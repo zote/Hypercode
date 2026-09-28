@@ -123,6 +123,25 @@ Vêm de `git worktree list --porcelain` e aparecem abaixo do nome:
 | Atualizar a partir da base… | `git fetch` da base do PR e `git merge` ou `git rebase` dela, à escolha | o PR aberto está atrás da base ou em conflito |
 | Apagar o worktree… | `git worktree remove`, com confirmação | não é o principal nem bare |
 
+### Em lote
+
+A lista aceita seleção múltipla (⌘-clique e ⇧-clique), e o menu age sobre **todas as linhas
+selecionadas**. Clicar com o botão direito numa linha fora da seleção seleciona só ela, como no
+Finder. O duplo-clique, o Enter e o botão "Abrir no iTerm2" do rodapé seguem agindo numa linha só.
+
+Com mais de uma linha, cada item diz em quantas vale — "Puxar do remoto (pull) (4)" — e fica
+habilitado se ao menos uma o suporta; as demais ficam de fora e aparecem no relatório final
+(funcionou / falhou / não se aplica). O progresso aparece no rodapé.
+
+- **Puxar do remoto**: um `git fetch` por remoto e depois `git merge --ff-only @{upstream}` em
+  cada worktree, 8 por vez. É o mesmo que um `git pull --ff-only` em cada um, mas sem os pulls
+  paralelos disputando o lock das refs remotas.
+- **Apagar os worktrees…**: uma confirmação só, listando todos. Um de cada vez, sem `--force`
+  e sem destravar: o worktree sujo ou travado fica, e o relatório diz por quê.
+- **Terminal, retomar o claude e PR no navegador**: uma janela por worktree. Acima de 3, pede
+  confirmação antes de abrir.
+- **Atualizar a partir da base…** não vira lote: merge ou rebase é uma escolha por worktree.
+
 O Claude Code guarda as conversas em `~/.claude/projects/`, numa pasta com o caminho absoluto
 do worktree trocando todo caractere que não é letra nem dígito por `-`. É isso que o app
 consulta para habilitar o "Retomar".
