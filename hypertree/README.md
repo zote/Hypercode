@@ -102,7 +102,7 @@ Vêm de `git worktree list --porcelain` e aparecem abaixo do nome:
 | Etiqueta | Significado |
 |---|---|
 | `principal` | Worktree original, onde fica o `.git`. Não é removível. |
-| `travado` | `git worktree lock` foi aplicado. O prune ignora, e a limpeza também. |
+| `travado` | `git worktree lock`. Lock manual protege; lock de ferramenta (JSON com `owner`) não. |
 | `órfão` | `prunable`: a pasta não existe mais. `git worktree prune` resolve. |
 | `bare` | Repositório sem árvore de trabalho. |
 | `draft` / `merged` / `closed` | Estado do PR, quando não está simplesmente aberto. |
@@ -134,7 +134,12 @@ ou arquivo não versionado, o app mostra o motivo e pergunta, num segundo diálo
 ## Limpar concluídos
 
 Entram na limpeza os worktrees com PR **merged** ou **closed**, mais os **órfãos**.
-Nunca entram o principal, os bare e os travados.
+Nunca entram o principal, os bare e os worktrees com **lock manual**.
+
+Sobre o lock: ferramentas como o `supacode` gravam no motivo um JSON com `owner` e usam o
+`git worktree lock` apenas como marcador de propriedade — não é um pedido seu de não mexer.
+Esses entram na limpeza e o app roda `git worktree unlock` antes do `remove` (o git recusa
+remover worktree travado). Lock manual — motivo em texto livre ou sem motivo — continua protegendo.
 
 A remoção usa `git worktree remove` **sem `--force`**, de propósito: havendo alteração não
 commitada o git recusa, e o app lista o que ficou de fora em vez de apagar trabalho.

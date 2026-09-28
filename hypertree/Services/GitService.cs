@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
+
 namespace Hypertree.Services;
 
 public sealed record WorktreeInfo
@@ -24,6 +27,62 @@ public sealed record WorktreeInfo
     }
 
     public string ShortHead => string.IsNullOrEmpty(Head) ? string.Empty : Head[..Math.Min(7, Head.Length)];
+
+    /// <summary>
+    /// Ferramentas como o supacode gravam um JSON com "owner" no motivo do lock e usam o
+    /// `git worktree lock` como marcador de propriedade. Isso não é um "não mexa" do usuário.
+    /// </summary>
+    public string? LockOwner => ExtractLockOwner(LockReason);
+
+    /// <summary>Lock de bookkeeping de ferramenta, e não lock manual.</summary>
+    public bool IsToolLock => IsLocked && !string.IsNullOrEmpty(LockOwner);
+
+    /// <summary>Motivo do lock em texto legível — sem o JSON cru.</summary>
+    public string? LockDescription
+    {
+        get
+        {
+            if (!IsLocked) return null;
+            if (LockOwner is { } owner) return $"travado por {owner}";
+            return string.IsNullOrWhiteSpace(LockReason) ? null : LockReason;
+        }
+    }
+
+    internal static string? ExtractLockOwner(string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason)) return null;
+
+        var text = Unquote(reason.Trim());
+        if (!text.StartsWith('{')) return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(text);
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("owner", out var owner)
+                && owner.ValueKind == JsonValueKind.String)
+            {
+                var value = owner.GetString();
+                if (!string.IsNullOrWhiteSpace(value)) return value;
+            }
+        }
+        catch (JsonException)
+        {
+            // JSON meio escapado pelo git ainda cai no regex abaixo.
+        }
+
+        var match = Regex.Match(text, "\"owner\"\\s*:\\s*\"([^\"]+)\"");
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    /// <summary>O git às vezes devolve o motivo entre aspas e com escapes.</summary>
+    private static string Unquote(string value)
+    {
+        if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
+            value = value[1..^1].Replace("\\\"", "\"").Replace("\\\\", "\\");
+
+        return value;
+    }
 }
 
 public sealed class GitNotFoundException : Exception
@@ -88,6 +147,22 @@ public static class GitService
         string worktreePath,
         CancellationToken cancellationToken = default)
         => RunAsync(worktreePath, new[] { "pull", "--ff-only" }, TimeSpan.FromSeconds(90), cancellationToken);
+
+    /// <summary>Destrava um worktree — o `remove` recusa enquanto houver lock.</summary>
+    public static async Task<ProcessResult> UnlockWorktreeAsync(
+        string repositoryPath,
+        string worktreePath,
+        CancellationToken cancellationToken = default)
+    {
+        var git = ExecutableLocator.Find("git") ?? throw new GitNotFoundException();
+
+        return await ProcessRunner.RunAsync(
+            git,
+            new[] { "-C", repositoryPath, "worktree", "unlock", worktreePath },
+            repositoryPath,
+            TimeSpan.FromSeconds(30),
+            cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>Limpa os metadados de worktrees órfãos (aqueles cuja pasta sumiu).</summary>
     public static async Task<ProcessResult> PruneAsync(

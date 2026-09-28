@@ -60,13 +60,13 @@ public sealed class WorktreeRow : ObservableObject
 
     /// <summary>
     /// Candidato à limpeza: PR mergeado ou fechado, ou worktree que o git já considera órfão.
-    /// O principal e o bare nunca entram (não são removíveis) e o travado também não —
-    /// travar é justamente pedir que ninguém mexa.
+    /// O principal e o bare nunca entram (não são removíveis). Lock manual também protege,
+    /// mas lock de ferramenta (supacode e afins) é só bookkeeping: entra, e a limpeza destrava antes.
     /// </summary>
     public bool IsCompleted =>
         !Worktree.IsMain
         && !Worktree.IsBare
-        && !Worktree.IsLocked
+        && (!Worktree.IsLocked || Worktree.IsToolLock)
         && (Worktree.IsPrunable || (_pullRequest is not null && !_pullRequest.IsOpen));
 
     /// <summary>Por que esta linha entrou na limpeza — usado no diálogo de confirmação.</summary>
@@ -272,9 +272,13 @@ public sealed class WorktreeRow : ObservableObject
         "bare" =>
             "bare — repositório sem árvore de trabalho. Não há arquivos para abrir no terminal.",
 
+        "travado" when Worktree.IsToolLock =>
+            $"travado por {Worktree.LockOwner} — lock de bookkeeping da ferramenta, não um pedido seu. "
+            + "A limpeza destrava antes de remover.",
+
         "travado" =>
             "travado — alguém rodou git worktree lock aqui"
-            + (string.IsNullOrEmpty(Worktree.LockReason) ? "" : $" (motivo: {Worktree.LockReason})")
+            + (string.IsNullOrEmpty(Worktree.LockDescription) ? "" : $" (motivo: {Worktree.LockDescription})")
             + ". O git não o remove no prune e a limpeza do Hypertree também o ignora. "
             + "Destrave com git worktree unlock.",
 

@@ -254,6 +254,13 @@ public sealed class MainViewModel : ObservableObject
 
                 try
                 {
+                    // O git recusa remover worktree travado. Como só chegam aqui os de lock
+                    // de ferramenta (o manual fica de fora), destravamos antes.
+                    if (row.Worktree.IsLocked)
+                        await GitService
+                            .UnlockWorktreeAsync(repositoryPath, row.FullPath)
+                            .ConfigureAwait(true);
+
                     var result = await GitService
                         .RemoveWorktreeAsync(repositoryPath, row.FullPath)
                         .ConfigureAwait(true);
