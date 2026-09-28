@@ -51,10 +51,25 @@
 
   <Window.Resources>
     <DataTemplate x:Key="BadgeTemplate">
-      <PathIcon Width="14" Height="14" Margin="0,0,7,0"
-                Data="{Binding PathData, Converter={x:Static views:BadgeConverter.ToGeometry}}"
-                Foreground="{Binding ColorHex, Converter={x:Static views:BadgeConverter.ToBrush}}"
-                ToolTip.Tip="{Binding Tooltip}" />
+      <!-- Viewbox + Path de 16x16 fixo, em vez de PathIcon: o PathIcon estica o
+           desenho até as bordas, e os Octicons dependem da caixa 16x16 para manter a
+           proporção (o dot-fill, por exemplo, é um ponto no meio, não um círculo
+           cheio). O Border transparente faz o tooltip responder na caixa toda, não
+           só no traço do ícone. -->
+      <Border Margin="0,0,7,0" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
+        <Viewbox Width="14" Height="14">
+          <Path Width="16" Height="16"
+                Data="{Binding PathData, Converter={x:Static views:BadgeConverter.ToGeometry}}">
+            <Path.Fill>
+              <MultiBinding Converter="{x:Static views:BadgeBrushConverter.Instance}">
+                <Binding Path="LightColorHex" />
+                <Binding Path="DarkColorHex" />
+                <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource Self}" />
+              </MultiBinding>
+            </Path.Fill>
+          </Path>
+        </Viewbox>
+      </Border>
     </DataTemplate>
 
     <ItemsPanelTemplate x:Key="BadgeRowPanel">

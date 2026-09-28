@@ -3,7 +3,8 @@ namespace Hypertree.ViewModels;
 public sealed record LegendEntry(StatusBadge Badge, string Title, string Description)
 {
     public string PathData => Badge.PathData;
-    public string ColorHex => Badge.ColorHex;
+    public string LightColorHex => Badge.LightColorHex;
+    public string DarkColorHex => Badge.DarkColorHex;
 }
 
 /// <summary>

@@ -70,20 +70,24 @@ quantidades diferentes de ícone. Vêm de `git status --porcelain=v2 --branch`, 
 (8 worktrees por vez). Os do PR ficam ao lado do número, e quando não há PR a coluna fica vazia,
 sem marcador. Todo ícone tem tooltip.
 
-| Ícone | Estado | Origem |
+Os desenhos são os [Octicons](https://primer.style/octicons/) do GitHub e as cores seguem os papéis
+do Primer, com um tom para o tema claro e outro para o escuro: onde o GitHub mostra a mesma
+informação, o ícone e a cor são os mesmos que ele usa.
+
+| Ícone (Octicon) | Estado | Origem |
 |---|---|---|
-| ● âmbar | Alterações não commitadas | `status` tem linhas fora do cabeçalho |
-| ⚠ vermelho | Conflito não resolvido | linhas `u` no status |
-| ❚❚ vermelho | Merge/rebase/cherry-pick/revert/bisect pausado | `MERGE_HEAD`, `rebase-merge/` etc. no git dir |
-| ↑ azul | Falta push | `branch.ab +N` |
-| ↓ azul | Falta pull | `branch.ab -N` |
-| ↑↓ âmbar | Divergiu | `+N` e `-M` ao mesmo tempo |
-| ↑ cinza com barra | Nunca foi pushada | sem `branch.upstream` |
-| 🗑 cinza | Pode ser removido | candidato à limpeza |
-| ○ verde / ○ cinza / ● roxo / ✕ cinza | PR aberto / draft / mergeado / fechado | `state`, `isDraft` |
-| ⚠ âmbar | Precisa rebase | `mergeable=CONFLICTING` ou `mergeStateStatus=BEHIND` |
-| ✓ verde / ✕ vermelho / ◉ âmbar | Checks passando / falhando / rodando | `statusCheckRollup` |
-| 💬 verde / 💬 vermelho / 💬 cinza | Review aprovado / mudanças pedidas / aguardando | `reviewDecision` |
+| `diff-modified` âmbar | Alterações não commitadas | `status` tem linhas fora do cabeçalho |
+| `alert` vermelho | Conflito não resolvido | linhas `u` no status |
+| `stop` vermelho | Merge/rebase/cherry-pick/revert/bisect pausado | `MERGE_HEAD`, `rebase-merge/` etc. no git dir |
+| `arrow-up` azul | Falta push | `branch.ab +N` |
+| `arrow-down` azul | Falta pull | `branch.ab -N` |
+| `git-compare` âmbar | Divergiu | `+N` e `-M` ao mesmo tempo |
+| `upload` cinza | Nunca foi pushada | sem `branch.upstream` |
+| `trash` cinza | Pode ser removido | candidato à limpeza |
+| `git-pull-request` verde / `git-pull-request-draft` cinza / `git-merge` roxo / `git-pull-request-closed` vermelho | PR aberto / draft / mergeado / fechado | `state`, `isDraft` |
+| `alert` âmbar | Precisa rebase | `mergeable=CONFLICTING` ou `mergeStateStatus=BEHIND` |
+| `check` verde / `x` vermelho / `dot-fill` âmbar | Checks passando / falhando / rodando | `statusCheckRollup` |
+| `check-circle` verde / `file-diff` vermelho / `code-review` cinza | Review aprovado / mudanças pedidas / aguardando | `reviewDecision` |
 
 Checks, review e "precisa rebase" só aparecem enquanto o PR está aberto. Se o `gh` instalado não
 aceitar os campos novos, o app refaz a consulta com o conjunto básico e avisa no rodapé — a coluna
