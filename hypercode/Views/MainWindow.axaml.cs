@@ -243,6 +243,8 @@ public partial class MainWindow : Window
         Configure(OpenPullRequestMenuItem, "Abrir PR no navegador", rows, row => row.HasPullRequest);
         Configure(MarkSeenMenuItem, "Marcar como visto", rows, row => row.HasPullRequestChanges);
         MarkSeenMenuItem.IsVisible = MarkSeenMenuItem.IsEnabled;
+        Configure(RerunFailedChecksMenuItem, "Rodar novamente os checks que falharam", rows, row => row.CanRerunFailedChecks);
+        RerunFailedChecksMenuItem.IsVisible = RerunFailedChecksMenuItem.IsEnabled;
         Configure(UpdateBranchMenuItem, "Puxar do remoto (pull)", rows, row => row.CanUpdateBranch);
         Configure(RemoveMenuItem, rows.Count > 1 ? "Apagar os worktrees…" : "Apagar o worktree…", rows, row => row.CanRemove);
 
@@ -496,6 +498,15 @@ public partial class MainWindow : Window
 
     private void OnMarkSeenMenuClick(object? sender, RoutedEventArgs e)
         => ViewModel?.MarkPullRequestChangesSeen(MenuTargets());
+
+    private async void OnRerunFailedChecksMenuClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } viewModel) return;
+
+        var rows = MenuTargets();
+        if (rows.Count == 1) await viewModel.RerunFailedChecksAsync(rows[0]);
+        else await ShowBatchReportAsync(await viewModel.RerunFailedChecksManyAsync(rows));
+    }
 
     private async void OnRevealMenuClick(object? sender, RoutedEventArgs e)
     {

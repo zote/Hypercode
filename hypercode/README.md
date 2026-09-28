@@ -140,6 +140,7 @@ Vêm de `git worktree list --porcelain` e aparecem abaixo do nome:
 | Revelar no Finder | `open <pasta>` | sempre |
 | Abrir PR no navegador | `open <url do PR>` — e marca as mudanças do PR como vistas | a branch tem PR |
 | Marcar como visto | tira o sino da linha | o PR mudou desde a última olhada (só aparece nesse caso) |
+| Rodar novamente os checks que falharam | `gh run rerun <run> --failed` em cada workflow run com job falho no último commit do PR, e reconsulta o PR | o PR aberto tem check do GitHub Actions falhando (só aparece nesse caso; falha só de CI externo não conta) |
 | Puxar do remoto (pull) | `git pull --ff-only` no worktree e relê o estado da linha | a branch tem upstream |
 | Atualizar a partir da base… | `git fetch` da base do PR e `git merge` ou `git rebase` dela, à escolha | o PR aberto está atrás da base ou em conflito |
 | Travar o worktree… | `git worktree lock`, com um motivo opcional | vinculado, destravado e com a pasta no lugar (só aparece nesse caso) |
@@ -163,6 +164,9 @@ habilitado se ao menos uma o suporta; as demais ficam de fora e aparecem no rela
   e sem destravar: o worktree sujo ou travado fica, e o relatório diz por quê.
 - **Terminal, retomar o claude e PR no navegador**: uma janela por worktree. Acima de 3, pede
   confirmação antes de abrir.
+- **Rodar novamente os checks que falharam**: `gh run rerun --failed` uma vez por workflow run
+  (vários jobs falhos do mesmo run viram um disparo só), 8 worktrees por vez. Run ainda em
+  andamento é recusado pelo `gh` e aparece como falha no relatório.
 - **Atualizar a partir da base…** não vira lote: merge ou rebase é uma escolha por worktree.
 
 O Claude Code guarda as conversas em `~/.claude/projects/`, numa pasta com o caminho absoluto
