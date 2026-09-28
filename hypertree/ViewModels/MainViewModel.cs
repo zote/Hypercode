@@ -208,6 +208,24 @@ public sealed class MainViewModel : ObservableObject
                 + $"    motivo: {row.CompletionReason}\n"
                 + $"    {row.FullPath}\n"));
 
+    /// <summary>Texto do diálogo de confirmação de "Apagar o worktree".</summary>
+    public static string BuildRemovalSummary(WorktreeRow row)
+    {
+        var lines = new List<string> { $"{row.Name}  —  {row.Branch}", $"    {row.FullPath}" };
+
+        if (row.Worktree.IsPrunable)
+            lines.Add("\nA pasta já não existe: só os metadados do git são limpos, com git worktree prune — que poda todos os órfãos de uma vez.");
+        else if (row.Worktree.IsLocked)
+            lines.Add("\nEstá travado (git worktree lock): o git vai recusar. Destrave antes com git worktree unlock.");
+        else if (row.Status.HasUncommittedChanges)
+            lines.Add("\nHá alterações não commitadas: o git vai recusar, e aí o app pergunta se é para forçar.");
+
+        if (row.PullRequest is { IsOpen: true } pullRequest)
+            lines.Add($"\nO PR #{pullRequest.Number} ainda está aberto.");
+
+        return string.Join("\n", lines);
+    }
+
     /// <summary>
     /// Remove os worktrees concluídos. Os órfãos não são removidos um a um: um único
     /// git worktree prune no final resolve todos. Nada usa --force.
@@ -410,16 +428,24 @@ public sealed class MainViewModel : ObservableObject
         StatusMessage = string.Join(" · ", parts);
     }
 
-    public async Task LaunchAsync(WorktreeRow? row)
+    public Task LaunchAsync(WorktreeRow? row) => LaunchAsync(row, EffectiveCommand);
+
+    /// <summary>Terminal na pasta do worktree, sem rodar comando nenhum.</summary>
+    public Task OpenShellAsync(WorktreeRow? row) => LaunchAsync(row, command: null);
+
+    /// <summary>Terminal retomando a última conversa do Claude Code naquele worktree.</summary>
+    public Task ResumeClaudeAsync(WorktreeRow? row) => LaunchAsync(row, ClaudeSessions.ContinueCommand);
+
+    private async Task LaunchAsync(WorktreeRow? row, string? command)
     {
         if (row is null) return;
-
-        var command = EffectiveCommand;
 
         try
         {
             await TerminalLauncher.LaunchAsync(row.FullPath, command, TerminalTitle(row)).ConfigureAwait(true);
-            StatusMessage = $"{TerminalLauncher.TerminalName} aberto em {row.Name} · {command}";
+            StatusMessage = command is null
+                ? $"{TerminalLauncher.TerminalName} aberto em {row.Name}"
+                : $"{TerminalLauncher.TerminalName} aberto em {row.Name} · {command}";
         }
         catch (Exception exception)
         {
@@ -430,6 +456,76 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Título da janela do terminal: nome do worktree e, se diferente, a branch.</summary>
     internal static string TerminalTitle(WorktreeRow row)
         => row.Branch == row.Name ? row.Name : $"{row.Name} · {row.Branch}";
+
+    /// <summary>
+    /// Remove um worktree. O órfão sai com prune (a pasta já não existe); os demais com
+    /// git worktree remove, com --force só se <paramref name="force"/> — que vem de uma
+    /// segunda confirmação, depois de o git recusar. Devolve o erro do git, ou null se removeu.
+    /// </summary>
+    public async Task<string?> RemoveWorktreeAsync(WorktreeRow row, bool force = false)
+    {
+        if (!row.CanRemove) return null;
+
+        var repositoryPath = ExpandHome(RepositoryPath.Trim());
+
+        IsBusy = true;
+        StatusMessage = $"Removendo {row.Name}…";
+
+        string? error;
+        try
+        {
+            var result = row.Worktree.IsPrunable
+                ? await GitService.PruneAsync(repositoryPath).ConfigureAwait(true)
+                : await GitService.RemoveWorktreeAsync(repositoryPath, row.FullPath, force).ConfigureAwait(true);
+
+            error = result.Success ? null : result.FirstErrorLine;
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        if (error is not null)
+        {
+            StatusMessage = $"{row.Name} não foi removido: {error}";
+            return error;
+        }
+
+        await LoadAsync().ConfigureAwait(true);
+        StatusMessage = $"Worktree {row.Name} removido · a branch {row.Branch} continua existindo";
+        return null;
+    }
+
+    /// <summary>git pull --ff-only no worktree e relê o estado da linha.</summary>
+    public async Task UpdateBranchAsync(WorktreeRow? row)
+    {
+        if (row is null || !row.CanUpdateBranch) return;
+
+        StatusMessage = $"Atualizando {row.Branch}…";
+
+        try
+        {
+            var result = await GitService.PullFastForwardAsync(row.FullPath).ConfigureAwait(true);
+
+            StatusMessage = result.Success
+                ? $"{row.Branch} atualizada" + (LastLine(result.StandardOutput) is { Length: > 0 } line ? $" · {line}" : "")
+                : $"{row.Branch} não foi atualizada: {result.FirstErrorLine}";
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = exception.Message;
+        }
+
+        row.Status = await WorktreeStatusReader.ReadAsync(row.FullPath).ConfigureAwait(true);
+    }
+
+    private static string LastLine(string output)
+        => output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+               .LastOrDefault() ?? string.Empty;
 
     public async Task RevealAsync(WorktreeRow? row)
     {

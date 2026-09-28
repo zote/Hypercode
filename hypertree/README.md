@@ -12,7 +12,7 @@ duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `c
 | `hotfix` | `hotfix/crash` | `#418` (merged) | `/Users/…/repo-hotfix` |
 
 - **Duplo-clique** (ou `Enter`) em uma linha → nova janela do iTerm2 em `cd <worktree> && claude`.
-- **Botão direito** → abrir no iTerm2, revelar no Finder, abrir o PR no navegador.
+- **Botão direito** → ações do worktree. Detalhes abaixo.
 - O campo **Filtrar** (`⌘F`) mostra só as linhas cujo nome, branch, número ou título do PR
   contém cada palavra digitada — `login 412` casa com a branch `feature/login` do PR `#412`.
   Não diferencia maiúsculas nem acentos. `Esc` limpa; `↓`/`Enter` desce para a lista.
@@ -107,6 +107,30 @@ Vêm de `git worktree list --porcelain` e aparecem abaixo do nome:
 | `bare` | Repositório sem árvore de trabalho. |
 | `draft` / `merged` / `closed` | Estado do PR, quando não está simplesmente aberto. |
 
+## Menu de contexto
+
+| Ação | O que faz | Habilitada quando |
+|---|---|---|
+| Abrir no iTerm2 rodando o comando | O mesmo que o duplo-clique | a pasta existe |
+| Abrir o terminal | `cd` no worktree, sem rodar o **Comando** | a pasta existe |
+| Retomar a sessão do claude | `claude --continue`: volta à última conversa daquele worktree | há sessão em `~/.claude/projects/<caminho>` |
+| Revelar no Finder | `open <pasta>` | sempre |
+| Abrir PR no navegador | `open <url do PR>` | a branch tem PR |
+| Atualizar a branch | `git pull --ff-only` no worktree e relê o estado da linha | a branch tem upstream |
+| Apagar o worktree… | `git worktree remove`, com confirmação | não é o principal nem bare |
+
+O Claude Code guarda as conversas em `~/.claude/projects/`, numa pasta com o caminho absoluto
+do worktree trocando todo caractere que não é letra nem dígito por `-`. É isso que o app
+consulta para habilitar o "Retomar".
+
+**Atualizar** é só fast-forward: se a branch divergiu do upstream, o git recusa, nada muda e o
+motivo aparece no rodapé. Merge ou rebase ficam por sua conta.
+
+**Apagar** usa `git worktree remove` sem `--force`. Se o git recusar por alteração não commitada
+ou arquivo não versionado, o app mostra o motivo e pergunta, num segundo diálogo, se é para forçar
+— o que descarta esse trabalho de vez. Worktree travado não ganha essa opção: destrave antes. Órfão
+é resolvido com `git worktree prune`. A branch local nunca é tocada.
+
 ## Limpar concluídos
 
 Entram na limpeza os worktrees com PR **merged** ou **closed**, mais os **órfãos**.
@@ -180,6 +204,7 @@ hypertree/
     ├── WorktreeCreator.cs      criação de worktree (branch nova / PR) e cópia do .worktreeinclude
     ├── GitHubService.cs        leitura dos PRs via gh
     ├── TerminalLauncher.cs     AppleScript p/ iTerm2 (fallback Terminal.app) + open
+    ├── ClaudeSessions.cs       detecta sessão do Claude Code para o "Retomar"
     ├── ProcessRunner.cs        execução de processos com timeout
     ├── ExecutableLocator.cs    resolução de PATH/binários
     └── SettingsStore.cs        preferências em JSON

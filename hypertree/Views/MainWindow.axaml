@@ -139,10 +139,25 @@
                 DoubleTapped="OnRowDoubleTapped">
             <Grid.ContextMenu>
               <ContextMenu>
-                <MenuItem Header="Abrir no iTerm2" Click="OnOpenTerminalMenuClick" />
+                <MenuItem Header="Abrir no iTerm2 rodando o comando" Click="OnOpenTerminalMenuClick"
+                          IsEnabled="{Binding CanLaunch}" />
+                <MenuItem Header="Abrir o terminal" Click="OnOpenShellMenuClick"
+                          IsEnabled="{Binding CanLaunch}"
+                          ToolTip.Tip="Abre o terminal na pasta do worktree, sem rodar o comando." />
+                <MenuItem Header="Retomar a sessão do claude" Click="OnResumeClaudeMenuClick"
+                          IsEnabled="{Binding HasClaudeSession}"
+                          ToolTip.Tip="Abre o terminal rodando claude --continue: volta à última conversa deste worktree." />
+                <Separator />
                 <MenuItem Header="Revelar no Finder" Click="OnRevealMenuClick" />
                 <MenuItem Header="Abrir PR no navegador" Click="OnOpenPullRequestMenuClick"
                           IsEnabled="{Binding HasPullRequest}" />
+                <Separator />
+                <MenuItem Header="Atualizar a branch" Click="OnUpdateBranchMenuClick"
+                          IsEnabled="{Binding CanUpdateBranch}"
+                          ToolTip.Tip="git pull --ff-only: traz os commits do upstream. Se a branch divergiu, o git recusa e nada muda." />
+                <MenuItem Header="Apagar o worktree…" Click="OnRemoveWorktreeMenuClick"
+                          IsEnabled="{Binding CanRemove}"
+                          ToolTip.Tip="git worktree remove, com confirmação. A branch local não é tocada." />
               </ContextMenu>
             </Grid.ContextMenu>
 

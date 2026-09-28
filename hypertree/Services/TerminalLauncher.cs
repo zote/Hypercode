@@ -1,8 +1,9 @@
 namespace Hypertree.Services;
 
 /// <summary>
-/// Abre uma nova janela do iTerm2 na pasta indicada e roda um comando, com um título
-/// opcional na sessão/aba. Se o iTerm2 não estiver instalado, cai para o Terminal.app.
+/// Abre uma nova janela do iTerm2 na pasta indicada e roda um comando (ou só abre o shell,
+/// se o comando vier vazio), com um título opcional na sessão/aba. Se o iTerm2 não estiver
+/// instalado, cai para o Terminal.app.
 /// </summary>
 public static class TerminalLauncher
 {
@@ -17,14 +18,14 @@ public static class TerminalLauncher
 
     public static async Task LaunchAsync(
         string directory,
-        string command,
+        string? command,
         string? title = null,
         CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(directory))
             throw new DirectoryNotFoundException($"A pasta '{directory}' não existe mais.");
 
-        var shellCommand = $"cd {QuoteForShell(directory)} && {command}";
+        var shellCommand = BuildShellCommand(directory, command);
 
         var script = IsITerm2Available
             ? BuildITerm2Script(shellCommand, title)
@@ -47,6 +48,12 @@ public static class TerminalLauncher
 
     public static Task OpenUrlAsync(string url, CancellationToken cancellationToken = default)
         => ProcessRunner.RunAsync("/usr/bin/open", new[] { url }, null, TimeSpan.FromSeconds(10), cancellationToken);
+
+    /// <summary>`cd` na pasta e, havendo comando, `&amp;&amp; comando`.</summary>
+    internal static string BuildShellCommand(string directory, string? command)
+        => string.IsNullOrWhiteSpace(command)
+            ? $"cd {QuoteForShell(directory)}"
+            : $"cd {QuoteForShell(directory)} && {command.Trim()}";
 
     // A referência por bundle id evita a ambiguidade entre os nomes "iTerm" e "iTerm2".
     internal static string BuildITerm2Script(string shellCommand, string? title = null)
