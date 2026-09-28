@@ -29,13 +29,30 @@ public sealed record ProcessResult(int ExitCode, string StandardOutput, string S
 
 public static class ProcessRunner
 {
-    public static async Task<ProcessResult> RunAsync(
+    /// <summary>
+    /// Roda o processo fora da thread de quem chama. O <c>Process.Start</c> é síncrono e, no
+    /// macOS, custa ~15 ms (o .NET faz fork do app inteiro): chamado da UI — que é de onde
+    /// vêm quase todas as chamadas — uma releitura de dezenas de worktrees somava segundos
+    /// de janela congelada.
+    /// </summary>
+    public static Task<ProcessResult> RunAsync(
         string fileName,
         IReadOnlyList<string> arguments,
         string? workingDirectory = null,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default,
         IReadOnlyDictionary<string, string>? environment = null)
+        => Task.Run(
+            () => RunCoreAsync(fileName, arguments, workingDirectory, timeout, cancellationToken, environment),
+            cancellationToken);
+
+    private static async Task<ProcessResult> RunCoreAsync(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        string? workingDirectory,
+        TimeSpan? timeout,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? environment)
     {
         var startInfo = new ProcessStartInfo
         {
