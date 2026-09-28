@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace Hypertree.ViewModels;
 
 public sealed record LegendEntry(StatusBadge Badge, string Title, string Description)
@@ -15,6 +17,20 @@ public sealed class HelpViewModel
 {
     private static LegendEntry Entry(BadgeKind kind, string title, string description)
         => new(new StatusBadge(kind, title), title, description);
+
+    /// <summary>"Hypertree 1.2.0-beta.1" — a versão do build (-p:Version), sem o hash do commit.</summary>
+    public string VersionLabel { get; } = "Hypertree " + DisplayVersion(
+        typeof(HelpViewModel).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+
+    internal static string DisplayVersion(string? informationalVersion)
+    {
+        if (string.IsNullOrWhiteSpace(informationalVersion)) return "(versão desconhecida)";
+
+        // O SDK anexa "+<commit>" à versão informacional; na tela, só a versão.
+        var plus = informationalVersion.IndexOf('+', StringComparison.Ordinal);
+        return plus < 0 ? informationalVersion : informationalVersion[..plus];
+    }
 
     public IReadOnlyList<LegendEntry> WorktreeLegend { get; } = new[]
     {

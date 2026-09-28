@@ -95,6 +95,8 @@
       </StackPanel>
     </ScrollViewer>
 
+    <TextBlock Grid.Row="1" Classes="muted" VerticalAlignment="Center" Margin="0,16,0,0"
+               Text="{Binding VersionLabel}" />
     <Button Grid.Row="1" Content="Fechar" HorizontalAlignment="Right" Margin="0,16,0,0"
             Click="OnClose" IsDefault="True" IsCancel="True" />
   </Grid>
