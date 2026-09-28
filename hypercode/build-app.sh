@@ -21,7 +21,7 @@ fi
 DIST="dist"
 APP="$DIST/$APP_NAME.app"
 
-echo "▸ publicando para $RID…"
+echo "▸ publicando para ${RID}…"
 rm -rf "$DIST"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
