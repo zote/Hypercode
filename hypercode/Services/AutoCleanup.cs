@@ -79,6 +79,38 @@ public sealed class AutoCleanupTracker
         => _completedSince.TryGetValue(path, out var since) && since + grace > now ? since + grace - now : TimeSpan.Zero;
 
     /// <summary>
+    /// O que a limpeza automática sabe deste worktree, para o tooltip: desde quando ela o vê
+    /// concluído — o carimbo de onde a carência conta — e quando ele pode sair ou por que ficou.
+    /// Null se ela ainda não o viu. Horários locais, como no histórico: um carimbo que muda
+    /// entre dois tiques é a carência recomeçando, e é isso que precisa ficar visível.
+    /// </summary>
+    public string? Describe(string path, TimeSpan grace, DateTimeOffset now, DateTimeOffset startsAt)
+    {
+        if (!_completedSince.TryGetValue(path, out var since)) return null;
+
+        static string At(DateTimeOffset moment) => $"{moment.ToLocalTime():dd/MM HH:mm}";
+
+        var lines = new List<string> { $"Visto concluído pela limpeza automática em {At(since)}." };
+        DateTimeOffset? retry = _retryAt.TryGetValue(path, out var retryAt) && retryAt > now ? retryAt : null;
+
+        if (_pending.TryGetValue(path, out var pending))
+        {
+            lines.Add($"Mantido: {pending.Reason}.");
+            if (retry is { } next) lines.Add($"Nova tentativa a partir de {At(next)}.");
+            return string.Join("\n", lines);
+        }
+
+        var dueAt = since + grace;
+        if (startsAt > dueAt) dueAt = startsAt;
+        if (retry is { } later && later > dueAt) dueAt = later;
+
+        lines.Add(dueAt > now
+            ? $"Carência de {grace.TotalMinutes:0} min: sai a partir de {At(dueAt)}."
+            : "Carência vencida: sai no próximo tique do monitoramento, se a janela não estiver minimizada.");
+        return string.Join("\n", lines);
+    }
+
+    /// <summary>
     /// Deixa o worktree para depois, com o motivo. Devolve se o motivo é novo — é quando vale
     /// dizer no rodapé; repetir o mesmo a cada ciclo seria ruído.
     /// </summary>

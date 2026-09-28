@@ -8,6 +8,7 @@ public sealed class WorktreeRow : ObservableObject
     private WorktreeStatus _status = WorktreeStatus.Unknown;
     private BaseDistance? _baseDistance;
     private IReadOnlyList<string> _pullRequestChanges = Array.Empty<string>();
+    private string? _cleanupNote;
 
     public WorktreeRow(WorktreeInfo worktree)
     {
@@ -63,6 +64,21 @@ public sealed class WorktreeRow : ObservableObject
     }
 
     public bool HasPullRequestChanges => _pullRequestChanges.Count > 0;
+
+    /// <summary>
+    /// Com a limpeza automática ligada, desde quando ela vê este worktree concluído e quando
+    /// ele sai (ou por que ficou). Vai para o tooltip do PR mergeado/fechado e do removível.
+    /// </summary>
+    public string? CleanupNote
+    {
+        get => _cleanupNote;
+        set
+        {
+            if (_cleanupNote == value) return;
+            _cleanupNote = value;
+            RefreshBadges();
+        }
+    }
 
     /// <summary>Base do PR aberto desta branch — de onde vem o "atualizar a partir da base".</summary>
     public string? BaseBranch => _pullRequest is { IsOpen: true, BaseRefName: { Length: > 0 } baseRef } ? baseRef : null;
@@ -197,7 +213,8 @@ public sealed class WorktreeRow : ObservableObject
                 badges.Add(new StatusBadge(
                     BadgeKind.Removable,
                     $"Pode ser removido — {CompletionReason}."
-                    + (_status.HasUncommittedChanges ? " Mas há alterações não commitadas: o git vai recusar." : string.Empty)));
+                    + (_status.HasUncommittedChanges ? " Mas há alterações não commitadas: o git vai recusar." : string.Empty)
+                    + WithCleanupNote()));
 
             return badges;
         }
@@ -220,8 +237,8 @@ public sealed class WorktreeRow : ObservableObject
 
             badges.Add(pullRequest.State.ToUpperInvariant() switch
             {
-                "MERGED" => new StatusBadge(BadgeKind.PrMerged, $"PR #{pullRequest.Number} mergeado."),
-                "CLOSED" => new StatusBadge(BadgeKind.PrClosed, $"PR #{pullRequest.Number} fechado sem merge."),
+                "MERGED" => new StatusBadge(BadgeKind.PrMerged, $"PR #{pullRequest.Number} mergeado.{WithCleanupNote()}"),
+                "CLOSED" => new StatusBadge(BadgeKind.PrClosed, $"PR #{pullRequest.Number} fechado sem merge.{WithCleanupNote()}"),
                 _ => pullRequest.IsDraft
                     ? new StatusBadge(BadgeKind.PrDraft, $"PR #{pullRequest.Number} aberto como rascunho.")
                     : new StatusBadge(BadgeKind.PrOpen, $"PR #{pullRequest.Number} aberto."),
@@ -285,6 +302,8 @@ public sealed class WorktreeRow : ObservableObject
 
         return $"A base {pullRequest.BaseRefName} {distance}. {hint}";
     }
+
+    private string WithCleanupNote() => _cleanupNote is null ? string.Empty : $"\n\n{_cleanupNote}";
 
     private void RefreshBadges()
     {
