@@ -48,7 +48,17 @@ public sealed class MainViewModel : ObservableObject
     private string? _monitorNotice;
 
     private readonly AutoCleanupTracker _autoCleanup = new();
+    private readonly AutoCleanupStore _autoCleanupStore = AutoCleanupStore.Default;
     private bool _isAutoCleaning;
+
+    /// <summary>
+    /// Quanto a limpeza automática espera depois de o app abrir. A carência conta com o app
+    /// fechado; sem isto, o PR mergeado ontem sumiria no primeiro tique, antes de dar para ver a
+    /// lista ou desligar a opção.
+    /// </summary>
+    private static readonly TimeSpan AutoCleanupStartupDelay = TimeSpan.FromMinutes(2);
+
+    private readonly DateTimeOffset _autoCleanupStartsAt = DateTimeOffset.UtcNow + AutoCleanupStartupDelay;
 
     /// <summary>
     /// O fetch do monitoramento em andamento. Pull e atualização a partir da base esperam por
@@ -112,6 +122,7 @@ public sealed class MainViewModel : ObservableObject
             _settings.AutoCleanup = value;
             PersistSettings();
             _autoCleanup.Reset();
+            SaveAutoCleanup();
             RaisePropertyChanged();
             RaiseCleanupState();
 
@@ -156,7 +167,8 @@ public sealed class MainViewModel : ObservableObject
         + "  • os travados, inclusive por ferramenta (supacode) — ela pode estar usando o worktree.\n"
         + "O botão Limpeza automática lista quais ficaram e por quê.\n\n"
         + "A remoção é definitiva: não passa pela Lixeira, e o que houver em bin/ e obj/ vai junto. "
-        + "Com a janela minimizada, nada é removido.";
+        + "A carência conta mesmo com o app fechado. Por isso, ao abrir o app, a limpeza espera "
+        + $"{AutoCleanupStartupDelay.TotalMinutes:0} min antes de remover qualquer coisa. Com a janela minimizada, nada é removido.";
 
     /// <summary>
     /// Texto do filtro. Cada palavra precisa aparecer no nome, na branch, no número
@@ -412,6 +424,12 @@ public sealed class MainViewModel : ObservableObject
                 .Where(item => item.Remaining > TimeSpan.Zero)
                 .ToList();
 
+            if (now < _autoCleanupStartsAt)
+            {
+                lines.Add(string.Empty);
+                lines.Add($"App recém-aberto: nada é removido nos próximos {Math.Ceiling((_autoCleanupStartsAt - now).TotalMinutes):0} min.");
+            }
+
             if (waiting.Count > 0)
             {
                 lines.Add(string.Empty);
@@ -429,7 +447,7 @@ public sealed class MainViewModel : ObservableObject
             lines.Add(string.Empty);
             if (_autoCleanup.History.Count == 0)
             {
-                lines.Add("Nada removido nesta sessão.");
+                lines.Add("Nada removido ainda.");
             }
             else
             {
@@ -685,9 +703,10 @@ public sealed class MainViewModel : ObservableObject
                 if (_loadedRepositoryPath != path)
                 {
                     _scheduler.Reset();
-                    _autoCleanup.Reset();
+                    _autoCleanup.Restore(_autoCleanupStore.Load(path), DateTimeOffset.UtcNow);
                 }
                 _loadedRepositoryPath = path;
+                SaveAutoCleanup();
 
                 // Não espera o watcher: num volume lento ele demora a subir, e a lista não depende dele.
                 _ = WatchAsync(path, cancellationToken);
@@ -1042,6 +1061,7 @@ public sealed class MainViewModel : ObservableObject
         var now = DateTimeOffset.UtcNow;
         var completed = Worktrees.Where(row => row.IsCompleted).ToList();
         _autoCleanup.Observe(completed.Select(row => row.FullPath).ToList(), now);
+        SaveAutoCleanup();
 
         var announcements = new List<string>();
 
@@ -1054,9 +1074,10 @@ public sealed class MainViewModel : ObservableObject
         foreach (var row in completed.Where(row => row.Worktree.IsLocked))
             Skip(row, $"{row.Worktree.LockDescription ?? "travado"}: a ferramenta pode estar usando", retryAfter: null);
 
-        var due = completed
-            .Where(row => !row.Worktree.IsLocked && _autoCleanup.IsDue(row.FullPath, AutoCleanupGrace, now))
-            .ToList();
+        // Recém-aberto, observa (a carência segue contando) mas não remove.
+        var due = now < _autoCleanupStartsAt
+            ? new List<WorktreeRow>()
+            : completed.Where(row => !row.Worktree.IsLocked && _autoCleanup.IsDue(row.FullPath, AutoCleanupGrace, now)).ToList();
 
         if (due.Count == 0)
         {
@@ -1155,8 +1176,16 @@ public sealed class MainViewModel : ObservableObject
         finally
         {
             _isAutoCleaning = false;
+            SaveAutoCleanup();
             RaiseCleanupState();
         }
+    }
+
+    /// <summary>Grava a carência e o histórico do repositório carregado, se mudaram.</summary>
+    private void SaveAutoCleanup()
+    {
+        if (_autoCleanup.IsDirty && _loadedRepositoryPath is { } path)
+            _autoCleanupStore.Save(path, _autoCleanup.Snapshot());
     }
 
     /// <summary>Cada remoção vai para o rodapé; o que ficou, só quando o motivo é novo.</summary>
