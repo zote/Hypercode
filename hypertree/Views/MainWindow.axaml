@@ -153,9 +153,12 @@
                 <MenuItem Header="Abrir PR no navegador" Click="OnOpenPullRequestMenuClick"
                           IsEnabled="{Binding HasPullRequest}" />
                 <Separator />
-                <MenuItem Header="Atualizar a branch" Click="OnUpdateBranchMenuClick"
+                <MenuItem Header="Puxar do remoto (pull)" Click="OnUpdateBranchMenuClick"
                           IsEnabled="{Binding CanUpdateBranch}"
-                          ToolTip.Tip="git pull --ff-only: traz os commits do upstream. Se a branch divergiu, o git recusa e nada muda." />
+                          ToolTip.Tip="git pull --ff-only: traz os commits do upstream da própria branch. Se a branch divergiu, o git recusa e nada muda. Não traz a base do PR." />
+                <MenuItem Header="Atualizar a partir da base…" Click="OnUpdateFromBaseMenuClick"
+                          IsEnabled="{Binding CanUpdateFromBase}"
+                          ToolTip.Tip="Faz fetch da base do PR e a traz para dentro da branch, com merge ou rebase — você escolhe na hora. É o que resolve o ícone de base desatualizada." />
                 <MenuItem Header="Apagar o worktree…" Click="OnRemoveWorktreeMenuClick"
                           IsEnabled="{Binding CanRemove}"
                           ToolTip.Tip="git worktree remove, com confirmação. A branch local não é tocada." />

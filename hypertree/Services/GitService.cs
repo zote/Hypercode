@@ -85,6 +85,9 @@ public sealed record WorktreeInfo
     }
 }
 
+/// <summary>Como trazer a base para dentro da branch.</summary>
+public enum BaseUpdateStrategy { Merge, Rebase }
+
 public sealed class GitNotFoundException : Exception
 {
     public GitNotFoundException()
@@ -147,6 +150,98 @@ public static class GitService
         string worktreePath,
         CancellationToken cancellationToken = default)
         => RunAsync(worktreePath, new[] { "pull", "--ff-only" }, TimeSpan.FromSeconds(90), cancellationToken);
+
+    /// <summary>
+    /// Remoto onde mora a base do PR: o do upstream da branch, caindo para origin. A base
+    /// é comparada como &lt;remoto&gt;/&lt;base&gt;, que é o que o GitHub enxerga — não a cópia local.
+    /// </summary>
+    public static async Task<string> ResolveRemoteAsync(
+        string worktreePath,
+        string branch,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await RunAsync(
+            worktreePath,
+            new[] { "config", "--get", $"branch.{branch}.remote" },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        var remote = result.Success ? result.StandardOutput.Trim() : string.Empty;
+
+        // "." é upstream local (branch rastreando outra branch local), sem remoto de verdade.
+        return remote.Length > 0 && remote != "." ? remote : "origin";
+    }
+
+    /// <summary>Atualiza só a ref remota da base — sem isso, &lt;remoto&gt;/&lt;base&gt; pode estar velho.</summary>
+    public static Task<ProcessResult> FetchBranchAsync(
+        string worktreePath,
+        string remote,
+        string branch,
+        CancellationToken cancellationToken = default)
+        => RunAsync(
+            worktreePath,
+            new[] { "fetch", remote, $"+refs/heads/{branch}:refs/remotes/{remote}/{branch}" },
+            TimeSpan.FromSeconds(90),
+            cancellationToken);
+
+    /// <summary>
+    /// Distância entre o HEAD do worktree e <paramref name="baseRef"/>: quantos commits a base
+    /// tem que a branch não tem (Behind) e o contrário (Ahead). Null se a ref não existe.
+    /// </summary>
+    public static async Task<(int Behind, int Ahead)?> CountDistanceAsync(
+        string worktreePath,
+        string baseRef,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await RunAsync(
+            worktreePath,
+            new[] { "rev-list", "--left-right", "--count", $"{baseRef}...HEAD" },
+            TimeSpan.FromSeconds(20),
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Success) return null;
+
+        var parts = result.StandardOutput.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 2 && int.TryParse(parts[0], out var behind) && int.TryParse(parts[1], out var ahead)
+            ? (behind, ahead)
+            : null;
+    }
+
+    /// <summary>
+    /// Há alteração em arquivo versionado? É o que faz merge e rebase recusarem. Arquivo
+    /// não versionado fica de fora: não atrapalha nenhum dos dois.
+    /// </summary>
+    public static async Task<bool> HasTrackedChangesAsync(
+        string worktreePath,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await RunAsync(
+            worktreePath,
+            new[] { "status", "--porcelain", "--untracked-files=no" },
+            TimeSpan.FromSeconds(25),
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Success) throw new InvalidOperationException(result.FirstErrorLine);
+
+        return result.StandardOutput.Trim().Length > 0;
+    }
+
+    /// <summary>
+    /// Traz <paramref name="baseRef"/> para dentro da branch do worktree. Merge preserva o
+    /// histórico (--no-edit: a mensagem padrão, sem abrir editor); rebase reescreve os commits
+    /// da branch por cima da base. Em conflito o git para e deixa o worktree no meio da operação.
+    /// </summary>
+    public static Task<ProcessResult> IntegrateBaseAsync(
+        string worktreePath,
+        string baseRef,
+        BaseUpdateStrategy strategy,
+        CancellationToken cancellationToken = default)
+        => RunAsync(
+            worktreePath,
+            strategy == BaseUpdateStrategy.Rebase
+                ? new[] { "rebase", baseRef }
+                : new[] { "merge", "--no-edit", baseRef },
+            TimeSpan.FromMinutes(3),
+            cancellationToken);
 
     /// <summary>Destrava um worktree — o `remove` recusa enquanto houver lock.</summary>
     public static async Task<ProcessResult> UnlockWorktreeAsync(

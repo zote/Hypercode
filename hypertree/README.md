@@ -88,7 +88,7 @@ informação, o ícone e a cor são os mesmos que ele usa.
 | `upload` cinza | Nunca foi pushada | sem `branch.upstream` |
 | `trash` cinza | Pode ser removido | candidato à limpeza |
 | `git-pull-request` verde / `git-pull-request-draft` cinza / `git-merge` roxo / `git-pull-request-closed` vermelho | PR aberto / draft / mergeado / fechado | `state`, `isDraft` |
-| `alert` âmbar | Precisa rebase | `mergeable=CONFLICTING` ou `mergeStateStatus=BEHIND` |
+| `alert` âmbar | Precisa atualizar a partir da base | `mergeable=CONFLICTING` ou `mergeStateStatus=BEHIND` |
 | `check` verde / `x` vermelho / `dot-fill` âmbar | Checks passando / falhando / rodando | `statusCheckRollup` |
 | `check-circle` verde / `file-diff` vermelho / `code-review` cinza | Review aprovado / mudanças pedidas / aguardando | `reviewDecision` |
 
@@ -119,15 +119,34 @@ Vêm de `git worktree list --porcelain` e aparecem abaixo do nome:
 | Retomar a sessão do claude | `claude --continue`: volta à última conversa daquele worktree | há sessão em `~/.claude/projects/<caminho>` |
 | Revelar no Finder | `open <pasta>` | sempre |
 | Abrir PR no navegador | `open <url do PR>` | a branch tem PR |
-| Atualizar a branch | `git pull --ff-only` no worktree e relê o estado da linha | a branch tem upstream |
+| Puxar do remoto (pull) | `git pull --ff-only` no worktree e relê o estado da linha | a branch tem upstream |
+| Atualizar a partir da base… | `git fetch` da base do PR e `git merge` ou `git rebase` dela, à escolha | o PR aberto está atrás da base ou em conflito |
 | Apagar o worktree… | `git worktree remove`, com confirmação | não é o principal nem bare |
 
 O Claude Code guarda as conversas em `~/.claude/projects/`, numa pasta com o caminho absoluto
 do worktree trocando todo caractere que não é letra nem dígito por `-`. É isso que o app
 consulta para habilitar o "Retomar".
 
-**Atualizar** é só fast-forward: se a branch divergiu do upstream, o git recusa, nada muda e o
-motivo aparece no rodapé. Merge ou rebase ficam por sua conta.
+**Puxar do remoto** é só fast-forward do upstream da própria branch: se ela divergiu, o git
+recusa, nada muda e o motivo aparece no rodapé. Não resolve o `alert` âmbar — esse fala da
+**base** do PR, e a branch normalmente já está em dia com o próprio remoto.
+
+**Atualizar a partir da base** é o que resolve o `alert`. Usa a base real do PR (`baseRefName`),
+não a `main` — PRs empilhados apontam para outra branch de feature —, comparada como
+`<remoto>/<base>`, com o remoto do upstream da branch (ou `origin`). O fluxo:
+
+1. Recusa se há alteração em arquivo versionado ou merge/rebase parado no meio. Nada de `--force`.
+2. `git fetch` só da base, e conta quantos commits ela tem que a branch não tem.
+3. Diálogo com a base, a distância e a escolha: **merge** (`git merge --no-edit`, preserva o
+   histórico, gera commit de merge) ou **rebase** (`git rebase`, histórico linear, reescreve
+   commits já publicados).
+4. Em conflito o app não tenta resolver: o worktree fica onde o git parou e a linha ganha o
+   `stop` de operação pausada. Depois de um rebase, avisa que o push precisa de
+   `--force-with-lease`.
+
+O tooltip do `alert` nomeia a base e quantos commits ela está à frente, medidos com as refs
+locais (`git rev-list --left-right --count <remoto>/<base>...HEAD`) — sem fetch, então o número
+pode estar defasado até o próximo fetch.
 
 **Apagar** usa `git worktree remove` sem `--force`. Se o git recusar por alteração não commitada
 ou arquivo não versionado, o app mostra o motivo e pergunta, num segundo diálogo, se é para forçar

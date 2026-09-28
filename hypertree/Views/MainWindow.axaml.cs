@@ -213,6 +213,49 @@ public partial class MainWindow : Window
             await viewModel.UpdateBranchAsync(RowOf(sender) ?? viewModel.SelectedWorktree);
     }
 
+    // Fetch e checagens primeiro, para o diálogo mostrar a base e quantos commits vêm; só
+    // então a escolha entre merge e rebase. Recusa e conflito viram diálogo, não só rodapé.
+    private async void OnUpdateFromBaseMenuClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } viewModel || (RowOf(sender) ?? viewModel.SelectedWorktree) is not { } row) return;
+        if (!row.CanUpdateFromBase) return;
+
+        var plan = await viewModel.PrepareBaseUpdateAsync(row);
+
+        if (plan.Distance is not { } distance)
+        {
+            viewModel.StatusMessage = $"{row.Name} não foi atualizado";
+            await new ConfirmWindow(
+                "Atualizar a partir da base",
+                $"Não dá para atualizar {row.Name} agora.",
+                plan.Error ?? string.Empty,
+                "Entendi").ShowDialog<bool>(this);
+            return;
+        }
+
+        if (distance.Behind == 0)
+        {
+            viewModel.StatusMessage = $"{row.Branch} já contém {distance.Ref} — nada a trazer";
+            return;
+        }
+
+        var strategy = await new UpdateFromBaseWindow(row, distance).ShowDialog<BaseUpdateStrategy?>(this);
+        if (strategy is not { } chosen)
+        {
+            viewModel.StatusMessage = $"Atualização de {row.Branch} cancelada";
+            return;
+        }
+
+        var outcome = await viewModel.UpdateFromBaseAsync(row, distance, chosen);
+        if (outcome.Details is null) return;
+
+        await new ConfirmWindow(
+            "Atualizar a partir da base",
+            outcome.Summary,
+            outcome.Details,
+            "Entendi").ShowDialog<bool>(this);
+    }
+
     // Duas etapas: remove sem --force; se o git recusar (alteração não commitada, arquivo
     // não versionado), explica o motivo e só então oferece forçar — o que descarta o trabalho.
     private async void OnRemoveWorktreeMenuClick(object? sender, RoutedEventArgs e)

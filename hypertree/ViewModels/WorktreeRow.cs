@@ -6,6 +6,7 @@ public sealed class WorktreeRow : ObservableObject
 {
     private PullRequestInfo? _pullRequest;
     private WorktreeStatus _status = WorktreeStatus.Unknown;
+    private BaseDistance? _baseDistance;
 
     public WorktreeRow(WorktreeInfo worktree)
     {
@@ -32,12 +33,32 @@ public sealed class WorktreeRow : ObservableObject
                 RaisePropertyChanged(nameof(PullRequestLabel));
                 RaisePropertyChanged(nameof(PullRequestTooltip));
                 RaisePropertyChanged(nameof(HasPullRequest));
+                RaisePropertyChanged(nameof(BaseBranch));
+                RaisePropertyChanged(nameof(CanUpdateFromBase));
                 RefreshTags();
             }
         }
     }
 
     public bool HasPullRequest => _pullRequest is not null;
+
+    /// <summary>Base do PR aberto desta branch — de onde vem o "atualizar a partir da base".</summary>
+    public string? BaseBranch => _pullRequest is { IsOpen: true, BaseRefName: { Length: > 0 } baseRef } ? baseRef : null;
+
+    /// <summary>
+    /// Quanto a branch está atrás de &lt;remoto&gt;/&lt;base&gt;, medido no worktree com as refs
+    /// locais — sem fetch, então pode estar defasado até o próximo fetch.
+    /// </summary>
+    public BaseDistance? BaseDistance
+    {
+        get => _baseDistance;
+        set
+        {
+            if (!SetProperty(ref _baseDistance, value)) return;
+            RaisePropertyChanged(nameof(CanUpdateFromBase));
+            RefreshBadges();
+        }
+    }
 
     public string PullRequestLabel => _pullRequest is null ? string.Empty : $"#{_pullRequest.Number}";
 
@@ -164,7 +185,7 @@ public sealed class WorktreeRow : ObservableObject
             if (pullRequest.HasConflicts)
                 badges.Add(new StatusBadge(BadgeKind.NeedsRebase, "Conflito com a base — precisa rebase ou merge antes de integrar."));
             else if (pullRequest.IsBehindBase)
-                badges.Add(new StatusBadge(BadgeKind.NeedsRebase, "A base andou desde que a branch saiu — o GitHub pede atualização."));
+                badges.Add(new StatusBadge(BadgeKind.NeedsRebase, BehindBaseTooltip(pullRequest)));
 
             switch (pullRequest.Checks)
             {
@@ -199,6 +220,24 @@ public sealed class WorktreeRow : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Nomeia a base e a distância, e deixa claro que pull não resolve: o ícone fala da base,
+    /// o pull traz o upstream da própria branch — que normalmente já está em dia.
+    /// </summary>
+    private string BehindBaseTooltip(PullRequestInfo pullRequest)
+    {
+        const string hint = "Traga a base para dentro da branch (Atualizar a partir da base…) — git pull na própria branch não resolve isto.";
+
+        if (string.IsNullOrEmpty(pullRequest.BaseRefName))
+            return $"A base andou desde que a branch saiu. {hint}";
+
+        var distance = _baseDistance is { } known && known.Branch == pullRequest.BaseRefName && known.Behind > 0
+            ? $"está {known.Behind} commit{(known.Behind == 1 ? "" : "s")} à frente"
+            : "andou desde que a branch saiu";
+
+        return $"A base {pullRequest.BaseRefName} {distance}. {hint}";
+    }
+
     private void RefreshBadges()
     {
         RaisePropertyChanged(nameof(GitBadges));
@@ -230,8 +269,19 @@ public sealed class WorktreeRow : ObservableObject
     /// <summary>O principal e o bare não são removíveis com git worktree remove.</summary>
     public bool CanRemove => !Worktree.IsMain && !Worktree.IsBare;
 
-    /// <summary>Só dá para atualizar uma branch que tem upstream — senão não há de onde puxar.</summary>
+    /// <summary>Só dá para puxar numa branch que tem upstream — senão não há de onde puxar.</summary>
     public bool CanUpdateBranch => CanLaunch && Worktree.Branch is not null && _status is { IsKnown: true, HasUpstream: true };
+
+    /// <summary>
+    /// A base do PR tem commits que a branch não tem: o GitHub diz BEHIND ou em conflito,
+    /// ou a contagem local achou commits. A confirmação final (e a contagem exata) vem do
+    /// fetch feito na hora de atualizar.
+    /// </summary>
+    public bool CanUpdateFromBase =>
+        CanLaunch
+        && Worktree.Branch is not null
+        && BaseBranch is not null
+        && (_pullRequest!.IsBehindBase || _pullRequest.HasConflicts || _baseDistance is { Behind: > 0 });
 
     /// <summary>
     /// Há sessão do Claude Code gravada para esta pasta — condição para o `claude --continue`
@@ -297,4 +347,10 @@ public sealed class WorktreeRow : ObservableObject
 
         _ => tag,
     };
+}
+
+/// <summary>Distância entre a branch e &lt;remoto&gt;/&lt;base&gt;.</summary>
+public sealed record BaseDistance(string Remote, string Branch, int Behind, int Ahead)
+{
+    public string Ref => $"{Remote}/{Branch}";
 }

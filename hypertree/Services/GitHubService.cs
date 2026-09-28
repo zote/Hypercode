@@ -22,6 +22,10 @@ public sealed class PullRequestInfo
 {
     [JsonPropertyName("number")] public int Number { get; set; }
     [JsonPropertyName("headRefName")] public string HeadRefName { get; set; } = string.Empty;
+
+    /// <summary>Branch em que o PR vai entrar — nem sempre a main: PRs empilhados apontam para outra feature.</summary>
+    [JsonPropertyName("baseRefName")] public string? BaseRefName { get; set; }
+
     [JsonPropertyName("state")] public string State { get; set; } = string.Empty;
     [JsonPropertyName("title")] public string Title { get; set; } = string.Empty;
     [JsonPropertyName("url")] public string Url { get; set; } = string.Empty;
@@ -45,7 +49,10 @@ public sealed class PullRequestInfo
     public bool HasConflicts =>
         IsOpen && string.Equals(Mergeable, "CONFLICTING", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>A base andou desde que a branch saiu; o GitHub pede atualização.</summary>
+    /// <summary>
+    /// A base andou desde que a branch saiu; o GitHub pede atualização. Quem resolve é trazer
+    /// a base para dentro da branch (merge ou rebase) — não um pull do upstream da própria branch.
+    /// </summary>
     public bool IsBehindBase =>
         IsOpen && string.Equals(MergeStateStatus, "BEHIND", StringComparison.OrdinalIgnoreCase);
 
@@ -117,9 +124,9 @@ public static class GitHubService
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private const string RichFields =
-        "number,headRefName,state,title,url,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup";
+        "number,headRefName,baseRefName,state,title,url,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup";
 
-    private const string BasicFields = "number,headRefName,state,title,url,isDraft";
+    private const string BasicFields = "number,headRefName,baseRefName,state,title,url,isDraft";
 
     public static async Task<PullRequestLookup> LoadPullRequestsAsync(
         string repositoryPath,

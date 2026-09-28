@@ -367,6 +367,7 @@ public sealed class MainViewModel : ObservableObject
                 {
                     row.PullRequest = old.PullRequest;
                     row.Status = old.Status;
+                    row.BaseDistance = old.BaseDistance;
                 }
 
                 Worktrees.Add(row);
@@ -421,7 +422,9 @@ public sealed class MainViewModel : ObservableObject
             // O PR chegou agora: um filtro por número/título ou a ordenação por PR mudam.
             ApplyView();
 
-            await statusesTask.ConfigureAwait(true);
+            // Só agora se sabe a base de cada PR, e com ela a distância até ela.
+            await Task.WhenAll(statusesTask, LoadBaseDistancesAsync(Worktrees.ToList(), cancellationToken))
+                .ConfigureAwait(true);
 
             if (!background)
             {
@@ -530,7 +533,13 @@ public sealed class MainViewModel : ObservableObject
     {
         try
         {
-            await LoadStatusesAsync(Worktrees.ToList(), _loadCancellation?.Token ?? default).ConfigureAwait(true);
+            // Um fetch pode ter trazido commits novos da base: a distância muda junto.
+            var rows = Worktrees.ToList();
+            var cancellationToken = _loadCancellation?.Token ?? default;
+            await Task.WhenAll(
+                    LoadStatusesAsync(rows, cancellationToken),
+                    LoadBaseDistancesAsync(rows, cancellationToken))
+                .ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -661,6 +670,112 @@ public sealed class MainViewModel : ObservableObject
         row.Status = await WorktreeStatusReader.ReadAsync(row.FullPath).ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// Primeira etapa de "atualizar a partir da base": fetch da base, recusa com worktree
+    /// sujo ou operação git parada no meio, e conta os commits que vão entrar. Não muda
+    /// nada na branch — o que acontece depois depende da escolha entre merge e rebase.
+    /// </summary>
+    public async Task<BaseUpdatePlan> PrepareBaseUpdateAsync(WorktreeRow row)
+    {
+        if (!row.CanUpdateFromBase || row.Worktree.Branch is not { } branch || row.BaseBranch is not { } baseBranch)
+            return BaseUpdatePlan.Refused("Esta linha não tem PR aberto com a base à frente.");
+
+        IsBusy = true;
+        StatusMessage = $"Buscando {baseBranch} para comparar com {branch}…";
+
+        try
+        {
+            var status = await WorktreeStatusReader.ReadAsync(row.FullPath).ConfigureAwait(true);
+            row.Status = status;
+
+            if (status.PendingOperation is { } operation)
+                return BaseUpdatePlan.Refused(
+                    $"Há um {operation} parado no meio em {row.Name}. Conclua com git {operation} --continue ou desfaça com git {operation} --abort antes.");
+
+            if (await GitService.HasTrackedChangesAsync(row.FullPath).ConfigureAwait(true))
+                return BaseUpdatePlan.Refused(
+                    $"{row.Name} tem alterações não commitadas em arquivos versionados — merge e rebase recusam assim. Faça commit ou stash antes.");
+
+            var remote = await GitService.ResolveRemoteAsync(row.FullPath, branch).ConfigureAwait(true);
+
+            var fetch = await GitService.FetchBranchAsync(row.FullPath, remote, baseBranch).ConfigureAwait(true);
+            if (!fetch.Success)
+                return BaseUpdatePlan.Refused($"git fetch {remote} {baseBranch} falhou: {fetch.FirstErrorLine}");
+
+            var counted = await GitService.CountDistanceAsync(row.FullPath, $"{remote}/{baseBranch}").ConfigureAwait(true);
+            if (counted is not { } count)
+                return BaseUpdatePlan.Refused($"Não consegui comparar {branch} com {remote}/{baseBranch}.");
+
+            var distance = new BaseDistance(remote, baseBranch, count.Behind, count.Ahead);
+            row.BaseDistance = distance;
+            return new BaseUpdatePlan(distance, null);
+        }
+        catch (Exception exception)
+        {
+            return BaseUpdatePlan.Refused(exception.Message);
+        }
+        finally
+        {
+            IsBusy = false;
+            StatusMessage = string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Segunda etapa: git merge ou git rebase de &lt;remoto&gt;/&lt;base&gt;. Em conflito não tenta
+    /// resolver nada — o worktree fica onde o git parou, e o ícone de operação pausada
+    /// aparece na linha. Devolve o que dizer a quem pediu.
+    /// </summary>
+    public async Task<BaseUpdateOutcome> UpdateFromBaseAsync(WorktreeRow row, BaseDistance distance, BaseUpdateStrategy strategy)
+    {
+        var verb = strategy == BaseUpdateStrategy.Rebase ? "rebase" : "merge";
+
+        IsBusy = true;
+        StatusMessage = $"git {verb} {distance.Ref} em {row.Name}…";
+
+        BaseUpdateOutcome outcome;
+        try
+        {
+            var result = await GitService.IntegrateBaseAsync(row.FullPath, distance.Ref, strategy).ConfigureAwait(true);
+            var status = await WorktreeStatusReader.ReadAsync(row.FullPath).ConfigureAwait(true);
+            row.Status = status;
+
+            if (result.Success)
+            {
+                outcome = strategy == BaseUpdateStrategy.Rebase
+                    ? new BaseUpdateOutcome(true,
+                        $"{row.Branch} rebaseada sobre {distance.Ref}",
+                        "Os commits da branch foram reescritos. O próximo push precisa de git push --force-with-lease — um push comum será recusado.")
+                    : new BaseUpdateOutcome(true, $"{distance.Ref} mergeada em {row.Branch} · falta o push", null);
+            }
+            else if (status.PendingOperation is { } operation)
+            {
+                outcome = new BaseUpdateOutcome(false,
+                    $"{verb} parou em conflito em {row.Name}",
+                    $"O git parou o {operation} com conflito e o worktree ficou nesse estado. Resolva os arquivos e rode git {operation} --continue, ou desfaça com git {operation} --abort.\n\n{Trim(result)}");
+            }
+            else
+            {
+                outcome = new BaseUpdateOutcome(false, $"{verb} recusado em {row.Name}: {result.FirstErrorLine}", Trim(result));
+            }
+        }
+        catch (Exception exception)
+        {
+            outcome = new BaseUpdateOutcome(false, exception.Message, null);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        await LoadBaseDistancesAsync(new[] { row }, default).ConfigureAwait(true);
+        StatusMessage = outcome.Summary;
+        return outcome;
+
+        static string Trim(ProcessResult result)
+            => (result.StandardOutput + "\n" + result.StandardError).Trim();
+    }
+
     private static string LastLine(string output)
         => output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                .LastOrDefault() ?? string.Empty;
@@ -728,6 +843,48 @@ public sealed class MainViewModel : ObservableObject
         await Task.WhenAll(tasks).ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// Distância de cada linha com PR aberto até &lt;remoto&gt;/&lt;base&gt;, com as refs que já estão
+    /// no repositório (sem fetch). Mesmo limite de 8 processos do estado.
+    /// </summary>
+    private static async Task LoadBaseDistancesAsync(
+        IReadOnlyList<WorktreeRow> rows,
+        CancellationToken cancellationToken)
+    {
+        using var gate = new SemaphoreSlim(8);
+
+        var tasks = rows.Select(async row =>
+        {
+            if (row.Worktree.Branch is not { } branch || row.BaseBranch is not { } baseBranch || !row.CanLaunch)
+            {
+                row.BaseDistance = null;
+                return;
+            }
+
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(true);
+            try
+            {
+                var remote = await GitService.ResolveRemoteAsync(row.FullPath, branch, cancellationToken).ConfigureAwait(true);
+                var count = await GitService
+                    .CountDistanceAsync(row.FullPath, $"{remote}/{baseBranch}", cancellationToken)
+                    .ConfigureAwait(true);
+
+                row.BaseDistance = count is { } known ? new BaseDistance(remote, baseBranch, known.Behind, known.Ahead) : null;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // A distância é enfeite do tooltip: sem ela, o ícone continua valendo.
+                row.BaseDistance = null;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks).ConfigureAwait(true);
+    }
+
     private void PersistSettings()
     {
         _settings.Command = _command;
@@ -748,6 +905,15 @@ public sealed class MainViewModel : ObservableObject
 }
 
 public enum SortColumn { Name, Branch, PullRequest, Path }
+
+/// <summary>Resultado da preparação: a distância medida depois do fetch, ou o motivo da recusa.</summary>
+public sealed record BaseUpdatePlan(BaseDistance? Distance, string? Error)
+{
+    public static BaseUpdatePlan Refused(string error) => new(null, error);
+}
+
+/// <summary>Resumo para o rodapé e, quando há algo a explicar, o texto de um diálogo.</summary>
+public sealed record BaseUpdateOutcome(bool Success, string Summary, string? Details);
 
 internal static class OrderingExtensions
 {
