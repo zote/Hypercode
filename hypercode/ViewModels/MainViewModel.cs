@@ -509,7 +509,7 @@ public sealed class MainViewModel : ObservableObject
                 Worktrees.Add(row);
             }
 
-            _scheduler.Retain(WorktreeBranches());
+            _scheduler.Retain(LocalBranches());
 
             ApplyView();
             RaisePropertyChanged(nameof(MainWorktreePath));
@@ -541,15 +541,14 @@ public sealed class MainViewModel : ObservableObject
             // O estado local de cada worktree é lido em paralelo com a consulta ao GitHub.
             var statusesTask = LoadStatusesAsync(Worktrees.ToList(), cancellationToken);
 
-            var branches = WorktreeBranches();
-            var lookup = await GitHubService.LoadPullRequestsAsync(path, branches, cancellationToken).ConfigureAwait(true);
+            var lookup = await GitHubService.LoadPullRequestsAsync(path, WorktreeBranches(), cancellationToken).ConfigureAwait(true);
 
             if (cancellationToken.IsCancellationRequested) return true;
 
             // Carregamento completo conta como conferência de todo mundo: o agendador parte daqui.
             if (!lookup.Failed)
             {
-                _scheduler.MarkChecked(branches, DateTimeOffset.UtcNow);
+                _scheduler.MarkChecked(LocalBranches(), DateTimeOffset.UtcNow);
                 _scheduler.RecordBudget(lookup.Budget);
                 UpdateMonitorNotice();
             }
@@ -599,8 +598,37 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    private IReadOnlyCollection<string> WorktreeBranches()
+    /// <summary>Nomes a consultar no GitHub: o da branch no remoto e o local, para quem não tem upstream.</summary>
+    private IReadOnlyCollection<string> WorktreeBranches() => QueryNames(Worktrees);
+
+    private static IReadOnlyCollection<string> QueryNames(IEnumerable<WorktreeRow> rows)
+        => rows
+            .SelectMany(row => new[] { row.Worktree.UpstreamBranch, row.Worktree.Branch })
+            .OfType<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>Branches locais dos worktrees — a chave do agendador.</summary>
+    private IReadOnlyCollection<string> LocalBranches()
         => Worktrees.Select(row => row.Worktree.Branch).OfType<string>().ToList();
+
+    /// <summary>
+    /// PR da linha: primeiro pelo nome da branch no remoto, depois pelo local. O upstream é
+    /// ignorado quando é a branch local de outro worktree — branch criada de origin/main sem
+    /// --no-track rastreia main, e o PR de main é da linha do main.
+    /// </summary>
+    private static PullRequestInfo? FindPullRequest(WorktreeInfo worktree, PullRequestLookup lookup, ISet<string> localBranches)
+    {
+        if (worktree.UpstreamBranch is { } upstream
+            && upstream != worktree.Branch
+            && !localBranches.Contains(upstream)
+            && lookup.ByBranch.TryGetValue(upstream, out var byUpstream))
+            return byUpstream;
+
+        return worktree.Branch is { } branch && lookup.ByBranch.TryGetValue(branch, out var byBranch)
+            ? byBranch
+            : null;
+    }
 
     /// <summary>
     /// Casa os PRs com as linhas pela branch, compara cada um com o último estado visto e
@@ -615,14 +643,13 @@ public sealed class MainViewModel : ObservableObject
         var matched = 0;
         var changed = new List<(WorktreeRow Row, PullRequestInfo PullRequest, IReadOnlyList<string> Transitions)>();
 
+        var localBranches = Worktrees.Select(row => row.Worktree.Branch).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         foreach (var row in Worktrees)
         {
             if (scope is not null && (row.Worktree.Branch is not { } scoped || !scope.Contains(scoped))) continue;
 
-            row.PullRequest = row.Worktree.Branch is { } branch
-                              && lookup.ByBranch.TryGetValue(branch, out var found)
-                ? found
-                : null;
+            row.PullRequest = FindPullRequest(row.Worktree, lookup, localBranches);
 
             if (row.PullRequest is { } pullRequest)
             {
@@ -794,7 +821,11 @@ public sealed class MainViewModel : ObservableObject
             // Marca antes de consultar: uma consulta que falha não é repetida a cada tique.
             _scheduler.MarkChecked(due, now);
 
-            var lookup = await GitHubService.LoadPullRequestsAsync(path, due, cancellationToken).ConfigureAwait(true);
+            // O agendador fala em branch local; a consulta leva também o nome no remoto.
+            var scope = due.ToHashSet(StringComparer.Ordinal);
+            var rows = Worktrees.Where(row => row.Worktree.Branch is { } branch && scope.Contains(branch)).ToList();
+
+            var lookup = await GitHubService.LoadPullRequestsAsync(path, QueryNames(rows), cancellationToken).ConfigureAwait(true);
             if (cancellationToken.IsCancellationRequested || _loadedRepositoryPath != path) return;
 
             if (lookup.Failed)
@@ -805,10 +836,8 @@ public sealed class MainViewModel : ObservableObject
 
             _scheduler.RecordBudget(lookup.Budget);
 
-            var scope = due.ToHashSet(StringComparer.Ordinal);
             if (ApplyPullRequests(lookup, scope).Changes is { } changes) StatusMessage = changes;
 
-            var rows = Worktrees.Where(row => row.Worktree.Branch is { } branch && scope.Contains(branch)).ToList();
             await LoadBaseDistancesAsync(rows, cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
@@ -1538,8 +1567,9 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>
     /// Lê `git status` de cada worktree. Limitado a 8 de cada vez para não disparar
-    /// dezenas de processos git de uma vez em repositórios com muitos worktrees. Um push
-    /// visto na releitura promove a branch no agendador.
+    /// dezenas de processos git de uma vez em repositórios com muitos worktrees. O status
+    /// também decide a limpeza (branch remota apagada já contida na base), daí recontar no fim.
+    /// Um push visto na releitura promove a branch no agendador.
     /// </summary>
     private async Task LoadStatusesAsync(
         IReadOnlyList<WorktreeRow> rows,
@@ -1565,6 +1595,7 @@ public sealed class MainViewModel : ObservableObject
         });
 
         await Task.WhenAll(tasks).ConfigureAwait(true);
+        RaiseCleanupState();
     }
 
     /// <summary>

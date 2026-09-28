@@ -101,7 +101,9 @@ public sealed class WorktreeRow : ObservableObject
     }
 
     /// <summary>
-    /// Candidato à limpeza: PR mergeado ou fechado, ou worktree que o git já considera órfão.
+    /// Candidato à limpeza: PR mergeado ou fechado, worktree que o git já considera órfão, ou
+    /// branch remota apagada com o HEAD já contido na base remota. Branch apagada fora da base
+    /// não entra: pode ter sido apagada sem merge.
     /// O principal e o bare nunca entram (não são removíveis). Lock manual também protege,
     /// mas lock de ferramenta (supacode e afins) é só bookkeeping: entra, e a limpeza destrava antes.
     /// </summary>
@@ -109,7 +111,13 @@ public sealed class WorktreeRow : ObservableObject
         !Worktree.IsMain
         && !Worktree.IsBare
         && (!Worktree.IsLocked || Worktree.IsToolLock)
-        && (Worktree.IsPrunable || (_pullRequest is not null && !_pullRequest.IsOpen));
+        && (Worktree.IsPrunable
+            || (_pullRequest is not null && !_pullRequest.IsOpen)
+            || IsGoneAndInBase);
+
+    /// <summary>Upstream "gone" e HEAD contido na base — dispensa achar o PR. Não vale com PR aberto.</summary>
+    private bool IsGoneAndInBase =>
+        _status.ContainedInBase is not null && _pullRequest is not { IsOpen: true };
 
     /// <summary>Por que esta linha entrou na limpeza — usado no diálogo de confirmação.</summary>
     public string CompletionReason
@@ -117,7 +125,10 @@ public sealed class WorktreeRow : ObservableObject
         get
         {
             if (Worktree.IsPrunable) return "órfão (a pasta não existe mais)";
-            if (_pullRequest is null) return string.Empty;
+            if (_pullRequest is null)
+                return IsGoneAndInBase
+                    ? $"branch remota apagada e já contida em {_status.ContainedInBase}"
+                    : string.Empty;
             return _pullRequest.State.ToUpperInvariant() switch
             {
                 "MERGED" => $"PR #{_pullRequest.Number} mergeado",
@@ -134,6 +145,8 @@ public sealed class WorktreeRow : ObservableObject
         {
             if (!SetProperty(ref _status, value)) return;
             RaisePropertyChanged(nameof(CanUpdateBranch));
+            RaisePropertyChanged(nameof(IsCompleted));
+            RaisePropertyChanged(nameof(CompletionReason));
             RefreshBadges();
         }
     }
@@ -165,7 +178,10 @@ public sealed class WorktreeRow : ObservableObject
                     badges.Add(new StatusBadge(
                         BadgeKind.UpstreamGone,
                         "A branch remota foi apagada (upstream \"gone\"), normalmente depois do merge do PR. "
-                        + "Se o trabalho já entrou na base, o worktree pode ser limpo."));
+                        + (_status.ContainedInBase is { } baseRef
+                            ? $"O HEAD já está contido em {baseRef}, então o worktree entra em Limpar concluídos."
+                            : "O HEAD não está contido na base remota (ou foi squash/rebase merge): só entra em "
+                              + "Limpar concluídos se o PR mergeado for encontrado. Senão, remova pelo menu.")));
                 else if (_status.IsDiverged)
                     badges.Add(new StatusBadge(
                         BadgeKind.Diverged,

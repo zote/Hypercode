@@ -15,6 +15,13 @@ public sealed record WorktreeInfo
     public bool IsPrunable { get; init; }
     public bool IsMain { get; init; }
 
+    /// <summary>
+    /// Nome da branch no remoto do gh, quando o upstream mora lá (branch.&lt;local&gt;.merge sem
+    /// o refs/heads/). Pode diferir de <see cref="Branch"/>: o Codex cria o worktree com um nome
+    /// e dá push para outro. Continua preenchido com o upstream "gone".
+    /// </summary>
+    public string? UpstreamBranch { get; init; }
+
     /// <summary>Nome do worktree = última pasta do caminho.</summary>
     public string Name
     {
@@ -114,7 +121,103 @@ public static class GitService
         if (!result.Success)
             throw new InvalidOperationException(result.FirstErrorLine);
 
-        return ParsePorcelain(result.StandardOutput);
+        var worktrees = ParsePorcelain(result.StandardOutput);
+        var upstreams = await ReadUpstreamBranchesAsync(repositoryPath, cancellationToken).ConfigureAwait(false);
+        if (upstreams.Count == 0) return worktrees;
+
+        return worktrees
+            .Select(worktree => worktree.Branch is { } branch && upstreams.TryGetValue(branch, out var upstream)
+                ? worktree with { UpstreamBranch = upstream }
+                : worktree)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Branch local → nome da branch no remoto do gh, só para as que rastreiam esse remoto.
+    /// Upstream em outro remoto (fork) fica de fora e continua casando pelo nome local. Falha
+    /// aqui não derruba a lista: sem upstream, o PR casa pelo nome local como antes.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<string, string>> ReadUpstreamBranchesAsync(
+        string repositoryPath,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // %(upstream:remoteref) vem da config branch.<local>.merge, então sobrevive ao
+            // upstream "gone"; e não depende de tirar "origin/" na mão (remoto pode ter "/").
+            var refs = RunAsync(
+                repositoryPath,
+                new[] { "for-each-ref", "--format=%(refname:lstrip=2)%00%(upstream:remotename)%00%(upstream:remoteref)", "refs/heads" },
+                TimeSpan.FromSeconds(20),
+                cancellationToken);
+            var remotes = RunAsync(
+                repositoryPath,
+                new[] { "config", "--get-regexp", @"^remote\..*\.(url|gh-resolved)$" },
+                TimeSpan.FromSeconds(20),
+                cancellationToken);
+
+            await Task.WhenAll(refs, remotes).ConfigureAwait(false);
+
+            if (!refs.Result.Success || ResolveGitHubRemote(remotes.Result.StandardOutput) is not { } remote)
+                return new Dictionary<string, string>();
+
+            return ParseUpstreams(refs.Result.StandardOutput, remote);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return new Dictionary<string, string>();
+        }
+    }
+
+    /// <summary>
+    /// O remoto que o gh usa para {owner}/{repo}: o marcado pelo `gh repo set-default`
+    /// (remote.&lt;nome&gt;.gh-resolved), senão upstream, github, origin nessa ordem, senão o único.
+    /// Recebe a saída de `git config --get-regexp '^remote\..*\.(url|gh-resolved)$'`.
+    /// </summary>
+    internal static string? ResolveGitHubRemote(string config)
+    {
+        var names = new List<string>();
+
+        foreach (var line in config.Replace("\r\n", "\n").Split('\n'))
+        {
+            var separator = line.IndexOf(' ');
+            if (separator < 0 || !line.StartsWith("remote.", StringComparison.Ordinal)) continue;
+
+            var key = line[..separator];
+            var value = line[(separator + 1)..].Trim();
+            var suffix = key.LastIndexOf('.');
+            if (suffix <= "remote.".Length) continue;
+
+            var name = key["remote.".Length..suffix];
+            if (key.EndsWith(".gh-resolved", StringComparison.Ordinal) && value == "base") return name;
+            if (!names.Contains(name)) names.Add(name);
+        }
+
+        foreach (var preferred in new[] { "upstream", "github", "origin" })
+            if (names.Contains(preferred)) return preferred;
+
+        return names.Count == 1 ? names[0] : null;
+    }
+
+    /// <summary>
+    /// Interpreta `git for-each-ref --format=%(refname:lstrip=2)%00%(upstream:remotename)%00%(upstream:remoteref)`
+    /// e guarda o nome remoto das branches que rastreiam <paramref name="remote"/>.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> ParseUpstreams(string output, string remote)
+    {
+        const string Heads = "refs/heads/";
+        var upstreams = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            var parts = line.Split('\0');
+            if (parts.Length != 3 || parts[1] != remote || !parts[2].StartsWith(Heads, StringComparison.Ordinal)) continue;
+
+            var name = parts[2][Heads.Length..];
+            if (parts[0].Length > 0 && name.Length > 0) upstreams[parts[0]] = name;
+        }
+
+        return upstreams;
     }
 
     /// <summary>
