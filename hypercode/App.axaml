@@ -8,7 +8,17 @@
     <!-- Compact aproxima a altura dos controles da do macOS (~22–24pt); a Normal é a do
          Windows 11. A cor de destaque vem do sistema: o FluentTheme já lê a do macOS. -->
     <FluentTheme DensityStyle="Compact" />
+    <StyleInclude Source="avares://Hypercode/Styles/Typography.axaml" />
   </Application.Styles>
+
+  <!-- Tokens do design system (cor, tipografia, espaçamento, raio): Styles/README.md -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://Hypercode/Styles/Tokens.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
 
   <!-- Menu do app no macOS. Sem ele o Avalonia monta um padrão com "About Avalonia";
        os itens de sistema (Serviços, Ocultar, Encerrar…) o macOS acrescenta depois destes. -->
