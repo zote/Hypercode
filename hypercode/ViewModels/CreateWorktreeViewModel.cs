@@ -41,6 +41,9 @@ public sealed class CreateWorktreeViewModel : ObservableObject
     {
         _mainWorktreePath = mainWorktreePath;
         _openTerminal = openTerminal;
+
+        // Todo trabalho nasce de uma issue (AGENTS.md). Explícito, para não depender da ordem do enum.
+        _mode = CreateMode.Issue;
         Command = command;
 
         var patterns = WorktreeCreator.ReadIncludePatterns(mainWorktreePath);

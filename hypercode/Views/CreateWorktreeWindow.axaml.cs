@@ -21,8 +21,8 @@ public partial class CreateWorktreeWindow : Window
 
     private async void OnOpened(object? sender, EventArgs e)
     {
-        this.FindControl<TextBox>("BranchNameBox")?.Focus();
         if (ViewModel is not { } viewModel) return;
+        FocusModeField();
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         await viewModel.InitializeAsync();
     }
@@ -30,11 +30,24 @@ public partial class CreateWorktreeWindow : Window
     // Trocar de modo leva o foco ao primeiro campo dele — depois do layout, quando ele já está visível.
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        var field = (e.PropertyName, ViewModel) switch
+        // A troca notifica os três modos; reage só ao que ficou marcado, para focar uma vez.
+        var becameActive = (e.PropertyName, ViewModel) switch
         {
-            (nameof(CreateWorktreeViewModel.IsNewBranchMode), { IsNewBranchMode: true }) => "BranchNameBox",
-            (nameof(CreateWorktreeViewModel.IsPullRequestMode), { IsPullRequestMode: true }) => "PullRequestBox",
-            (nameof(CreateWorktreeViewModel.IsIssueMode), { IsIssueMode: true }) => "IssueBox",
+            (nameof(CreateWorktreeViewModel.IsIssueMode), { IsIssueMode: true }) => true,
+            (nameof(CreateWorktreeViewModel.IsPullRequestMode), { IsPullRequestMode: true }) => true,
+            (nameof(CreateWorktreeViewModel.IsNewBranchMode), { IsNewBranchMode: true }) => true,
+            _ => false,
+        };
+        if (becameActive) FocusModeField();
+    }
+
+    private void FocusModeField()
+    {
+        var field = ViewModel switch
+        {
+            { IsIssueMode: true } => "IssueBox",
+            { IsPullRequestMode: true } => "PullRequestBox",
+            { IsNewBranchMode: true } => "BranchNameBox",
             _ => null,
         };
         if (field is not null) Dispatcher.UIThread.Post(() => this.FindControl<TextBox>(field)?.Focus());
