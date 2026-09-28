@@ -20,4 +20,9 @@
     <ProjectReference Include="..\..\hypercode\Hypercode.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- TokensTests lê o XAML dos tokens para conferir contraste e paridade das variantes -->
+    <None Include="..\..\hypercode\Styles\Tokens.axaml" Link="Tokens.axaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
