@@ -10,6 +10,11 @@ public sealed class MainViewModel : ObservableObject
     private readonly PullRequestMemory _pullRequestMemory = PullRequestMemory.Load();
     private CancellationTokenSource? _loadCancellation;
     private RepositoryWatcher? _watcher;
+    // Git dir observado ou com o watcher ainda subindo; a geração descarta subidas obsoletas.
+    private string? _watchedGitDir;
+    private int _watchGeneration;
+    private string? _watcherNotice;
+    private DateTimeOffset _lastFallbackRefresh;
     private RepositoryChange _pendingChange;
     private bool _isRefreshing;
 
@@ -29,6 +34,12 @@ public sealed class MainViewModel : ObservableObject
     /// A pergunta é só conta em memória; o custo está no que vence, não no tique.
     /// </summary>
     private static readonly TimeSpan MonitorTick = TimeSpan.FromSeconds(10);
+
+    /// <summary>Quanto se espera o FSEvents subir antes de seguir sem watcher.</summary>
+    private static readonly TimeSpan WatcherStartTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>Sem watcher, de quanto em quanto tempo a lista é relida por conta própria.</summary>
+    private static readonly TimeSpan FallbackRefreshInterval = TimeSpan.FromMinutes(2);
 
     private readonly MonitorScheduler _scheduler = new();
     private CancellationTokenSource? _monitorCancellation;
@@ -279,6 +290,18 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public bool HasMonitorNotice => _monitorNotice is not null;
+
+    /// <summary>Aviso fixo do rodapé enquanto o repositório está sem watcher.</summary>
+    public string? WatcherNotice
+    {
+        get => _watcherNotice;
+        private set
+        {
+            if (SetProperty(ref _watcherNotice, value)) RaisePropertyChanged(nameof(HasWatcherNotice));
+        }
+    }
+
+    public bool HasWatcherNotice => _watcherNotice is not null;
 
     public string RepositoryPath
     {
@@ -666,7 +689,8 @@ public sealed class MainViewModel : ObservableObject
                 }
                 _loadedRepositoryPath = path;
 
-                await WatchAsync(path, cancellationToken).ConfigureAwait(true);
+                // Não espera o watcher: num volume lento ele demora a subir, e a lista não depende dele.
+                _ = WatchAsync(path, cancellationToken);
                 StartMonitoring();
 
                 StatusMessage = worktrees.Count switch
@@ -896,6 +920,7 @@ public sealed class MainViewModel : ObservableObject
         {
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(true))
             {
+                RefreshWithoutWatcher();
                 await CheckRemoteAsync().ConfigureAwait(true);
                 await AutoCleanupAsync().ConfigureAwait(true);
             }
@@ -1194,31 +1219,101 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>Passa a observar o git dir do repositório carregado, se ainda não observa.</summary>
+    /// <summary>
+    /// Passa a observar o git dir do repositório carregado, se ainda não observa nem está
+    /// subindo o watcher dele. Nunca lança: sem watcher o app segue, com o aviso no rodapé
+    /// e a releitura periódica do monitoramento no lugar dele.
+    /// </summary>
     private async Task WatchAsync(string repositoryPath, CancellationToken cancellationToken)
     {
-        var gitDir = await GitService.TryResolveCommonGitDirAsync(repositoryPath, cancellationToken).ConfigureAwait(true);
+        string? gitDir;
+        try
+        {
+            gitDir = await GitService.TryResolveCommonGitDirAsync(repositoryPath, cancellationToken).ConfigureAwait(true);
+        }
+        catch (Exception)
+        {
+            // Carregamento cancelado por outro, que chama isto de novo; ou git indisponível.
+            return;
+        }
 
-        if (gitDir is not null && _watcher is not null && PathsEqual(_watcher.GitCommonDir, gitDir)) return;
+        if (gitDir is not null && _watchedGitDir is not null && PathsEqual(_watchedGitDir, gitDir)) return;
 
         StopWatching();
         if (gitDir is null) return;
 
+        _watchedGitDir = gitDir;
+        var generation = _watchGeneration;
+
+        RepositoryWatcher? watcher;
+        string? problem = null;
         try
         {
-            _watcher = new RepositoryWatcher(gitDir, OnRepositoryChanged);
+            watcher = await RepositoryWatcher
+                .CreateAsync(gitDir, OnRepositoryChanged, SynchronizationContext.Current, WatcherStartTimeout)
+                .ConfigureAwait(true);
+            if (watcher is null) problem = "o disco demorou a responder";
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            // Sem watcher o app segue funcionando: resta o botão Atualizar.
-            _watcher = null;
+            watcher = null;
+            problem = exception.Message;
         }
+
+        // Outro repositório foi carregado (ou a lista falhou) enquanto este subia.
+        if (generation != _watchGeneration)
+        {
+            if (watcher is not null) DisposeInBackground(watcher);
+            return;
+        }
+
+        if (watcher is null)
+        {
+            // Esquece o git dir: o próximo Atualizar, ou a releitura periódica, tenta de novo.
+            _watchedGitDir = null;
+            _lastFallbackRefresh = DateTimeOffset.UtcNow;
+            WatcherNotice = "Atualização automática limitada";
+            ReportWatcherProblem(problem!);
+            return;
+        }
+
+        _watcher = watcher;
+        WatcherNotice = null;
+    }
+
+    private void ReportWatcherProblem(string problem)
+    {
+        var message = $"Sem acompanhamento do git dir ({problem}): a lista é relida a cada {FallbackRefreshInterval.TotalMinutes:0} min";
+        StatusMessage = string.IsNullOrEmpty(StatusMessage) ? message : $"{StatusMessage} · {message}";
     }
 
     private void StopWatching()
     {
-        _watcher?.Dispose();
+        _watchGeneration++;
+        _watchedGitDir = null;
+        WatcherNotice = null;
+
+        if (_watcher is { } watcher) DisposeInBackground(watcher);
         _watcher = null;
+    }
+
+    /// <summary>Desligar o FSEvents pode bloquear como ligar; fora da UI.</summary>
+    private static void DisposeInBackground(RepositoryWatcher watcher) => _ = Task.Run(watcher.Dispose);
+
+    /// <summary>
+    /// Sem watcher, o monitoramento faz o papel dele de tempos em tempos: relê a lista e o
+    /// status, e tenta subir o watcher de novo — o volume pode ter voltado ao normal.
+    /// </summary>
+    private void RefreshWithoutWatcher()
+    {
+        if (_watcher is not null || _watchedGitDir is not null || _loadedRepositoryPath is not { } path || IsBusy) return;
+
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastFallbackRefresh < FallbackRefreshInterval) return;
+        _lastFallbackRefresh = now;
+
+        OnRepositoryChanged(RepositoryChange.Worktrees | RepositoryChange.Status);
+        _ = WatchAsync(path, CancellationToken.None);
     }
 
     /// <summary>
