@@ -24,15 +24,17 @@ public sealed class MainViewModel : ObservableObject
     private SortColumn _sortColumn;
     private bool _sortDescending;
 
-    /// <summary>De quanto em quanto tempo o laço do monitoramento confere se já é hora.</summary>
-    private static readonly TimeSpan MonitorTick = TimeSpan.FromSeconds(30);
+    /// <summary>
+    /// De quanto em quanto tempo o laço do monitoramento pergunta ao agendador se algo venceu.
+    /// A pergunta é só conta em memória; o custo está no que vence, não no tique.
+    /// </summary>
+    private static readonly TimeSpan MonitorTick = TimeSpan.FromSeconds(10);
 
+    private readonly MonitorScheduler _scheduler = new();
     private CancellationTokenSource? _monitorCancellation;
-    private DateTimeOffset _lastRemoteCheck = DateTimeOffset.MinValue;
     private bool _isCheckingRemote;
-    private bool _isWindowActive = true;
-    private bool _isWindowMinimized;
     private string? _monitorProblem;
+    private string? _monitorNotice;
 
     /// <summary>
     /// O fetch do monitoramento em andamento. Pull e atualização a partir da base esperam por
@@ -47,6 +49,7 @@ public sealed class MainViewModel : ObservableObject
         _command = string.IsNullOrWhiteSpace(_settings.Command) ? "claude" : _settings.Command;
         _sortColumn = ParseSortColumn(_settings.SortColumn);
         _sortDescending = _settings.SortDescending;
+        _scheduler.Profile = ParseMonitorProfile(_settings.MonitorProfile);
 
         SelectedWorktrees.CollectionChanged += OnSelectionChanged;
     }
@@ -165,6 +168,42 @@ public sealed class MainViewModel : ObservableObject
 
     private static SortColumn ParseSortColumn(string? value)
         => Enum.TryParse<SortColumn>(value, ignoreCase: true, out var column) ? column : SortColumn.Name;
+
+    private static MonitorProfile ParseMonitorProfile(string? value)
+        => Enum.TryParse<MonitorProfile>(value, ignoreCase: true, out var profile) ? profile : MonitorProfile.Balanced;
+
+    /// <summary>
+    /// Perfil do monitoramento, como índice do seletor do rodapé: desligado, econômico,
+    /// equilibrado, agressivo — a ordem de <see cref="Services.MonitorProfile"/>.
+    /// </summary>
+    public int MonitorProfileIndex
+    {
+        get => (int)_scheduler.Profile;
+        set
+        {
+            if (!Enum.IsDefined(typeof(MonitorProfile), value) || (int)_scheduler.Profile == value) return;
+
+            _scheduler.Profile = (MonitorProfile)value;
+            _settings.MonitorProfile = _scheduler.Profile.ToString().ToLowerInvariant();
+            PersistSettings();
+            RaisePropertyChanged();
+
+            // Ficou mais atento: o que passou a estar vencido é conferido já.
+            _ = CheckRemoteAsync();
+        }
+    }
+
+    /// <summary>Aviso fixo do rodapé enquanto o monitoramento recua pela cota do GitHub.</summary>
+    public string? MonitorNotice
+    {
+        get => _monitorNotice;
+        private set
+        {
+            if (SetProperty(ref _monitorNotice, value)) RaisePropertyChanged(nameof(HasMonitorNotice));
+        }
+    }
+
+    public bool HasMonitorNotice => _monitorNotice is not null;
 
     public string RepositoryPath
     {
@@ -470,6 +509,8 @@ public sealed class MainViewModel : ObservableObject
                 Worktrees.Add(row);
             }
 
+            _scheduler.Retain(LocalBranches());
+
             ApplyView();
             RaisePropertyChanged(nameof(MainWorktreePath));
             RaisePropertyChanged(nameof(CanCreateWorktree));
@@ -483,6 +524,7 @@ public sealed class MainViewModel : ObservableObject
                 _settings.RepositoryPath = root ?? path;
                 RepositoryPath = root ?? path;
                 PersistSettings();
+                if (_loadedRepositoryPath != path) _scheduler.Reset();
                 _loadedRepositoryPath = path;
 
                 await WatchAsync(path, cancellationToken).ConfigureAwait(true);
@@ -502,6 +544,14 @@ public sealed class MainViewModel : ObservableObject
             var lookup = await GitHubService.LoadPullRequestsAsync(path, WorktreeBranches(), cancellationToken).ConfigureAwait(true);
 
             if (cancellationToken.IsCancellationRequested) return true;
+
+            // Carregamento completo conta como conferência de todo mundo: o agendador parte daqui.
+            if (!lookup.Failed)
+            {
+                _scheduler.MarkChecked(LocalBranches(), DateTimeOffset.UtcNow);
+                _scheduler.RecordBudget(lookup.Budget);
+                UpdateMonitorNotice();
+            }
 
             // Em background, uma consulta que falhou não apaga os PRs herdados das linhas.
             var (matched, changes) = background && lookup.Failed
@@ -549,12 +599,18 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>Nomes a consultar no GitHub: o da branch no remoto e o local, para quem não tem upstream.</summary>
-    private IReadOnlyCollection<string> WorktreeBranches()
-        => Worktrees
+    private IReadOnlyCollection<string> WorktreeBranches() => QueryNames(Worktrees);
+
+    private static IReadOnlyCollection<string> QueryNames(IEnumerable<WorktreeRow> rows)
+        => rows
             .SelectMany(row => new[] { row.Worktree.UpstreamBranch, row.Worktree.Branch })
             .OfType<string>()
             .Distinct(StringComparer.Ordinal)
             .ToList();
+
+    /// <summary>Branches locais dos worktrees — a chave do agendador.</summary>
+    private IReadOnlyCollection<string> LocalBranches()
+        => Worktrees.Select(row => row.Worktree.Branch).OfType<string>().ToList();
 
     /// <summary>
     /// PR da linha: primeiro pelo nome da branch no remoto, depois pelo local. O upstream é
@@ -578,9 +634,11 @@ public sealed class MainViewModel : ObservableObject
     /// Casa os PRs com as linhas pela branch, compara cada um com o último estado visto e
     /// avisa das transições. É o caminho comum do carregamento e do monitoramento — por isso
     /// uma mudança que aconteceu com o app fechado também é avisada, uma vez, ao abrir.
-    /// Devolve quantas linhas têm PR e, se algum mudou, a frase para o rodapé.
+    /// Com <paramref name="scope"/>, só as linhas dessas branches são tocadas — o monitoramento
+    /// consulta um lote, não a lista inteira. Devolve quantas linhas (do escopo) têm PR e, se
+    /// algum mudou, a frase para o rodapé.
     /// </summary>
-    private (int Matched, string? Changes) ApplyPullRequests(PullRequestLookup lookup)
+    private (int Matched, string? Changes) ApplyPullRequests(PullRequestLookup lookup, IReadOnlySet<string>? scope = null)
     {
         var matched = 0;
         var changed = new List<(WorktreeRow Row, PullRequestInfo PullRequest, IReadOnlyList<string> Transitions)>();
@@ -589,6 +647,8 @@ public sealed class MainViewModel : ObservableObject
 
         foreach (var row in Worktrees)
         {
+            if (scope is not null && (row.Worktree.Branch is not { } scoped || !scope.Contains(scoped))) continue;
+
             row.PullRequest = FindPullRequest(row.Worktree, lookup, localBranches);
 
             if (row.PullRequest is { } pullRequest)
@@ -659,35 +719,21 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Intervalo do monitoramento agora: o configurado com a janela ativa, o triplo com ela
-    /// em segundo plano, e nenhum (pausado) minimizada ou com o monitoramento desligado.
+    /// A janela avisa quando ganha ou perde o foco e quando é minimizada ou restaurada. Em
+    /// segundo plano as cadências triplicam; minimizada, nada roda.
     /// </summary>
-    private TimeSpan? MonitorInterval
-    {
-        get
-        {
-            if (_settings.MonitorIntervalMinutes <= 0 || _isWindowMinimized) return null;
-            var interval = TimeSpan.FromMinutes(_settings.MonitorIntervalMinutes);
-            return _isWindowActive ? interval : interval * 3;
-        }
-    }
-
-    private bool IsRemoteCheckDue
-        => MonitorInterval is { } interval && DateTimeOffset.UtcNow - _lastRemoteCheck >= interval;
-
-    /// <summary>A janela avisa quando ganha ou perde o foco e quando é minimizada ou restaurada.</summary>
     public void SetWindowActivity(bool isActive, bool isMinimized)
     {
-        _isWindowActive = isActive;
-        _isWindowMinimized = isMinimized;
+        _scheduler.IsWindowActive = isActive;
+        _scheduler.IsWindowMinimized = isMinimized;
 
-        // Voltou para a frente depois de muito tempo parada: confere já, sem esperar o tique.
-        if (isActive && !isMinimized && IsRemoteCheckDue) _ = CheckRemoteAsync();
+        // Voltou para a frente: o que venceu enquanto estava fora é conferido já, sem esperar o tique.
+        if (isActive && !isMinimized) _ = CheckRemoteAsync();
     }
 
     private void StartMonitoring()
     {
-        if (_monitorCancellation is not null || _settings.MonitorIntervalMinutes <= 0) return;
+        if (_monitorCancellation is not null) return;
 
         _monitorCancellation = new CancellationTokenSource();
         _ = MonitorLoopAsync(_monitorCancellation.Token);
@@ -700,18 +746,17 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Roda na UI enquanto houver repositório carregado. A cada tique só confere se já passou
-    /// o intervalo — que muda com a janela em segundo plano ou minimizada.
+    /// Roda na UI enquanto houver repositório carregado. Com o perfil desligado ou a janela
+    /// minimizada o laço segue, mas o agendador não deixa nada vencer.
     /// </summary>
     private async Task MonitorLoopAsync(CancellationToken cancellationToken)
     {
+        using var timer = new PeriodicTimer(MonitorTick);
+
         try
         {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                await Task.Delay(MonitorTick, cancellationToken).ConfigureAwait(true);
-                if (IsRemoteCheckDue) await CheckRemoteAsync().ConfigureAwait(true);
-            }
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(true))
+                await CheckRemoteAsync().ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -719,39 +764,68 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>As branches dos worktrees com a faixa de cadência de cada uma, pelo estado de agora.</summary>
+    private IEnumerable<ScheduledBranch> ScheduledBranches()
+        => Worktrees
+            .Where(row => row.Worktree.Branch is not null && !row.Worktree.IsBare)
+            .Select(row => new ScheduledBranch(
+                row.Worktree.Branch!,
+                MonitorScheduler.Classify(row.PullRequest, row.Status, row.Worktree.IsMain),
+                row.PullRequest is not null));
+
     /// <summary>
-    /// Um ciclo do monitoramento: `git fetch --all --prune` e uma consulta dos PRs. O fetch
+    /// Um passo do monitoramento: o `git fetch --all --prune`, se venceu o ciclo dele, e uma
+    /// consulta só dos PRs das branches que venceram — em lote, nunca uma por worktree. O fetch
     /// escreve em refs/remotes, e o <see cref="RepositoryWatcher"/> relê o status das linhas
     /// sozinho. Não roda com uma operação do app em andamento; sem gh, fica só a parte git.
     /// </summary>
     private async Task CheckRemoteAsync()
     {
+        UpdateMonitorNotice();
+
         if (_isCheckingRemote || IsBusy || _loadedRepositoryPath is not { } path) return;
 
+        var now = DateTimeOffset.UtcNow;
+        var fetchDue = _scheduler.IsFetchDue(now);
+        var due = _scheduler.DueBranches(ScheduledBranches(), now);
+        if (!fetchDue && due.Count == 0) return;
+
         _isCheckingRemote = true;
-        _lastRemoteCheck = DateTimeOffset.UtcNow;
         var cancellationToken = _monitorCancellation?.Token ?? default;
         var problems = new List<string>();
 
         try
         {
-            var fetch = GitService.FetchAllInBackgroundAsync(path, cancellationToken);
-            _backgroundFetch = fetch;
-
-            try
+            if (fetchDue)
             {
-                var result = await fetch.ConfigureAwait(true);
-                if (!result.Success) problems.Add($"git fetch falhou: {result.FirstErrorLine}");
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                problems.Add($"git fetch falhou: {exception.Message}");
+                _scheduler.MarkFetched(now);
+                var fetch = GitService.FetchAllInBackgroundAsync(path, cancellationToken);
+                _backgroundFetch = fetch;
+
+                try
+                {
+                    var result = await fetch.ConfigureAwait(true);
+                    if (!result.Success) problems.Add($"git fetch falhou: {result.FirstErrorLine}");
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    problems.Add($"git fetch falhou: {exception.Message}");
+                }
+
+                // O usuário começou algo durante o fetch: os PRs ficam para o próximo tique.
+                if (IsBusy) return;
             }
 
-            // O usuário começou algo durante o fetch: os PRs ficam para o próximo ciclo.
-            if (IsBusy) return;
+            if (due.Count == 0) return;
 
-            var lookup = await GitHubService.LoadPullRequestsAsync(path, WorktreeBranches(), cancellationToken).ConfigureAwait(true);
+            // Marca antes de consultar: uma consulta que falha não é repetida a cada tique.
+            _scheduler.MarkChecked(due, now);
+
+            // O agendador fala em branch local; a consulta leva também o nome no remoto.
+            var scope = due.ToHashSet(StringComparer.Ordinal);
+            var rows = Worktrees.Where(row => row.Worktree.Branch is { } branch && scope.Contains(branch)).ToList();
+
+            var lookup = await GitHubService.LoadPullRequestsAsync(path, QueryNames(rows), cancellationToken).ConfigureAwait(true);
             if (cancellationToken.IsCancellationRequested || _loadedRepositoryPath != path) return;
 
             if (lookup.Failed)
@@ -760,8 +834,11 @@ public sealed class MainViewModel : ObservableObject
                 return;
             }
 
-            if (ApplyPullRequests(lookup).Changes is { } changes) StatusMessage = changes;
-            await LoadBaseDistancesAsync(Worktrees.ToList(), cancellationToken).ConfigureAwait(true);
+            _scheduler.RecordBudget(lookup.Budget);
+
+            if (ApplyPullRequests(lookup, scope).Changes is { } changes) StatusMessage = changes;
+
+            await LoadBaseDistancesAsync(rows, cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -775,7 +852,36 @@ public sealed class MainViewModel : ObservableObject
         {
             _isCheckingRemote = false;
             ReportMonitorProblem(problems.Count == 0 ? null : string.Join(" · ", problems));
+            UpdateMonitorNotice();
         }
+    }
+
+    /// <summary>
+    /// Enquanto o agendador recua pela cota, o rodapé diz — sem isso a coluna PR parada
+    /// pareceria travamento. Some sozinho no reset da cota ou quando o consumo baixa.
+    /// </summary>
+    private void UpdateMonitorNotice()
+    {
+        var now = DateTimeOffset.UtcNow;
+        MonitorNotice = _scheduler.Budget is { } budget && _scheduler.IsBackingOff(now) && !_scheduler.IsPaused
+            ? $"Monitor em recuo · {budget.UsedFraction:P0} da cota do GitHub usada · normaliza às {budget.ResetAt.ToLocalTime():HH:mm}"
+            : null;
+    }
+
+    /// <summary>
+    /// Promove a branch no agendador quando o status relido mostra um push: ganhou upstream
+    /// agora, ou tinha commits à frente e deixou de ter. É o momento em que um PR está para
+    /// nascer — e o sinal já chega pelo watcher, sem custar chamada nenhuma.
+    /// </summary>
+    private void NotePush(WorktreeRow row, WorktreeStatus previous, WorktreeStatus current)
+    {
+        if (!previous.IsKnown || !current.IsKnown || row.PullRequest is not null || row.Worktree.Branch is not { } branch) return;
+
+        var now = DateTimeOffset.UtcNow;
+        if (!previous.HasUpstream && current.HasUpstream)
+            _scheduler.Promote(branch, MonitorScheduler.UpstreamPromotion, now);
+        else if (previous.HasUpstream && current.HasUpstream && previous.Ahead > 0 && current.Ahead == 0)
+            _scheduler.Promote(branch, MonitorScheduler.PushPromotion, now);
     }
 
     /// <summary>Problema do monitoramento vai para o rodapé uma vez — não a cada ciclo que falhar igual.</summary>
@@ -1463,6 +1569,7 @@ public sealed class MainViewModel : ObservableObject
     /// Lê `git status` de cada worktree. Limitado a 8 de cada vez para não disparar
     /// dezenas de processos git de uma vez em repositórios com muitos worktrees. O status
     /// também decide a limpeza (branch remota apagada já contida na base), daí recontar no fim.
+    /// Um push visto na releitura promove a branch no agendador.
     /// </summary>
     private async Task LoadStatusesAsync(
         IReadOnlyList<WorktreeRow> rows,
@@ -1475,9 +1582,11 @@ public sealed class MainViewModel : ObservableObject
             await gate.WaitAsync(cancellationToken).ConfigureAwait(true);
             try
             {
+                var previous = row.Status;
                 row.Status = await WorktreeStatusReader
                     .ReadAsync(row.FullPath, cancellationToken)
                     .ConfigureAwait(true);
+                NotePush(row, previous, row.Status);
             }
             finally
             {
