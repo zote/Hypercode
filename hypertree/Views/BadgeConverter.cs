@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
+using Avalonia.Styling;
 
 namespace Hypertree.Views;
 
@@ -10,16 +11,12 @@ namespace Hypertree.Views;
 /// </summary>
 public sealed class BadgeConverter : IValueConverter
 {
-    public static readonly BadgeConverter ToGeometry = new(producesGeometry: true);
-    public static readonly BadgeConverter ToBrush = new(producesGeometry: false);
+    public static readonly BadgeConverter ToGeometry = new();
 
     private static readonly object CacheLock = new();
     private static readonly Dictionary<string, Geometry> Geometries = new(StringComparer.Ordinal);
-    private static readonly Dictionary<string, IBrush> Brushes = new(StringComparer.Ordinal);
 
-    private readonly bool _producesGeometry;
-
-    private BadgeConverter(bool producesGeometry) => _producesGeometry = producesGeometry;
+    private BadgeConverter() { }
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
@@ -27,17 +24,43 @@ public sealed class BadgeConverter : IValueConverter
 
         lock (CacheLock)
         {
-            if (_producesGeometry)
+            if (!Geometries.TryGetValue(text, out var geometry))
             {
-                if (!Geometries.TryGetValue(text, out var geometry))
-                {
-                    geometry = Geometry.Parse(text);
-                    Geometries[text] = geometry;
-                }
-
-                return geometry;
+                geometry = Geometry.Parse(text);
+                Geometries[text] = geometry;
             }
 
+            return geometry;
+        }
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Escolhe a cor clara ou escura do ícone conforme o tema efetivo do controle.
+/// Entradas do MultiBinding: cor do tema claro, cor do tema escuro e o
+/// ActualThemeVariant — que, por ser binding, troca a cor na hora em que o macOS
+/// muda de tema.
+/// </summary>
+public sealed class BadgeBrushConverter : IMultiValueConverter
+{
+    public static readonly BadgeBrushConverter Instance = new();
+
+    private static readonly object CacheLock = new();
+    private static readonly Dictionary<string, IBrush> Brushes = new(StringComparer.Ordinal);
+
+    private BadgeBrushConverter() { }
+
+    public object? Convert(IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (values.Count < 3 || values[0] is not string light || values[1] is not string dark) return null;
+
+        var text = values[2] is ThemeVariant variant && variant == ThemeVariant.Dark ? dark : light;
+
+        lock (CacheLock)
+        {
             if (!Brushes.TryGetValue(text, out var brush))
             {
                 brush = new SolidColorBrush(Color.Parse(text));
@@ -47,7 +70,4 @@ public sealed class BadgeConverter : IValueConverter
             return brush;
         }
     }
-
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => throw new NotSupportedException();
 }
