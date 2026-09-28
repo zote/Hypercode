@@ -114,7 +114,7 @@ public partial class MainWindow : Window
 
         var dialog = new CreateWorktreeWindow
         {
-            DataContext = new CreateWorktreeViewModel(mainPath, viewModel.OpenTerminalAfterCreate, viewModel.EffectiveCommand),
+            DataContext = new CreateWorktreeViewModel(mainPath, viewModel.OpenTerminalAfterCreate, viewModel.EffectiveCommand, viewModel.AssignIssueOnCreate),
         };
 
         var result = await dialog.ShowDialog<WorktreeCreationResult?>(this);
@@ -157,6 +157,27 @@ public partial class MainWindow : Window
 
     private async void OnHelpClick(object? sender, RoutedEventArgs e)
         => await new HelpWindow().ShowDialog(this);
+
+    private SettingsWindow? _settingsWindow;
+
+    private void OnSettingsClick(object? sender, RoutedEventArgs e) => ShowSettings();
+
+    /// <summary>
+    /// Abre as configurações, ou traz para a frente as que já estão abertas. Não é modal: o
+    /// perfil do monitor muda com a lista à vista, e o ⌘, do menu do app chega aqui também.
+    /// </summary>
+    public void ShowSettings()
+    {
+        if (_settingsWindow is not null)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
+        _settingsWindow = new SettingsWindow { DataContext = DataContext };
+        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Show(this);
+    }
 
     private async void OnCleanupClick(object? sender, RoutedEventArgs e)
     {

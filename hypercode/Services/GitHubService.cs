@@ -118,11 +118,20 @@ public sealed class IssueInfo
     [JsonPropertyName("title")] public string Title { get; set; } = string.Empty;
     [JsonPropertyName("state")] public string State { get; set; } = string.Empty;
     [JsonPropertyName("url")] public string Url { get; set; } = string.Empty;
+    [JsonPropertyName("assignees")] public List<IssueAssignee> Assignees { get; set; } = new();
+
+    public bool IsAssignedTo(string login)
+        => Assignees.Any(assignee => string.Equals(assignee.Login, login, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>`gh issue view` também resolve número de PR; só a URL diferencia.</summary>
     public bool IsPullRequest => Url.Contains("/pull/", StringComparison.Ordinal);
 
     public bool IsClosed => State.Equals("CLOSED", StringComparison.OrdinalIgnoreCase);
+}
+
+public sealed class IssueAssignee
+{
+    [JsonPropertyName("login")] public string Login { get; set; } = string.Empty;
 }
 
 /// <param name="Failed">
@@ -395,7 +404,7 @@ public static class GitHubService
 
         var result = await ProcessRunner.RunAsync(
             gh,
-            new[] { "issue", "view", number.ToString(), "--json", "number,title,state,url" },
+            new[] { "issue", "view", number.ToString(), "--json", "number,title,state,url,assignees" },
             repositoryPath,
             TimeSpan.FromSeconds(30),
             cancellationToken).ConfigureAwait(false);
@@ -405,6 +414,51 @@ public static class GitHubService
 
         return JsonSerializer.Deserialize<IssueInfo>(result.StandardOutput, JsonOptions)
             ?? throw new InvalidOperationException($"Issue #{number}: resposta vazia do gh.");
+    }
+
+    /// <summary>Login do usuário autenticado no gh. Lança com a mensagem do gh quando falha.</summary>
+    public static async Task<string> GetViewerLoginAsync(
+        string repositoryPath,
+        CancellationToken cancellationToken = default)
+    {
+        var gh = ExecutableLocator.Find("gh")
+            ?? throw new InvalidOperationException("GitHub CLI (gh) não encontrado. Instale com: brew install gh");
+
+        var result = await ProcessRunner.RunAsync(
+            gh,
+            new[] { "api", "user", "--jq", ".login" },
+            repositoryPath,
+            TimeSpan.FromSeconds(30),
+            cancellationToken).ConfigureAwait(false);
+
+        var login = result.StandardOutput.Trim();
+        if (!result.Success || login.Length == 0)
+            throw new InvalidOperationException($"Usuário do gh: {result.FirstErrorLine}");
+
+        return login;
+    }
+
+    /// <summary>
+    /// Acrescenta o usuário do gh aos assignees da issue — adiciona, não substitui os que já
+    /// estão lá. Lança com a mensagem do gh quando o GitHub recusa (sem permissão de escrita).
+    /// </summary>
+    public static async Task AssignIssueToViewerAsync(
+        string repositoryPath,
+        int number,
+        CancellationToken cancellationToken = default)
+    {
+        var gh = ExecutableLocator.Find("gh")
+            ?? throw new InvalidOperationException("GitHub CLI (gh) não encontrado. Instale com: brew install gh");
+
+        var result = await ProcessRunner.RunAsync(
+            gh,
+            new[] { "issue", "edit", number.ToString(), "--add-assignee", "@me" },
+            repositoryPath,
+            TimeSpan.FromSeconds(30),
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Success)
+            throw new InvalidOperationException(result.FirstErrorLine);
     }
 
     private static async Task<ProcessResult?> TryListAsync(

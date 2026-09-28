@@ -12,6 +12,7 @@ public sealed class CreateWorktreeViewModel : ObservableObject
     private enum CreateMode { NewBranch, PullRequest, Issue }
 
     private readonly string _mainWorktreePath;
+    private readonly bool _assignIssue;
 
     private CreateMode _mode;
     private string? _remote;
@@ -37,10 +38,11 @@ public sealed class CreateWorktreeViewModel : ObservableObject
     private CancellationTokenSource? _issueLookupCancellation;
     private CancellationTokenSource? _branchCheckCancellation;
 
-    public CreateWorktreeViewModel(string mainWorktreePath, bool openTerminal, string command)
+    public CreateWorktreeViewModel(string mainWorktreePath, bool openTerminal, string command, bool assignIssue)
     {
         _mainWorktreePath = mainWorktreePath;
         _openTerminal = openTerminal;
+        _assignIssue = assignIssue;
 
         // Todo trabalho nasce de uma issue (AGENTS.md). Explícito, para não depender da ordem do enum.
         _mode = CreateMode.Issue;
@@ -276,8 +278,8 @@ public sealed class CreateWorktreeViewModel : ObservableObject
         {
             var path = MainViewModel.ExpandHome(_worktreePath.Trim());
 
-            // Para o git, a issue é só uma branch nova: ela alimenta as sugestões e mais nada.
-            return _mode switch
+            // Para o git, a issue é só uma branch nova: ela alimenta as sugestões e a atribuição.
+            var result = _mode switch
             {
                 CreateMode.PullRequest => await WorktreeCreator
                     .CreateFromPullRequestAsync(_mainWorktreePath, _pullRequest!, path).ConfigureAwait(true),
@@ -288,6 +290,11 @@ public sealed class CreateWorktreeViewModel : ObservableObject
                     .CreateFromNewBranchAsync(_mainWorktreePath, _branchName.Trim(), _baseRef.Trim(), path)
                     .ConfigureAwait(true),
             };
+
+            if (_mode == CreateMode.Issue && _assignIssue && await AssignIssueAsync(_issue!).ConfigureAwait(true) is { } note)
+                result = result with { Warnings = result.Warnings.Append(note).ToList() };
+
+            return result;
         }
         catch (Exception exception)
         {
@@ -298,6 +305,28 @@ public sealed class CreateWorktreeViewModel : ObservableObject
         {
             ProgressMessage = null;
             IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Atribui a issue ao usuário do gh se ele ainda não estiver entre os assignees. O worktree
+    /// já existe: falha aqui vira frase do rodapé, nunca erro do diálogo. Já atribuído, silêncio.
+    /// </summary>
+    private async Task<string?> AssignIssueAsync(IssueInfo issue)
+    {
+        ProgressMessage = $"Atribuindo a issue #{issue.Number}…";
+
+        try
+        {
+            var login = await GitHubService.GetViewerLoginAsync(_mainWorktreePath).ConfigureAwait(true);
+            if (issue.IsAssignedTo(login)) return null;
+
+            await GitHubService.AssignIssueToViewerAsync(_mainWorktreePath, issue.Number).ConfigureAwait(true);
+            return $"issue #{issue.Number} atribuída a {login}";
+        }
+        catch (Exception exception)
+        {
+            return $"não deu para atribuir a issue #{issue.Number}: {exception.Message}";
         }
     }
 

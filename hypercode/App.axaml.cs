@@ -25,6 +25,9 @@ public partial class App : Application
 
     private AboutWindow? _aboutWindow;
 
+    private void OnSettingsClick(object? sender, EventArgs e)
+        => ((ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow as MainWindow)?.ShowSettings();
+
     private void OnAboutClick(object? sender, EventArgs e)
     {
         // Um Sobre só: clicar de novo traz a janela aberta para a frente.

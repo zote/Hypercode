@@ -91,7 +91,7 @@
         <TextBlock Classes="p" Text="Antes de remover qualquer coisa, o app lista os candidatos e pede confirmação." />
 
         <TextBlock Classes="h2" Text="Abrir no terminal" />
-        <TextBlock Classes="p" Text="Duplo-clique ou Enter abre uma janela nova do iTerm2 na pasta do worktree e roda o comando do campo Comando (por padrão claude). Sem iTerm2 instalado, usa o Terminal.app. Na primeira vez o macOS pede permissão de automação." />
+        <TextBlock Classes="p" Text="Duplo-clique ou Enter abre uma janela nova do iTerm2 na pasta do worktree e roda o Comando das configurações, ⌘, (por padrão claude). Sem iTerm2 instalado, usa o Terminal.app. Na primeira vez o macOS pede permissão de automação." />
 
       </StackPanel>
     </ScrollViewer>

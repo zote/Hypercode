@@ -20,7 +20,10 @@ duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `c
   principal fica sempre no topo e, ordenando por PR, as linhas sem PR vão para o fim. A
   escolha fica salva.
 - **Novo worktree…** (`⌘N`) cria um worktree com branch nova, a partir de um PR ou a partir de uma issue. Detalhes abaixo.
-- O campo **Comando** deixa você trocar `claude` por outra coisa (`claude --resume`, `zsh`, etc.).
+- **Configurações…** (`⌘,`, no menu do app, ou o botão **⚙** ao lado do **?**) reúne as
+  preferências: o **Comando** que o duplo-clique roda — troque `claude` por outra coisa
+  (`claude --resume`, `zsh`, etc.) —, o perfil do monitoramento e a atribuição de issue. Cada
+  campo vale na hora e fica salvo; não há Salvar.
 - O botão **?** abre a legenda das etiquetas, da coluna PR e das regras da limpeza.
   Parar o mouse sobre a etiqueta de uma linha explica só as dela.
 - **Limpar concluídos** remove os worktrees com PR `merged` ou `closed` e poda os órfãos,
@@ -30,8 +33,8 @@ duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `c
   relê tudo, inclusive os PRs. Detalhes abaixo.
 - O app **monitora o remoto**: faz `git fetch --prune` e relê os PRs com uma cadência por
   worktree — de 30 s com a CI rodando a 30 min na branch nunca pushada —, e avisa (notificação
-  do macOS e sino na linha) quando checks, review, merge ou conflito mudam. O perfil fica no
-  rodapé. Detalhes em [Monitoramento](#monitoramento).
+  do macOS e sino na linha) quando checks, review, merge ou conflito mudam. O perfil fica nas
+  configurações. Detalhes em [Monitoramento](#monitoramento).
 - O caminho do repositório e o comando ficam salvos em
   `~/Library/Application Support/Hypercode/settings.json`. Quem vem da época em que o app se
   chamava Hypertree não perde nada: na primeira abertura, se essa pasta não existe, o app copia
@@ -232,7 +235,11 @@ O diálogo tem três modos:
   artigos e preposições). Branch e base são editáveis; para o git é uma branch nova como no
   primeiro modo. Issue fechada é aceita com aviso; número de PR é recusado (use o modo PR).
   Se a branch já existe localmente o botão Criar fica desabilitado; se existe só no remoto,
-  aparece um aviso.
+  aparece um aviso. Com **Atribuir a issue a mim** ligado nas configurações (desligado por
+  padrão), depois de criar o app confere os assignees e, se o usuário do `gh` não está entre
+  eles, roda `gh issue edit <n> --add-assignee @me` — acrescenta, não substitui. Se o GitHub
+  recusar (sem permissão de escrita no repo), o worktree fica criado e o motivo vai para o
+  rodapé; já atribuído, nada acontece.
 
 A pasta sugerida é `<pai do repo>/<repo>.worktrees/<branch>`, com `/` virando `-`
 (`feature/login` → `meu-repo.worktrees/feature-login`). Dá para editar; apagar o campo volta
@@ -313,7 +320,7 @@ não custa chamada a mais — a branch só entra em lotes mais cedo. PR criado *
 pushada dias antes não deixa sinal local: é o que a faixa de 5 min cobre, e voltar o foco para a
 janela confere na hora o que venceu.
 
-**Perfil**, no seletor do rodapé, multiplica todas as cadências: econômico 2×, equilibrado 1×,
+**Perfil**, nas configurações (`⌘,`), multiplica todas as cadências: econômico 2×, equilibrado 1×,
 agressivo ½, ou desligado.
 
 | Janela | Cadências |
@@ -356,7 +363,7 @@ Em `settings.json`:
 
 | Chave | Padrão | |
 |---|---|---|
-| `MonitorProfile` | `balanced` | `off`, `economical`, `balanced` ou `aggressive` — o mesmo do seletor do rodapé |
+| `MonitorProfile` | `balanced` | `off`, `economical`, `balanced` ou `aggressive` — o mesmo do seletor das configurações |
 | `NotifyPullRequestChanges` | `true` | `false` mantém o sino e o rodapé, sem notificação |
 
 A chave antiga `MonitorIntervalMinutes`, do intervalo fixo, é migrada na leitura: `0` vira `off`,
@@ -383,6 +390,7 @@ hypercode/
 ├── App.axaml(.cs)              tema e janela principal
 ├── Views/MainWindow.axaml(.cs) UI e handlers (duplo-clique, menu, atalhos)
 ├── Views/CreateWorktreeWindow.axaml(.cs) diálogo "Novo worktree"
+├── Views/SettingsWindow.axaml(.cs) tela de configurações (⌘,)
 ├── ViewModels/
 │   ├── MainViewModel.cs        carregamento, filtro, ordenação, status, ações
 │   ├── CreateWorktreeViewModel.cs  diálogo "Novo worktree"

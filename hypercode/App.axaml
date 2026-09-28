@@ -13,6 +13,8 @@
   <NativeMenu.Menu>
     <NativeMenu>
       <NativeMenuItem Header="Sobre o Hypercode" Click="OnAboutClick" />
+      <NativeMenuItemSeparator />
+      <NativeMenuItem Header="Configurações…" Gesture="Cmd+OemComma" Click="OnSettingsClick" />
     </NativeMenu>
   </NativeMenu.Menu>
 
