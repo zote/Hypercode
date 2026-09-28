@@ -1,0 +1,219 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Hypercode.Views"
+        x:Class="Hypercode.Views.MainWindow"
+        Title="Hypercode — Git Worktrees"
+        Width="1180" Height="640"
+        MinWidth="860" MinHeight="400">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.header">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Opacity" Value="0.6" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.cell">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <!-- Cabeçalho clicável: ordena pela coluna. Sem fundo nem borda, para parecer texto. -->
+    <Style Selector="Button.header">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Opacity" Value="0.6" />
+    </Style>
+    <Style Selector="Button.header:pointerover">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Button.header:pointerover /template/ ContentPresenter, Button.header:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="ListBox">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBoxItem">
+      <Setter Property="Padding" Value="16,0" />
+      <Setter Property="MinHeight" Value="40" />
+    </Style>
+  </Window.Styles>
+
+  <Window.Resources>
+    <DataTemplate x:Key="BadgeTemplate">
+      <!-- Viewbox + Path de 16x16 fixo, em vez de PathIcon: o PathIcon estica o
+           desenho até as bordas, e os Octicons dependem da caixa 16x16 para manter a
+           proporção (o dot-fill, por exemplo, é um ponto no meio, não um círculo
+           cheio). O Border transparente faz o tooltip responder na caixa toda, não
+           só no traço do ícone. -->
+      <Border Margin="0,0,7,0" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
+        <Viewbox Width="14" Height="14">
+          <Path Width="16" Height="16"
+                Data="{Binding PathData, Converter={x:Static views:BadgeConverter.ToGeometry}}">
+            <Path.Fill>
+              <MultiBinding Converter="{x:Static views:BadgeBrushConverter.Instance}">
+                <Binding Path="LightColorHex" />
+                <Binding Path="DarkColorHex" />
+                <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource Self}" />
+              </MultiBinding>
+            </Path.Fill>
+          </Path>
+        </Viewbox>
+      </Border>
+    </DataTemplate>
+
+    <ItemsPanelTemplate x:Key="BadgeRowPanel">
+      <StackPanel Orientation="Horizontal" />
+    </ItemsPanelTemplate>
+  </Window.Resources>
+
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+    <!-- Repositório -->
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="16,16,16,12">
+      <TextBlock Grid.Column="0" Text="Repositório" VerticalAlignment="Center" Margin="0,0,10,0" />
+      <TextBox Grid.Column="1"
+               Text="{Binding RepositoryPath, Mode=TwoWay}"
+               Watermark="/Users/voce/dev/meu-repo"
+               KeyDown="OnRepositoryPathKeyDown" />
+      <Button Grid.Column="2" Content="Escolher…" Margin="8,0,0,0" Click="OnBrowseClick" />
+      <Button Grid.Column="3" Content="Atualizar" Margin="8,0,0,0"
+              Click="OnRefreshClick" IsEnabled="{Binding IsNotBusy}" HotKey="Cmd+R"
+              ToolTip.Tip="Relê tudo, inclusive os PRs (⌘R). Worktree criado ou apagado fora do app e commit, fetch ou push já aparecem sozinhos." />
+      <Button Grid.Column="4" Content="?" Width="34" Margin="8,0,0,0"
+              HorizontalContentAlignment="Center" FontWeight="SemiBold"
+              Click="OnHelpClick" ToolTip.Tip="O que significam as etiquetas, a coluna PR e a limpeza" />
+      <!-- O ⌘, fica no item do menu do app: um HotKey aqui dispararia junto com ele. -->
+      <Button Grid.Column="5" Content="⚙" Width="34" Margin="8,0,0,0" FontSize="16" Padding="0"
+              HorizontalContentAlignment="Center"
+              Click="OnSettingsClick" ToolTip.Tip="Configurações: comando, monitoramento, atribuição de issue, limpeza automática (⌘,)" />
+    </Grid>
+
+    <!-- Filtro e criação -->
+    <Grid Grid.Row="1" ColumnDefinitions="320,Auto,*,Auto" Margin="16,0,16,12">
+      <TextBox Grid.Column="0" Name="FilterBox"
+               Text="{Binding FilterText, Mode=TwoWay}"
+               Watermark="Filtrar por worktree, branch ou PR  (⌘F)"
+               KeyDown="OnFilterKeyDown" />
+      <TextBlock Grid.Column="1" Classes="muted" VerticalAlignment="Center" Margin="10,0,0,0"
+                 Text="{Binding FilterSummary}" IsVisible="{Binding HasHiddenRows}" />
+      <Button Grid.Column="3" Content="Novo worktree…" Click="OnCreateWorktreeClick"
+              IsEnabled="{Binding CanCreateWorktree}" HotKey="Cmd+N"
+              ToolTip.Tip="Cria um worktree com branch nova, a partir de um PR ou de uma issue (⌘N)" />
+    </Grid>
+
+    <!-- Cabeçalho da lista: clicar ordena; clicar de novo inverte -->
+    <Border Grid.Row="2" BorderThickness="0,0,0,1" BorderBrush="#22808080" Padding="16,0,16,8">
+      <Grid ColumnDefinitions="2.8*,2.2*,162,2.4*">
+        <Button Grid.Column="0" Classes="header" Content="{Binding NameHeader}" Margin="72,0,0,0"
+                Click="OnSortClick" Tag="Name" />
+        <Button Grid.Column="1" Classes="header" Content="{Binding BranchHeader}" Click="OnSortClick" Tag="Branch" />
+        <Button Grid.Column="2" Classes="header" Content="{Binding PullRequestHeader}" Click="OnSortClick" Tag="PullRequest" />
+        <Button Grid.Column="3" Classes="header" Content="{Binding PathHeader}" Click="OnSortClick" Tag="Path" />
+      </Grid>
+    </Border>
+
+    <!-- Lista de worktrees -->
+    <ListBox Grid.Row="3" Name="WorktreeList"
+             ItemsSource="{Binding VisibleWorktrees}"
+             SelectionMode="Multiple"
+             SelectedItems="{Binding SelectedWorktrees}"
+             KeyDown="OnListKeyDown">
+      <!-- Um menu só, para a lista inteira: age sobre todas as linhas selecionadas. O clique
+           direito numa linha fora da seleção seleciona só ela (o ListBox faz isso), e o
+           Opening põe a contagem nos rótulos e habilita o que ao menos uma linha suporta. -->
+      <ListBox.ContextMenu>
+        <ContextMenu Opening="OnListContextMenuOpening">
+          <MenuItem Name="LaunchMenuItem" Click="OnOpenTerminalMenuClick" />
+          <MenuItem Name="ShellMenuItem" Click="OnOpenShellMenuClick"
+                    ToolTip.Tip="Abre o terminal na pasta do worktree, sem rodar o comando." />
+          <MenuItem Name="ResumeClaudeMenuItem" Click="OnResumeClaudeMenuClick"
+                    ToolTip.Tip="Abre o terminal rodando claude --continue: volta à última conversa deste worktree." />
+          <Separator />
+          <MenuItem Name="RevealMenuItem" Click="OnRevealMenuClick" />
+          <MenuItem Name="OpenPullRequestMenuItem" Click="OnOpenPullRequestMenuClick" />
+          <MenuItem Name="MarkSeenMenuItem" Click="OnMarkSeenMenuClick"
+                    ToolTip.Tip="Tira o sino da linha: as mudanças do PR avisadas pelo monitoramento ficam como vistas. Abrir o PR no navegador faz o mesmo." />
+          <Separator />
+          <MenuItem Name="UpdateBranchMenuItem" Click="OnUpdateBranchMenuClick"
+                    ToolTip.Tip="git pull --ff-only: traz os commits do upstream da própria branch. Se a branch divergiu, o git recusa e nada muda. Não traz a base do PR." />
+          <MenuItem Name="UpdateFromBaseMenuItem" Click="OnUpdateFromBaseMenuClick"
+                    ToolTip.Tip="Faz fetch da base do PR e a traz para dentro da branch, com merge ou rebase — você escolhe na hora. É o que resolve o ícone de base desatualizada. Uma linha por vez." />
+          <MenuItem Name="LockMenuItem" Click="OnLockMenuClick"
+                    ToolTip.Tip="git worktree lock, com um motivo opcional: o git passa a recusar remover e podar o worktree, e a limpeza o ignora." />
+          <MenuItem Name="UnlockMenuItem" Click="OnUnlockMenuClick"
+                    ToolTip.Tip="git worktree unlock, depois de mostrar o worktree e a trava. Uma linha por vez." />
+          <MenuItem Name="RemoveMenuItem" Click="OnRemoveWorktreeMenuClick"
+                    ToolTip.Tip="git worktree remove, com confirmação. A branch local não é tocada." />
+        </ContextMenu>
+      </ListBox.ContextMenu>
+      <ListBox.ItemTemplate>
+        <DataTemplate>
+          <Grid ColumnDefinitions="2.8*,2.2*,162,2.4*"
+                Background="Transparent"
+                DoubleTapped="OnRowDoubleTapped">
+            <Grid Grid.Column="0" ColumnDefinitions="72,*">
+              <!-- Calha de largura fixa: os ícones ficam colados no nome e os nomes
+                   continuam alinhados entre linhas com quantidades diferentes de ícone. -->
+              <ItemsControl Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Right"
+                            ItemsSource="{Binding GitBadges}"
+                            ItemTemplate="{StaticResource BadgeTemplate}"
+                            ItemsPanel="{StaticResource BadgeRowPanel}" />
+              <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                <TextBlock Classes="cell" Text="{Binding Name}" FontWeight="SemiBold" />
+                <TextBlock Classes="cell muted" FontSize="11" Text="{Binding Tags}"
+                           ToolTip.Tip="{Binding TagsTooltip}"
+                           IsVisible="{Binding Tags, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              </StackPanel>
+            </Grid>
+            <TextBlock Grid.Column="1" Classes="cell" Text="{Binding Branch}" Margin="0,0,12,0" />
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+              <TextBlock Classes="cell" Width="50" Text="{Binding PullRequestLabel}"
+                         ToolTip.Tip="{Binding PullRequestTooltip}" />
+              <ItemsControl VerticalAlignment="Center"
+                            ItemsSource="{Binding PullRequestBadges}"
+                            ItemTemplate="{StaticResource BadgeTemplate}"
+                            ItemsPanel="{StaticResource BadgeRowPanel}" />
+            </StackPanel>
+
+            <TextBlock Grid.Column="3" Classes="cell muted" FontSize="11" Text="{Binding FullPath}"
+                       ToolTip.Tip="{Binding FullPath}" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+    <!-- Rodapé -->
+    <Border Grid.Row="4" BorderThickness="0,1,0,0" BorderBrush="#22808080" Padding="16,10">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+        <ProgressBar Grid.Column="0" Width="80" Height="4" IsIndeterminate="True"
+                     VerticalAlignment="Center" Margin="0,0,12,0"
+                     IsVisible="{Binding IsBusy}" />
+        <TextBlock Grid.Column="1" Classes="muted" VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" Text="{Binding StatusMessage}" />
+        <!-- Fica enquanto o monitoramento recua pela cota: a coluna PR parada não é travamento. -->
+        <TextBlock Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0" FontSize="11"
+                   Foreground="#C9822B"
+                   Text="{Binding MonitorNotice}" IsVisible="{Binding HasMonitorNotice}"
+                   ToolTip.Tip="A cota de consultas GraphQL do GitHub (5000/h, da conta inteira — outras ferramentas gastam dela também) passou de 60 %. Todas as cadências ficam mais longas até o reset ou até o consumo baixar." />
+        <Button Grid.Column="3" Content="{Binding CleanupButtonLabel}" Margin="0,0,8,0"
+                Click="OnCleanupClick" IsEnabled="{Binding CanCleanupManually}"
+                ToolTip.Tip="{Binding CleanupToolTip}" ToolTip.ShowOnDisabled="True" />
+        <Button Grid.Column="4" Content="Abrir no iTerm2" Click="OnOpenTerminalClick"
+                IsEnabled="{Binding SelectedWorktree, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      </Grid>
+    </Border>
+
+  </Grid>
+</Window>

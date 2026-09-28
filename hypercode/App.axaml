@@ -1,0 +1,21 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Hypercode.App"
+             Name="Hypercode"
+             RequestedThemeVariant="Default">
+
+  <Application.Styles>
+    <FluentTheme />
+  </Application.Styles>
+
+  <!-- Menu do app no macOS. Sem ele o Avalonia monta um padrão com "About Avalonia";
+       os itens de sistema (Serviços, Ocultar, Encerrar…) o macOS acrescenta depois destes. -->
+  <NativeMenu.Menu>
+    <NativeMenu>
+      <NativeMenuItem Header="Sobre o Hypercode" Click="OnAboutClick" />
+      <NativeMenuItemSeparator />
+      <NativeMenuItem Header="Configurações…" Gesture="Cmd+OemComma" Click="OnSettingsClick" />
+    </NativeMenu>
+  </NativeMenu.Menu>
+
+</Application>

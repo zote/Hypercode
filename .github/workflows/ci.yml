@@ -37,18 +37,18 @@ jobs:
 
       - name: Restore (locked mode)
         run: |
-          dotnet restore Hypertree.sln --locked-mode
+          dotnet restore Hypercode.sln --locked-mode
           dotnet tool restore
 
       - name: Build (avisos são erro)
-        run: dotnet build Hypertree.sln -c Release --no-restore -warnaserror
+        run: dotnet build Hypercode.sln -c Release --no-restore -warnaserror
 
       - name: Formatação (whitespace, style e analyzers)
-        run: dotnet format Hypertree.sln --verify-no-changes --no-restore --verbosity diagnostic
+        run: dotnet format Hypercode.sln --verify-no-changes --no-restore --verbosity diagnostic
 
       - name: Testes com cobertura
         run: >
-          dotnet test --solution Hypertree.sln -c Release --no-build
+          dotnet test --solution Hypercode.sln -c Release --no-build
           --coverlet --coverlet-output-format cobertura
           --results-directory "$GITHUB_WORKSPACE/artifacts/test-results"
 
@@ -71,11 +71,11 @@ jobs:
 
       - name: Pacotes vulneráveis (falha se houver)
         run: |
-          dotnet list Hypertree.sln package --vulnerable --include-transitive --format json > vulnerable.json
+          dotnet list Hypercode.sln package --vulnerable --include-transitive --format json > vulnerable.json
           count=$(jq '[.projects[].frameworks[]? | (.topLevelPackages[]?, .transitivePackages[]?) | select(.vulnerabilities)] | length' vulnerable.json)
           if [ "$count" -gt 0 ]; then
             echo "::error::$count pacote(s) com vulnerabilidade conhecida"
-            dotnet list Hypertree.sln package --vulnerable --include-transitive
+            dotnet list Hypercode.sln package --vulnerable --include-transitive
             exit 1
           fi
           echo "Nenhum pacote vulnerável."
@@ -86,7 +86,7 @@ jobs:
           {
             echo '### Pacotes desatualizados'
             echo '```'
-            dotnet list Hypertree.sln package --outdated
+            dotnet list Hypercode.sln package --outdated
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -110,13 +110,13 @@ jobs:
       - name: Gera o .app
         env:
           VERSION: 0.0.0-pr.${{ github.event.pull_request.number || github.run_number }}
-        run: hypertree/build-app.sh ${{ matrix.rid }}
+        run: hypercode/build-app.sh ${{ matrix.rid }}
 
       - name: Compacta
-        run: ditto -c -k --keepParent hypertree/dist/Hypertree.app "Hypertree-${{ matrix.rid }}.zip"
+        run: ditto -c -k --keepParent hypercode/dist/Hypercode.app "Hypercode-${{ matrix.rid }}.zip"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: Hypertree-${{ matrix.rid }}
-          path: Hypertree-${{ matrix.rid }}.zip
+          name: Hypercode-${{ matrix.rid }}
+          path: Hypercode-${{ matrix.rid }}.zip
           retention-days: 14

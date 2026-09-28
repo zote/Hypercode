@@ -74,18 +74,18 @@ jobs:
           cache-dependency-path: "**/packages.lock.json"
 
       - name: Gera o .app
-        run: hypertree/build-app.sh ${{ matrix.rid }} "${{ needs.version.outputs.version }}"
+        run: hypercode/build-app.sh ${{ matrix.rid }} "${{ needs.version.outputs.version }}"
 
       - name: Confere a versão no Info.plist
-        run: plutil -p hypertree/dist/Hypertree.app/Contents/Info.plist | grep CFBundleShortVersionString
+        run: plutil -p hypercode/dist/Hypercode.app/Contents/Info.plist | grep CFBundleShortVersionString
 
       - name: Compacta (ditto preserva os atributos do bundle)
-        run: ditto -c -k --keepParent hypertree/dist/Hypertree.app "Hypertree-${{ needs.version.outputs.version }}-${{ matrix.arch }}.zip"
+        run: ditto -c -k --keepParent hypercode/dist/Hypercode.app "Hypercode-${{ needs.version.outputs.version }}-${{ matrix.arch }}.zip"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: Hypertree-${{ matrix.arch }}
-          path: Hypertree-*.zip
+          name: Hypercode-${{ matrix.arch }}
+          path: Hypercode-*.zip
           if-no-files-found: error
 
   publish:
@@ -97,14 +97,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: Hypertree-*
+          pattern: Hypercode-*
           merge-multiple: true
           path: dist
 
       - name: Checksums
         working-directory: dist
         run: |
-          sha256sum Hypertree-*.zip > SHA256SUMS
+          sha256sum Hypercode-*.zip > SHA256SUMS
           cat SHA256SUMS
 
       - name: Cria o release
@@ -113,7 +113,7 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
-          flags=(--generate-notes --title "Hypertree $VERSION" --target "$GITHUB_SHA")
+          flags=(--generate-notes --title "Hypercode $VERSION" --target "$GITHUB_SHA")
           [ "$PRERELEASE" = true ] && flags+=(--prerelease)
-          gh release create "v$VERSION" dist/Hypertree-*.zip dist/SHA256SUMS \
+          gh release create "v$VERSION" dist/Hypercode-*.zip dist/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" "${flags[@]}"
