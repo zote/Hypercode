@@ -33,9 +33,9 @@ public sealed class HelpViewModel
         Entry(BadgeKind.NeverPushed, "Sem upstream",
             "A branch nunca foi pushada — não existe remota correspondente."),
         Entry(BadgeKind.UpstreamGone, "Branch remota apagada",
-            "A branch rastreia uma remota que não existe mais (upstream \"gone\"), normalmente porque o PR foi mergeado e o GitHub apagou a branch. Aparece depois do fetch --prune que o monitoramento faz."),
+            "A branch rastreia uma remota que não existe mais (upstream \"gone\"), normalmente porque o PR foi mergeado e o GitHub apagou a branch. Aparece depois do fetch --prune que o monitoramento faz. Entra na limpeza só se o HEAD já estiver contido na base remota (origin/HEAD); caso contrário, remova pelo menu."),
         Entry(BadgeKind.Removable, "Pode ser removido",
-            "Entra na limpeza: PR mergeado ou fechado, ou worktree órfão. Passar o mouse mostra o motivo."),
+            "Entra na limpeza: PR mergeado ou fechado, worktree órfão, ou branch remota apagada já contida na base. Passar o mouse mostra o motivo."),
     };
 
     public IReadOnlyList<LegendEntry> PullRequestLegend { get; } = new[]

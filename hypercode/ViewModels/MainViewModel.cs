@@ -1439,9 +1439,10 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>
     /// Lê `git status` de cada worktree. Limitado a 8 de cada vez para não disparar
-    /// dezenas de processos git de uma vez em repositórios com muitos worktrees.
+    /// dezenas de processos git de uma vez em repositórios com muitos worktrees. O status
+    /// também decide a limpeza (branch remota apagada já contida na base), daí recontar no fim.
     /// </summary>
-    private static async Task LoadStatusesAsync(
+    private async Task LoadStatusesAsync(
         IReadOnlyList<WorktreeRow> rows,
         CancellationToken cancellationToken)
     {
@@ -1463,6 +1464,7 @@ public sealed class MainViewModel : ObservableObject
         });
 
         await Task.WhenAll(tasks).ConfigureAwait(true);
+        RaiseCleanupState();
     }
 
     /// <summary>
