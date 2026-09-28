@@ -1,0 +1,119 @@
+# Release versionado. Duas formas de disparar:
+#
+#   - push de uma tag vX.Y.Z (ou vX.Y.Z-beta.N):  git tag v1.2.0 && git push origin v1.2.0
+#   - Actions → Release → Run workflow, informando a versão: o workflow cria a tag no
+#     commit escolhido ao publicar o release.
+#
+# Tag com sufixo de pré-release (-beta.1, -rc.1) vira pre-release no GitHub.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão SemVer, sem o v (ex.: 1.2.0 ou 1.2.0-beta.1)"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  version:
+    name: Versão
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      prerelease: ${{ steps.resolve.outputs.prerelease }}
+    steps:
+      - id: resolve
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version="${INPUT_VERSION:-$REF_NAME}"
+          version="${version#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::versão inválida: '$version' (esperado SemVer, ex.: 1.2.0 ou 1.2.0-beta.1)"
+            exit 1
+          fi
+          prerelease=false
+          [[ "$version" == *-* ]] && prerelease=true
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "Versão $version (pre-release: $prerelease)" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: App (${{ matrix.arch }})
+    needs: version
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - rid: osx-arm64
+            arch: arm64
+          - rid: osx-x64
+            arch: x64
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Gera o .app
+        run: hypertree/build-app.sh ${{ matrix.rid }} "${{ needs.version.outputs.version }}"
+
+      - name: Confere a versão no Info.plist
+        run: plutil -p hypertree/dist/Hypertree.app/Contents/Info.plist | grep CFBundleShortVersionString
+
+      - name: Compacta (ditto preserva os atributos do bundle)
+        run: ditto -c -k --keepParent hypertree/dist/Hypertree.app "Hypertree-${{ needs.version.outputs.version }}-${{ matrix.arch }}.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Hypertree-${{ matrix.arch }}
+          path: Hypertree-*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publica o release
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: Hypertree-*
+          merge-multiple: true
+          path: dist
+
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum Hypertree-*.zip > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Cria o release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          flags=(--generate-notes --title "Hypertree $VERSION" --target "$GITHUB_SHA")
+          [ "$PRERELEASE" = true ] && flags+=(--prerelease)
+          gh release create "v$VERSION" dist/Hypertree-*.zip dist/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" "${flags[@]}"
