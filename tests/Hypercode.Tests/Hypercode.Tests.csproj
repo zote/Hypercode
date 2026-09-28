@@ -21,8 +21,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- TokensTests lê o XAML dos tokens para conferir contraste e paridade das variantes -->
+    <!-- TokensTests e FluentOverridesTests leem o XAML para conferir contraste, paridade das
+         variantes e os aliases das chaves do Fluent -->
     <None Include="..\..\hypercode\Styles\Tokens.axaml" Link="Tokens.axaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\hypercode\Styles\FluentOverrides.axaml" Link="FluentOverrides.axaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

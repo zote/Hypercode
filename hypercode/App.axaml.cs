@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Hypercode.ViewModels;
@@ -8,7 +9,17 @@ namespace Hypercode;
 
 public partial class App : Application
 {
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+
+        // Janela fora de foco ganha a classe "inactive": Styles/Controls.axaml a usa para o
+        // botão padrão perder o destaque, como no macOS. O Avalonia não tem pseudo-classe
+        // para isso (a seleção de lista não precisa: a janela inativa já perde o
+        // :focus-within).
+        Window.IsActiveProperty.Changed.AddClassHandler<Window>(
+            (window, _) => window.Classes.Set("inactive", !window.IsActive));
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {

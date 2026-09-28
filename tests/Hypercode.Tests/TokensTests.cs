@@ -22,6 +22,7 @@ public class TokensTests
     private static readonly string[] Fundos =
     [
         "Brush.Background.Window", "Brush.Background.Content", "Brush.Background.ContentAlternate",
+        "Brush.Background.Overlay",
     ];
 
     public static TheoryData<string> Variantes => new() { "Light", "Dark" };

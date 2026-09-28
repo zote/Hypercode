@@ -25,10 +25,14 @@
       <SolidColorBrush x:Key="Brush.Background.Content" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Brush.Background.ContentAlternate" Color="#F4F5F5" />
       <SolidColorBrush x:Key="Brush.Background.Control" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Brush.Background.ControlPressed" Color="#E3E3E3" />
+      <SolidColorBrush x:Key="Brush.Background.Overlay" Color="#F6F6F6" />
       <SolidColorBrush x:Key="Brush.Background.Danger" Color="#1FFF3B30" />
       <SolidColorBrush x:Key="Brush.Background.Warning" Color="#26FF9500" />
       <SolidColorBrush x:Key="Brush.Selection.Inactive" Color="#DCDCDC" />
       <SolidColorBrush x:Key="Brush.Separator" Color="#1A000000" />
+      <SolidColorBrush x:Key="Brush.Border.Control" Color="#26000000" />
+      <SolidColorBrush x:Key="Brush.Border.Overlay" Color="#1F000000" />
 
       <!-- Status para ícone, ponto e borda — não para texto (ver Brush.Text.*) -->
       <SolidColorBrush x:Key="Brush.Status.Danger" Color="#FF3B30" />
@@ -50,10 +54,14 @@
       <SolidColorBrush x:Key="Brush.Background.Content" Color="#1E1E1E" />
       <SolidColorBrush x:Key="Brush.Background.ContentAlternate" Color="#262626" />
       <SolidColorBrush x:Key="Brush.Background.Control" Color="#40FFFFFF" />
+      <SolidColorBrush x:Key="Brush.Background.ControlPressed" Color="#59FFFFFF" />
+      <SolidColorBrush x:Key="Brush.Background.Overlay" Color="#2C2C2C" />
       <SolidColorBrush x:Key="Brush.Background.Danger" Color="#29FF453A" />
       <SolidColorBrush x:Key="Brush.Background.Warning" Color="#29FF9F0A" />
       <SolidColorBrush x:Key="Brush.Selection.Inactive" Color="#464646" />
       <SolidColorBrush x:Key="Brush.Separator" Color="#1AFFFFFF" />
+      <SolidColorBrush x:Key="Brush.Border.Control" Color="#1FFFFFFF" />
+      <SolidColorBrush x:Key="Brush.Border.Overlay" Color="#26FFFFFF" />
 
       <SolidColorBrush x:Key="Brush.Status.Danger" Color="#FF453A" />
       <SolidColorBrush x:Key="Brush.Status.Warning" Color="#FF9F0A" />
@@ -65,6 +73,9 @@
   <!-- Destaque e seleção seguem a accent color do sistema, que o FluentTheme lê do macOS (#64). -->
   <SolidColorBrush x:Key="Brush.Accent" Color="{DynamicResource SystemAccentColor}" />
   <SolidColorBrush x:Key="Brush.Selection.Active" Color="{DynamicResource SystemAccentColorDark1}" />
+  <SolidColorBrush x:Key="Brush.Accent.Pressed" Color="{DynamicResource SystemAccentColorDark2}" />
+  <!-- Anel de foco do teclado: a accent a 50%, por fora do controle -->
+  <SolidColorBrush x:Key="Brush.Focus" Color="{DynamicResource SystemAccentColor}" Opacity="0.5" />
   <SolidColorBrush x:Key="Brush.Text.OnAccent" Color="#FFFFFF" />
 
   <!-- Tipografia: escala da HIG do macOS. Peso e altura de linha de cada estilo ficam nas
@@ -102,11 +113,19 @@
   <x:Double x:Key="Spacing.Label">6</x:Double>
   <!-- Dentro de uma caixa de conteúdo: aviso, bloco de detalhe -->
   <Thickness x:Key="Padding.Box">12</Thickness>
+  <!-- Botão sem borda: o fundo só aparece sob o mouse, então o padding é menor -->
+  <Thickness x:Key="Padding.Borderless">6,3</Thickness>
+  <!-- Recuo do item de menu e da linha de lista estilo tabela, para o destaque arredondado
+       não encostar nas bordas -->
+  <Thickness x:Key="Margin.MenuItem">5,0</Thickness>
+  <Thickness x:Key="Margin.TableRow">6,0</Thickness>
 
   <!-- Raios de canto -->
   <CornerRadius x:Key="Radius.Small">4</CornerRadius>
   <CornerRadius x:Key="Radius.Control">6</CornerRadius>
   <CornerRadius x:Key="Radius.Group">10</CornerRadius>
   <CornerRadius x:Key="Radius.Window">12</CornerRadius>
+  <!-- Radius.Control + a espessura do anel (3), para o anel acompanhar a curva do controle -->
+  <CornerRadius x:Key="Radius.FocusRing">9</CornerRadius>
 
 </ResourceDictionary>

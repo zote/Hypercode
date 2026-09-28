@@ -9,7 +9,18 @@ sistema) e os motivos estão na #64.
 | Arquivo | O que tem | Onde entra |
 |---|---|---|
 | `Tokens.axaml` | cores (claro/escuro), tamanhos de fonte, espaçamento, raios | `Application.Resources` |
+| `FluentOverrides.axaml` | as chaves de recurso do Fluent apontando para os tokens | `Application.Resources`, depois dos tokens |
 | `Typography.axaml` | classes de texto (`title1`, `body`, `headline`…) | `Application.Styles`, depois do `FluentTheme` |
+| `Controls.axaml` | variantes e estados que o Fluent não tem (botão destrutivo, lista `table`, anel de foco…) | `Application.Styles`, depois do `FluentTheme` |
+
+Para ver tudo em claro e escuro lado a lado, abra a galeria de controles:
+
+```bash
+dotnet run --project hypercode -- --galeria
+```
+
+Os argumentos `escuro` (o foco vai para a lista escura), `foco` (anel de foco num botão) e
+`tooltip` mudam o estado inicial, para capturar a tela sem usar mouse e teclado.
 
 ## Regra geral
 
@@ -52,21 +63,27 @@ texto passa em WCAG AA (4,5:1) sobre os fundos.
 | `Brush.Background.Window` | fundo da janela |
 | `Brush.Background.Content` | fundo de lista, tabela e campo de texto |
 | `Brush.Background.ContentAlternate` | linha alternada de lista |
-| `Brush.Background.Control` | fundo de controle (botão secundário) |
+| `Brush.Background.Control` | fundo de controle (botão, combo, checkbox) |
+| `Brush.Background.ControlPressed` | controle pressionado |
+| `Brush.Background.Overlay` | menu, lista do combo e tooltip |
 | `Brush.Background.Danger` / `Warning` | caixa de erro e de aviso (com o `Brush.Text.*` do mesmo status) |
 | `Brush.Selection.Active` | linha selecionada com a janela em foco |
 | `Brush.Selection.Inactive` | linha selecionada com a janela fora de foco |
-| `Brush.Separator` | linha divisória e borda sutil |
+| `Brush.Separator` | linha divisória, borda de controle desabilitado |
+| `Brush.Border.Control` | borda de botão, campo, combo e checkbox |
+| `Brush.Border.Overlay` | borda de menu e tooltip |
 
 **Status e destaque**
 
 | Token | Uso |
 |---|---|
 | `Brush.Status.Danger` / `Warning` / `Success` | ícone, ponto e borda de status — **não para texto** |
-| `Brush.Accent` | destaque: foco, controle marcado, ícone ativo |
+| `Brush.Accent` | destaque: borda do campo em foco, ícone ativo |
+| `Brush.Accent.Pressed` | botão de destaque e checkbox marcado, pressionados |
+| `Brush.Focus` | anel de foco do teclado (a accent a 50%) |
 
-`Brush.Accent` e `Brush.Selection.Active` seguem a accent color escolhida em Ajustes do
-Sistema (o `FluentTheme` lê do macOS e expõe como `SystemAccentColor`). Por isso não têm
+`Brush.Accent`, `Brush.Accent.Pressed`, `Brush.Focus` e `Brush.Selection.Active` seguem
+a accent color escolhida em Ajustes do Sistema (o `FluentTheme` lê do macOS e expõe como `SystemAccentColor`). Por isso não têm
 versão clara/escura nem entram no teste. Com o azul padrão, o branco dá 6,1:1 sobre
 `Brush.Selection.Active` mas só 4,0:1 sobre `Brush.Accent`: texto sobre destaque vai
 sobre `Selection.Active`.
@@ -120,6 +137,48 @@ Grade de 4pt: `Space.XXS` (2), `XS` (4), `S` (8), `M` (12), `L` (16), `XL` (20),
 | `Spacing.Group` | 20 | entre grupos de controles |
 | `Spacing.Label` | 6 | entre um rótulo e o controle que ele descreve |
 | `Padding.Box` | 12 | dentro de caixa de aviso ou de detalhe |
+| `Padding.Borderless` | 6,3 | botão sem borda |
+| `Margin.MenuItem` / `Margin.TableRow` | 5,0 / 6,0 | recuo do destaque de item de menu e de linha de lista |
 
-Raios: `Radius.Small` (4, etiqueta), `Radius.Control` (6, botão e campo),
-`Radius.Group` (10, cartão e grupo), `Radius.Window` (12, sheet e popover).
+Raios: `Radius.Small` (4, etiqueta, tooltip, item de menu e linha de lista),
+`Radius.Control` (6, botão e campo), `Radius.Group` (10, cartão, grupo e menu),
+`Radius.Window` (12, sheet e popover) e `Radius.FocusRing` (9, o anel de foco em volta de
+um controle).
+
+## Controles
+
+Os controles do Fluent (botão, campo, checkbox, radio, combo, `NumericUpDown`, menu,
+tooltip) já saem com as cores, a fonte (13pt) e os raios daqui, sem classe nenhuma:
+`FluentOverrides.axaml` liga cada chave de recurso do Fluent a um token. Chave que não
+aparece lá continua com o valor do Fluent.
+
+**Botões**
+
+| Como | Visual | Uso |
+|---|---|---|
+| `<Button>` | fundo de controle com borda | ação comum |
+| `IsDefault="True"` | preenchido na accent, texto branco | a ação que o Return aciona — uma por janela |
+| `Classes="accent"` | igual ao padrão | destaque sem ser o botão padrão |
+| `Classes="destructive"` | botão comum com o rótulo em vermelho | remover, descartar; vence o `IsDefault` |
+| `Classes="borderless"` | só o conteúdo; fundo discreto sob o mouse | barra de ferramentas, ação dentro de linha |
+
+Em janela fora de foco o botão padrão perde o destaque, como no macOS: o `App` põe a
+classe `inactive` na janela que perde o foco, e `Controls.axaml` a usa.
+
+**Lista estilo tabela** — `<ListBox Classes="table">`: fundo de conteúdo, linhas recuadas
+com o destaque arredondado, sem destaque sob o mouse, seleção na accent com a lista em
+foco e cinza quando o foco está em outro lugar ou a janela está inativa. É opcional porque
+o `ListBox` também serve de barra de abas (`MainWindow`), que não deve ganhar esse visual.
+
+**Foco** — Tab mostra um anel na accent a 50% por fora do controle. O campo de texto em
+foco troca a borda pela accent (o Fluent não mostra anel nele).
+
+### Como mexer em `FluentOverrides.axaml`
+
+Os aliases se repetem em `Light` e `Dark`: um `StaticResource` dentro de um dicionário de
+tema só encontra os tokens da mesma variante. O teste `FluentOverridesTests` garante que
+as duas listas são iguais e que todo alias aponta para um token que existe. Para achar a
+chave do Fluent que um controle usa, veja o template dele em
+`src/Avalonia.Themes.Fluent/Controls/` e as chaves em
+`src/Avalonia.Themes.Fluent/Accents/FluentControlResources.xaml`, no repositório do
+Avalonia, na tag da versão em uso.
