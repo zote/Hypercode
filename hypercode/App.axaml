@@ -8,4 +8,12 @@
     <FluentTheme />
   </Application.Styles>
 
+  <!-- Menu do app no macOS. Sem ele o Avalonia monta um padrão com "About Avalonia";
+       os itens de sistema (Serviços, Ocultar, Encerrar…) o macOS acrescenta depois destes. -->
+  <NativeMenu.Menu>
+    <NativeMenu>
+      <NativeMenuItem Header="Sobre o Hypercode" Click="OnAboutClick" />
+    </NativeMenu>
+  </NativeMenu.Menu>
+
 </Application>

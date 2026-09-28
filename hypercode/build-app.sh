@@ -7,7 +7,8 @@ cd "$(dirname "$0")"
 
 APP_NAME="Hypercode"
 BUNDLE_ID="app.zimps.hypercode"
-VERSION="1.0.0"
+# A versão mora no Hypercode.csproj (é a mesma que a janela Sobre exibe).
+VERSION="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Hypercode.csproj)"
 
 RID="${1:-}"
 if [ -z "$RID" ]; then

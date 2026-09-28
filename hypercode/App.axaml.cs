@@ -22,4 +22,25 @@ public partial class App : Application
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    private AboutWindow? _aboutWindow;
+
+    private void OnAboutClick(object? sender, EventArgs e)
+    {
+        // Um Sobre só: clicar de novo traz a janela aberta para a frente.
+        if (_aboutWindow is not null)
+        {
+            _aboutWindow.Activate();
+            return;
+        }
+
+        _aboutWindow = new AboutWindow();
+        _aboutWindow.Closed += (_, _) => _aboutWindow = null;
+
+        var owner = (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (owner is { IsVisible: true })
+            _aboutWindow.Show(owner);
+        else
+            _aboutWindow.Show();
+    }
 }
