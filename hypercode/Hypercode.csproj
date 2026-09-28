@@ -26,4 +26,8 @@
     <AvaloniaResource Include="Assets\icon.png" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Hypercode.Tests" />
+  </ItemGroup>
+
 </Project>

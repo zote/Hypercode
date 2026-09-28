@@ -4,7 +4,8 @@
         x:Class="Hypercode.Views.MainWindow"
         Title="Hypercode — Git Worktrees"
         Width="1180" Height="640"
-        MinWidth="860" MinHeight="400">
+        MinWidth="860" MinHeight="400"
+        DragDrop.AllowDrop="True">
 
   <Window.Styles>
     <Style Selector="TextBlock.header">
@@ -47,6 +48,35 @@
       <Setter Property="Padding" Value="16,0" />
       <Setter Property="MinHeight" Value="40" />
     </Style>
+    <!-- Abas: depois do estilo geral de ListBoxItem, para vencer o padding e a altura dele. -->
+    <Style Selector="ListBox.tabs ListBoxItem">
+      <Setter Property="Padding" Value="12,0,6,0" />
+      <Setter Property="MinHeight" Value="34" />
+      <Setter Property="Margin" Value="0,0,2,0" />
+      <Setter Property="CornerRadius" Value="6,6,0,0" />
+    </Style>
+    <!-- × da aba: discreto até o mouse passar. -->
+    <Style Selector="Button.tabclose">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Opacity" Value="0.45" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.tabclose:pointerover">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Button.addtab">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="MinHeight" Value="34" />
+      <Setter Property="VerticalAlignment" Value="Bottom" />
+    </Style>
   </Window.Styles>
 
   <Window.Resources>
@@ -77,30 +107,86 @@
     </ItemsPanelTemplate>
   </Window.Resources>
 
-  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+  <Grid RowDefinitions="Auto,*">
 
-    <!-- Repositório -->
-    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="16,16,16,12">
-      <TextBlock Grid.Column="0" Text="Repositório" VerticalAlignment="Center" Margin="0,0,10,0" />
-      <TextBox Grid.Column="1"
-               Text="{Binding RepositoryPath, Mode=TwoWay}"
-               Watermark="/Users/voce/dev/meu-repo"
-               KeyDown="OnRepositoryPathKeyDown" />
-      <Button Grid.Column="2" Content="Escolher…" Margin="8,0,0,0" Click="OnBrowseClick" />
-      <Button Grid.Column="3" Content="Atualizar" Margin="8,0,0,0"
-              Click="OnRefreshClick" IsEnabled="{Binding IsNotBusy}" HotKey="Cmd+R"
-              ToolTip.Tip="Relê tudo, inclusive os PRs (⌘R). Worktree criado ou apagado fora do app e commit, fetch ou push já aparecem sozinhos." />
-      <Button Grid.Column="4" Content="?" Width="34" Margin="8,0,0,0"
-              HorizontalContentAlignment="Center" FontWeight="SemiBold"
-              Click="OnHelpClick" ToolTip.Tip="O que significam as etiquetas, a coluna PR e a limpeza" />
-      <!-- O ⌘, fica no item do menu do app: um HotKey aqui dispararia junto com ele. -->
-      <Button Grid.Column="5" Content="⚙" Width="34" Margin="8,0,0,0" FontSize="16" Padding="0"
-              HorizontalContentAlignment="Center"
-              Click="OnSettingsClick" ToolTip.Tip="Configurações: comando, monitoramento, atribuição de issue, limpeza automática (⌘,)" />
-    </Grid>
+    <!-- Abas: um repositório por aba, todos monitorados. Arrastar reordena; ⌘1…⌘9 trocam. -->
+    <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="#22808080" Padding="8,8,16,0">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+        <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+          <StackPanel Orientation="Horizontal">
+            <ListBox Name="TabStrip" Classes="tabs"
+                     ItemsSource="{Binding Repositories}"
+                     SelectedItem="{Binding SelectedRepository, Mode=TwoWay}"
+                     SelectionMode="Single">
+              <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ListBox.ItemsPanel>
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent"
+                              VerticalAlignment="Center" ToolTip.Tip="{Binding TabToolTip}">
+                    <StackPanel.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem Header="Configurações deste repositório…" Click="OnTabSettingsClick" />
+                        <MenuItem Header="Revelar no Finder" Click="OnTabRevealClick" />
+                        <Separator />
+                        <MenuItem Header="Fechar a aba…" Click="OnTabCloseClick" />
+                      </ContextMenu>
+                    </StackPanel.ContextMenu>
+                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <TextBlock Classes="muted" FontSize="11" VerticalAlignment="Center" Text="{Binding WorktreeCount}" />
+                    <ContentControl VerticalAlignment="Center"
+                                    Content="{Binding FailingBadge}" ContentTemplate="{StaticResource BadgeTemplate}"
+                                    IsVisible="{Binding HasFailingChecks}" />
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding HasCompleted}">
+                      <ContentControl Content="{Binding CompletedBadge}" ContentTemplate="{StaticResource BadgeTemplate}" />
+                      <TextBlock FontSize="11" VerticalAlignment="Center" Margin="-4,0,0,0" Text="{Binding CompletedCount}"
+                                 ToolTip.Tip="{Binding CompletedBadge.Tooltip}" />
+                    </StackPanel>
+                    <ContentControl VerticalAlignment="Center"
+                                    Content="{Binding UnseenBadge}" ContentTemplate="{StaticResource BadgeTemplate}"
+                                    IsVisible="{Binding HasUnseenChanges}" />
+                    <Button Classes="tabclose" Content="×" Click="OnTabCloseClick"
+                            ToolTip.Tip="Fechar a aba (⌘W). Nada no disco é apagado." />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <Button Classes="addtab" Content="+" Click="OnAddRepositoryClick" HotKey="Cmd+O"
+                    ToolTip.Tip="Abrir um repositório numa aba nova (⌘O). Também dá para arrastar a pasta do Finder para a janela." />
+          </StackPanel>
+        </ScrollViewer>
+        <Button Grid.Column="1" Content="Atualizar" Margin="8,0,0,6" VerticalAlignment="Center"
+                Click="OnRefreshClick" IsEnabled="{Binding SelectedRepository.IsNotBusy, FallbackValue=False}" HotKey="Cmd+R"
+                ToolTip.Tip="Relê tudo da aba, inclusive os PRs (⌘R). Worktree criado ou apagado fora do app e commit, fetch ou push já aparecem sozinhos." />
+        <Button Grid.Column="2" Content="?" Width="34" Margin="8,0,0,6" VerticalAlignment="Center"
+                HorizontalContentAlignment="Center" FontWeight="SemiBold"
+                Click="OnHelpClick" ToolTip.Tip="O que significam as etiquetas, a coluna PR, as abas e a limpeza" />
+        <!-- O ⌘, fica no item do menu do app: um HotKey aqui dispararia junto com ele. -->
+        <Button Grid.Column="3" Content="⚙" Width="34" Margin="8,0,0,6" FontSize="16" Padding="0" VerticalAlignment="Center"
+                HorizontalContentAlignment="Center"
+                Click="OnSettingsClick" ToolTip.Tip="Configurações, globais ou de um repositório: comando, monitoramento, atribuição de issue, limpeza automática (⌘,)" />
+      </Grid>
+    </Border>
+
+    <!-- Sem aba nenhuma -->
+    <StackPanel Grid.Row="1" IsVisible="{Binding HasNoRepositories}"
+                HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
+      <TextBlock Text="Nenhum repositório aberto" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
+      <TextBlock Classes="muted" HorizontalAlignment="Center" TextAlignment="Center"
+                 Text="Abra um repositório git pela aba +, pelo ⌘O ou arrastando a pasta do Finder para cá.&#10;Cada repositório ganha a sua aba e continua monitorado em segundo plano." />
+      <Button Content="Abrir repositório…" HorizontalAlignment="Center" Click="OnAddRepositoryClick" />
+    </StackPanel>
+
+    <!-- A aba da frente: tudo daqui para baixo é do repositório selecionado. -->
+    <Grid Grid.Row="1" RowDefinitions="Auto,Auto,*,Auto"
+          DataContext="{Binding SelectedRepository}"
+          IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
 
     <!-- Filtro e criação -->
-    <Grid Grid.Row="1" ColumnDefinitions="320,Auto,*,Auto" Margin="16,0,16,12">
+    <Grid Grid.Row="0" ColumnDefinitions="320,Auto,*,Auto" Margin="16,12,16,12">
       <TextBox Grid.Column="0" Name="FilterBox"
                Text="{Binding FilterText, Mode=TwoWay}"
                Watermark="Filtrar por worktree, branch ou PR  (⌘F)"
@@ -113,7 +199,7 @@
     </Grid>
 
     <!-- Cabeçalho da lista: clicar ordena; clicar de novo inverte -->
-    <Border Grid.Row="2" BorderThickness="0,0,0,1" BorderBrush="#22808080" Padding="16,0,16,8">
+    <Border Grid.Row="1" BorderThickness="0,0,0,1" BorderBrush="#22808080" Padding="16,0,16,8">
       <Grid ColumnDefinitions="2.8*,2.2*,162,2.4*">
         <Button Grid.Column="0" Classes="header" Content="{Binding NameHeader}" Margin="72,0,0,0"
                 Click="OnSortClick" Tag="Name" />
@@ -124,7 +210,7 @@
     </Border>
 
     <!-- Lista de worktrees -->
-    <ListBox Grid.Row="3" Name="WorktreeList"
+    <ListBox Grid.Row="2" Name="WorktreeList"
              ItemsSource="{Binding VisibleWorktrees}"
              SelectionMode="Multiple"
              SelectedItems="{Binding SelectedWorktrees}"
@@ -197,7 +283,7 @@
     </ListBox>
 
     <!-- Rodapé -->
-    <Border Grid.Row="4" BorderThickness="0,1,0,0" BorderBrush="#22808080" Padding="16,10">
+    <Border Grid.Row="3" BorderThickness="0,1,0,0" BorderBrush="#22808080" Padding="16,10">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
         <ProgressBar Grid.Column="0" Width="80" Height="4" IsIndeterminate="True"
                      VerticalAlignment="Center" Margin="0,0,12,0"
@@ -221,6 +307,8 @@
                 IsEnabled="{Binding SelectedWorktree, Converter={x:Static ObjectConverters.IsNotNull}}" />
       </Grid>
     </Border>
+
+    </Grid>
 
   </Grid>
 </Window>

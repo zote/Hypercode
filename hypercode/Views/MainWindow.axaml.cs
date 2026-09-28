@@ -1,8 +1,10 @@
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 using Hypercode.Services;
 using Hypercode.ViewModels;
 
@@ -25,28 +27,42 @@ public partial class MainWindow : Window
 
         // Túnel: o ⌘F precisa funcionar mesmo com o foco dentro da lista ou de outro campo.
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+
+        // Pasta arrastada do Finder abre numa aba.
+        AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        AddHandler(DragDrop.DropEvent, OnDrop);
+
+        // Arrastar a aba reordena. Com handledEventsToo: o ListBoxItem marca o clique como tratado.
+        TabStrip.AddHandler(PointerPressedEvent, OnTabStripPointerPressed, RoutingStrategies.Tunnel);
+        TabStrip.AddHandler(PointerMovedEvent, OnTabStripPointerMoved, RoutingStrategies.Bubble, handledEventsToo: true);
+        TabStrip.AddHandler(PointerReleasedEvent, OnTabStripPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
+        TabStrip.AddHandler(PointerCaptureLostEvent, (_, _) => _draggedTab = null, RoutingStrategies.Bubble, handledEventsToo: true);
     }
 
-    private MainViewModel? ViewModel => DataContext as MainViewModel;
+    private MainViewModel? Shell => DataContext as MainViewModel;
+
+    /// <summary>O repositório da aba à frente: é sobre ele que a lista, o menu e o rodapé agem.</summary>
+    private RepositoryViewModel? ViewModel => Shell?.SelectedRepository;
 
     /// <summary>Linha associada ao controle que disparou o evento (item do template).</summary>
     private static WorktreeRow? RowOf(object? sender)
         => (sender as Control)?.DataContext as WorktreeRow;
 
+    /// <summary>Repositório da aba associada ao controle que disparou o evento (item do template ou do menu dele).</summary>
+    private static RepositoryViewModel? TabOf(object? sender)
+        => (sender as Control)?.DataContext as RepositoryViewModel;
+
     private void ReportActivity()
-        => ViewModel?.SetWindowActivity(IsActive, WindowState == WindowState.Minimized);
+        => Shell?.SetWindowActivity(IsActive, WindowState == WindowState.Minimized);
 
     private async void OnOpened(object? sender, EventArgs e)
     {
-        // Se havia um repositório salvo da última sessão, já carrega a lista.
-        if (ViewModel is { } viewModel && !string.IsNullOrWhiteSpace(viewModel.RepositoryPath))
-            await viewModel.LoadAsync();
+        // As abas da última sessão: a da frente carrega primeiro.
+        if (Shell is { } shell) await shell.OpenSavedAsync();
     }
 
-    private async void OnBrowseClick(object? sender, RoutedEventArgs e)
+    private async void OnAddRepositoryClick(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is not { } viewModel) return;
-
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
             Title = "Escolha o repositório git",
@@ -56,20 +72,144 @@ public partial class MainWindow : Window
         if (folders.Count == 0) return;
 
         var path = folders[0].TryGetLocalPath();
-        if (string.IsNullOrEmpty(path)) return;
+        if (!string.IsNullOrEmpty(path)) await AddRepositoryAsync(path);
+    }
 
-        viewModel.SetRepositoryPath(path);
-        await viewModel.LoadAsync();
+    /// <summary>Abre numa aba; se não der, diz por quê num diálogo — sem aba, não há rodapé para dizer.</summary>
+    private async Task AddRepositoryAsync(string path)
+    {
+        if (Shell is not { } shell) return;
+
+        if (await shell.AddRepositoryAsync(path) is { } error)
+            await new ConfirmWindow("Abrir repositório", "Não dá para abrir essa pasta.", error, "Entendi").ShowDialog<bool>(this);
+    }
+
+    private void OnDragOver(object? sender, DragEventArgs e)
+    {
+        e.DragEffects = e.DataTransfer.Contains(DataFormat.File) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    // Uma aba por pasta solta; o que não for repositório git vira diálogo, um por vez.
+    private async void OnDrop(object? sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        var paths = e.DataTransfer.TryGetFiles()?.Select(item => item.TryGetLocalPath()).OfType<string>().ToList();
+        if (paths is null) return;
+
+        foreach (var path in paths) await AddRepositoryAsync(path);
     }
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.F || !e.KeyModifiers.HasFlag(KeyModifiers.Meta)) return;
-        if (this.FindControl<TextBox>("FilterBox") is not { } filterBox) return;
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Meta)) return;
 
+        switch (e.Key)
+        {
+            case Key.F when this.FindControl<TextBox>("FilterBox") is { IsEffectivelyVisible: true } filterBox:
+                e.Handled = true;
+                filterBox.Focus();
+                filterBox.SelectAll();
+                break;
+
+            case Key.W when ViewModel is { } repository:
+                e.Handled = true;
+                _ = ConfirmCloseTabAsync(repository);
+                break;
+
+            case >= Key.D1 and <= Key.D9:
+                e.Handled = true;
+                Shell?.SelectIndex(e.Key - Key.D1);
+                break;
+        }
+    }
+
+    private void OnTabCloseClick(object? sender, RoutedEventArgs e)
+    {
         e.Handled = true;
-        filterBox.Focus();
-        filterBox.SelectAll();
+        if (TabOf(sender) is { } repository) _ = ConfirmCloseTabAsync(repository);
+    }
+
+    /// <summary>Fechar a aba pede confirmação e deixa claro que o disco não é tocado.</summary>
+    private async Task ConfirmCloseTabAsync(RepositoryViewModel repository)
+    {
+        if (Shell is not { } shell) return;
+
+        var confirmed = await new ConfirmWindow(
+            "Fechar a aba",
+            $"Fechar {repository.DisplayName}?",
+            "O repositório sai da faixa de abas e deixa de ser monitorado: sem watcher, sem consulta ao GitHub, "
+            + "sem limpeza automática.\n\nNada no disco é apagado — nem worktree, nem branch, nem arquivo. A carência da "
+            + "limpeza, a memória dos PRs e as configurações deste repositório ficam guardadas para quando ele for reaberto.\n\n"
+            + repository.RepositoryPath,
+            "Fechar a aba").ShowDialog<bool>(this);
+
+        if (confirmed) shell.CloseRepository(repository);
+    }
+
+    private void OnTabSettingsClick(object? sender, RoutedEventArgs e) => ShowSettings(TabOf(sender));
+
+    private async void OnTabRevealClick(object? sender, RoutedEventArgs e)
+    {
+        if (TabOf(sender) is not { } repository) return;
+
+        try
+        {
+            await TerminalLauncher.RevealInFinderAsync(repository.RepositoryPath);
+        }
+        catch (Exception exception)
+        {
+            repository.StatusMessage = exception.Message;
+        }
+    }
+
+    // Arrastar a aba: depois de alguns pixels, a aba vai para a posição sob o ponteiro. A
+    // captura passa para a faixa, porque o item arrastado é recriado a cada troca de posição.
+    private RepositoryViewModel? _draggedTab;
+    private Point _dragStart;
+    private bool _isDraggingTab;
+
+    private const double TabDragThreshold = 6;
+
+    private void OnTabStripPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _isDraggingTab = false;
+        _draggedTab = e.GetCurrentPoint(TabStrip).Properties.IsLeftButtonPressed && e.Source is Visual source
+            ? source.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as RepositoryViewModel
+            : null;
+        _dragStart = e.GetPosition(TabStrip);
+    }
+
+    private void OnTabStripPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_draggedTab is not { } dragged || Shell is not { } shell) return;
+
+        var position = e.GetPosition(TabStrip);
+        if (!_isDraggingTab)
+        {
+            if (Math.Abs(position.X - _dragStart.X) < TabDragThreshold) return;
+            _isDraggingTab = true;
+            e.Pointer.Capture(TabStrip);
+        }
+
+        for (var index = 0; index < shell.Repositories.Count; index++)
+        {
+            if (TabStrip.ContainerFromIndex(index) is not { } container) continue;
+            if (container.TranslatePoint(default, TabStrip) is not { } origin) continue;
+
+            if (position.X >= origin.X && position.X < origin.X + container.Bounds.Width)
+            {
+                if (!ReferenceEquals(shell.Repositories[index], dragged)) shell.MoveRepository(dragged, index);
+                break;
+            }
+        }
+    }
+
+    private void OnTabStripPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_isDraggingTab) e.Pointer.Capture(null);
+        _draggedTab = null;
+        _isDraggingTab = false;
     }
 
     // Esc limpa o filtro; ↓ desce para a lista, para escolher com o teclado e abrir com Enter.
@@ -110,32 +250,25 @@ public partial class MainWindow : Window
 
     private async void OnCreateWorktreeClick(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is not { } viewModel || viewModel.MainWorktreePath is not { } mainPath) return;
+        if (Shell is not { } shell || ViewModel is not { } viewModel || viewModel.MainWorktreePath is not { } mainPath) return;
 
         var dialog = new CreateWorktreeWindow
         {
-            DataContext = new CreateWorktreeViewModel(mainPath, viewModel.OpenTerminalAfterCreate, viewModel.EffectiveCommand, viewModel.AssignIssueOnCreate),
+            DataContext = new CreateWorktreeViewModel(mainPath, shell.OpenTerminalAfterCreate, viewModel.EffectiveCommand, viewModel.AssignIssueOnCreate),
         };
 
         var result = await dialog.ShowDialog<WorktreeCreationResult?>(this);
 
         // O checkbox vale como preferência mesmo se o usuário cancelar depois de mexer nele.
         if (dialog.DataContext is CreateWorktreeViewModel dialogViewModel)
-            viewModel.OpenTerminalAfterCreate = dialogViewModel.OpenTerminal;
+            shell.OpenTerminalAfterCreate = dialogViewModel.OpenTerminal;
 
         if (result is not null)
-            await viewModel.CompleteCreationAsync(result, viewModel.OpenTerminalAfterCreate);
+            await viewModel.CompleteCreationAsync(result, shell.OpenTerminalAfterCreate);
     }
 
     private async void OnRefreshClick(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is { } viewModel) await viewModel.LoadAsync();
-    }
-
-    private async void OnRepositoryPathKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key is not (Key.Enter or Key.Return)) return;
-        e.Handled = true;
         if (ViewModel is { } viewModel) await viewModel.LoadAsync();
     }
 
@@ -165,17 +298,27 @@ public partial class MainWindow : Window
     /// <summary>
     /// Abre as configurações, ou traz para a frente as que já estão abertas. Não é modal: o
     /// perfil do monitor muda com a lista à vista, e o ⌘, do menu do app chega aqui também.
+    /// Com um repositório (menu da aba), já abre no escopo dele; sem, no global.
     /// </summary>
-    public void ShowSettings()
+    public void ShowSettings(RepositoryViewModel? scope = null)
     {
+        if (Shell is not { } shell) return;
+
         if (_settingsWindow is not null)
         {
+            if (scope is not null && _settingsWindow.DataContext is SettingsViewModel open)
+                open.SelectedScope = open.Scopes.FirstOrDefault(item => ReferenceEquals(item.Repository, scope)) ?? open.SelectedScope;
             _settingsWindow.Activate();
             return;
         }
 
-        _settingsWindow = new SettingsWindow { DataContext = DataContext };
-        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        var settings = new SettingsViewModel(shell, scope);
+        _settingsWindow = new SettingsWindow { DataContext = settings };
+        _settingsWindow.Closed += (_, _) =>
+        {
+            settings.Detach();
+            _settingsWindow = null;
+        };
         _settingsWindow.Show(this);
     }
 
@@ -197,7 +340,7 @@ public partial class MainWindow : Window
         var confirmed = await new ConfirmWindow(
             "Limpar concluídos",
             headline + " A branch local não é tocada, só o worktree.",
-            MainViewModel.BuildCleanupSummary(candidates),
+            RepositoryViewModel.BuildCleanupSummary(candidates),
             "Remover").ShowDialog<bool>(this);
 
         if (!confirmed) return;
@@ -282,7 +425,7 @@ public partial class MainWindow : Window
     private async Task<bool> ConfirmWindowsAsync(string what, IReadOnlyList<WorktreeRow> rows, Func<WorktreeRow, bool> supports)
     {
         var targets = rows.Where(supports).ToList();
-        if (targets.Count <= MainViewModel.WindowConfirmationThreshold) return true;
+        if (targets.Count <= RepositoryViewModel.WindowConfirmationThreshold) return true;
 
         return await new ConfirmWindow(
             what,
@@ -406,7 +549,7 @@ public partial class MainWindow : Window
         var confirmed = await new ConfirmWindow(
             "Apagar o worktree",
             $"Apagar o worktree {row.Name}? A branch local não é tocada, só o worktree.",
-            MainViewModel.BuildRemovalSummary(row),
+            RepositoryViewModel.BuildRemovalSummary(row),
             "Apagar").ShowDialog<bool>(this);
 
         if (!confirmed) return;
@@ -425,7 +568,7 @@ public partial class MainWindow : Window
 
     // Em lote é uma confirmação só, sem a segunda etapa de forçar: quem o git recusar fica,
     // e o relatório diz por quê.
-    private async Task RemoveManyAsync(MainViewModel viewModel, IReadOnlyList<WorktreeRow> rows)
+    private async Task RemoveManyAsync(RepositoryViewModel viewModel, IReadOnlyList<WorktreeRow> rows)
     {
         var targets = rows.Where(row => row.CanRemove).ToList();
         if (targets.Count == 0) return;
@@ -436,7 +579,7 @@ public partial class MainWindow : Window
         var confirmed = await new ConfirmWindow(
             "Apagar os worktrees",
             headline,
-            MainViewModel.BuildBatchRemovalSummary(targets),
+            RepositoryViewModel.BuildBatchRemovalSummary(targets),
             $"Apagar {targets.Count}").ShowDialog<bool>(this);
 
         if (!confirmed) return;
@@ -483,7 +626,7 @@ public partial class MainWindow : Window
             row.Worktree.IsToolLock
                 ? $"Destravar {row.Name}? A trava é do {row.Worktree.LockOwner}."
                 : $"Destravar {row.Name}?",
-            MainViewModel.BuildUnlockSummary(row),
+            RepositoryViewModel.BuildUnlockSummary(row),
             "Destravar",
             cancelIsDefault: true).ShowDialog<bool>(this);
 
