@@ -242,6 +242,31 @@ public static class GitService
     }
 
     /// <summary>
+    /// Git dir comum a todos os worktrees (o `.git` do principal, ou o próprio repo se bare):
+    /// é onde ficam `worktrees/`, `refs/` e o HEAD do principal. Null se não for um repo.
+    /// </summary>
+    public static async Task<string?> TryResolveCommonGitDirAsync(
+        string path,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await RunAsync(
+                path,
+                new[] { "rev-parse", "--path-format=absolute", "--git-common-dir" },
+                TimeSpan.FromSeconds(10),
+                cancellationToken).ConfigureAwait(false);
+
+            var gitDir = result.Success ? result.StandardOutput.Trim() : string.Empty;
+            return gitDir.Length > 0 && Directory.Exists(gitDir) ? gitDir : null;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Interpreta a saída de `git worktree list --porcelain`. Cada bloco é separado por
     /// linha em branco e começa com `worktree &lt;caminho&gt;`.
     /// </summary>

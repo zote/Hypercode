@@ -25,6 +25,9 @@ duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `c
   Parar o mouse sobre a etiqueta de uma linha explica só as dela.
 - **Limpar concluídos** remove os worktrees com PR `merged` ou `closed` e poda os órfãos,
   sempre com confirmação. Detalhes abaixo.
+- A lista **se atualiza sozinha**: worktree criado, apagado ou travado fora do app, troca de
+  branch, commit, fetch, push e rebase aparecem em menos de um segundo. **Atualizar** (`⌘R`)
+  relê tudo, inclusive os PRs. Detalhes abaixo.
 - O caminho do repositório e o comando ficam salvos em
   `~/Library/Application Support/Hypertree/settings.json`.
 
@@ -175,6 +178,32 @@ appsettings.Development.json
 Depois de criar, a lista recarrega com o novo selecionado e — se o checkbox estiver marcado,
 o padrão — abre o terminal nele rodando o **Comando**. O checkbox fica salvo.
 
+## Atualização automática
+
+O app observa o git dir comum do repositório (o `.git` do principal) com `FileSystemWatcher`,
+que no macOS usa o FSEvents: nada de polling, e o processador fica parado enquanto nada muda.
+Os eventos são filtrados na chegada e agrupados por 800 ms, então um `git worktree add` ou um
+`fetch` viram uma releitura só.
+
+| O que mudou no git dir | O que o app relê |
+|---|---|
+| `worktrees/<nome>` criado ou apagado, `HEAD`, `locked`, `gitdir` dele, `HEAD` do principal | `git worktree list`; se a lista mudou, refaz as linhas e busca os PRs |
+| `refs/heads/`, `refs/remotes/`, `packed-refs` (commit, fetch, push) | só o `git status` de cada linha |
+| `MERGE_HEAD`, `rebase-merge/` e cia. | só o `git status` de cada linha |
+| `objects/`, `logs/`, `index`, `FETCH_HEAD`, arquivos `.lock` | nada |
+
+A releitura automática não trava os botões nem mexe no rodapé, e as linhas que não mudaram
+guardam o PR e os ícones — a lista não pisca. Se o app está no meio de uma operação própria
+(carregar, limpar, apagar), espera ela terminar.
+
+Fica de fora, de propósito:
+
+- **Edição de arquivo sem commit** (o ícone de "alterações não commitadas"). Detectar isso exigiria
+  observar a árvore de trabalho inteira de cada worktree, e o `index` não serve de sinal: o próprio
+  `git status` que o app roda pode regravá-lo, o que viraria um laço.
+- **Mudança de PR no GitHub** (merge, checks, review): não passa pelo disco. Um `fetch` depois do
+  merge relê os ícones locais, mas a coluna PR só muda com **Atualizar** (`⌘R`).
+
 ## Como os dados são obtidos
 
 - **Worktrees**: `git -C <repo> worktree list --porcelain`
@@ -203,6 +232,7 @@ hypertree/
     ├── GitService.cs           parser do `worktree list --porcelain` e helpers de git
     ├── WorktreeCreator.cs      criação de worktree (branch nova / PR) e cópia do .worktreeinclude
     ├── GitHubService.cs        leitura dos PRs via gh
+    ├── RepositoryWatcher.cs    observa o git dir e avisa o que precisa ser relido
     ├── TerminalLauncher.cs     AppleScript p/ iTerm2 (fallback Terminal.app) + open
     ├── ClaudeSessions.cs       detecta sessão do Claude Code para o "Retomar"
     ├── ProcessRunner.cs        execução de processos com timeout

@@ -88,7 +88,8 @@
                KeyDown="OnRepositoryPathKeyDown" />
       <Button Grid.Column="2" Content="Escolher…" Margin="8,0,0,0" Click="OnBrowseClick" />
       <Button Grid.Column="3" Content="Atualizar" Margin="8,0,0,0"
-              Click="OnRefreshClick" IsEnabled="{Binding IsNotBusy}" />
+              Click="OnRefreshClick" IsEnabled="{Binding IsNotBusy}" HotKey="Cmd+R"
+              ToolTip.Tip="Relê tudo, inclusive os PRs (⌘R). Worktree criado ou apagado fora do app e commit, fetch ou push já aparecem sozinhos." />
       <Button Grid.Column="4" Content="?" Width="34" Margin="8,0,0,0"
               HorizontalContentAlignment="Center" FontWeight="SemiBold"
               Click="OnHelpClick" ToolTip.Tip="O que significam as etiquetas, a coluna PR e a limpeza" />
