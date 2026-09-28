@@ -106,10 +106,10 @@ public sealed class PullRequestMemory
         _entries = entries;
     }
 
-    public static PullRequestMemory Load()
-    {
-        var filePath = Path.Combine(SettingsStore.DataDirectory, "pull-requests.json");
+    public static PullRequestMemory Load() => Load(Path.Combine(SettingsStore.DataDirectory, "pull-requests.json"));
 
+    public static PullRequestMemory Load(string filePath)
+    {
         try
         {
             if (File.Exists(filePath)

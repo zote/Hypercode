@@ -22,7 +22,7 @@ public partial class SettingsWindow : Window
     /// </summary>
     private async void OnAutoCleanupClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel viewModel) return;
+        if (DataContext is not SettingsViewModel viewModel) return;
 
         var wanted = AutoCleanupBox.IsChecked == true;
         AutoCleanupBox.SetCurrentValue(ToggleButton.IsCheckedProperty, viewModel.AutoCleanup);
@@ -35,7 +35,7 @@ public partial class SettingsWindow : Window
 
         var confirmed = await new ConfirmWindow(
             "Limpeza automática",
-            MainViewModel.AutoCleanupWarningTitle,
+            RepositoryViewModel.AutoCleanupWarningTitle,
             viewModel.AutoCleanupWarning,
             "Ativar mesmo assim",
             cancelIsDefault: true).ShowDialog<bool>(this);
@@ -45,7 +45,7 @@ public partial class SettingsWindow : Window
 
     private async void OnAutoCleanupInfoClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel viewModel) return;
+        if (DataContext is not SettingsViewModel viewModel) return;
 
         await new ConfirmWindow(
             "Limpeza automática",

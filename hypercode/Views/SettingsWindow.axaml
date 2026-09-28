@@ -2,16 +2,16 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Hypercode.Views.SettingsWindow"
         Title="Configurações"
-        Width="520" SizeToContent="Height"
+        Width="560" SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
 
-  <!-- DataContext é o MainViewModel: cada campo grava no settings.json assim que muda, e a
-       janela principal reage na hora. Por isso não há Salvar nem Cancelar, só Fechar. -->
+  <!-- DataContext é o SettingsViewModel: cada campo grava no settings.json assim que muda, e as
+       abas reagem na hora. Por isso não há Salvar nem Cancelar, só Fechar. -->
   <Window.Styles>
     <Style Selector="TextBlock.label">
       <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Margin" Value="0,0,0,6" />
+      <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBlock.help">
       <Setter Property="Opacity" Value="0.6" />
@@ -19,52 +19,119 @@
       <Setter Property="TextWrapping" Value="Wrap" />
       <Setter Property="Margin" Value="0,6,0,0" />
     </Style>
+    <!-- Marca de campo sobrescrito no repositório do escopo. -->
+    <Style Selector="TextBlock.overridden">
+      <Setter Property="Foreground" Value="#0969DA" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Text" Value="● sobrescrito neste repositório" />
+    </Style>
+    <!-- "Usar o global", à direita do título de cada campo, só no escopo de um repositório. -->
+    <Style Selector="CheckBox.inherit">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="Content" Value="Usar o global" />
+    </Style>
   </Window.Styles>
 
-  <StackPanel Margin="24,24,24,20" Spacing="22">
+  <StackPanel Margin="24,20,24,20" Spacing="20">
+
+    <!-- Escopo -->
+    <StackPanel Spacing="6">
+      <Grid ColumnDefinitions="Auto,*">
+        <TextBlock Grid.Column="0" Classes="label" Text="Valem para" Margin="0,0,10,0" />
+        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                  ItemsSource="{Binding Scopes}" SelectedItem="{Binding SelectedScope, Mode=TwoWay}" />
+      </Grid>
+      <TextBlock Classes="help" Text="{Binding ScopeHint}" />
+    </StackPanel>
+
+    <Separator />
 
     <StackPanel>
-      <TextBlock Classes="label" Text="Comando" />
-      <TextBox Name="CommandBox" Text="{Binding Command, Mode=TwoWay}" Watermark="claude" />
+      <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+        <TextBlock Grid.Column="0" Classes="label" Text="Comando" />
+        <TextBlock Grid.Column="1" Classes="overridden" Margin="10,0,0,0" IsVisible="{Binding IsCommandOverridden}" />
+        <CheckBox Grid.Column="2" Classes="inherit" IsChecked="{Binding CommandUsesGlobal, Mode=TwoWay}"
+                  IsVisible="{Binding IsRepositoryScope}" />
+      </Grid>
+      <TextBox Name="CommandBox" Text="{Binding Command, Mode=TwoWay}" Watermark="claude"
+               IsEnabled="{Binding CanEditCommand}" />
       <TextBlock Classes="help"
                  Text="Duplo-clique (ou Enter) abre uma janela nova do iTerm2 no worktree e roda o comando. Vazio volta a ser claude." />
     </StackPanel>
 
     <StackPanel>
-      <TextBlock Classes="label" Text="Monitoramento do GitHub" />
-      <ComboBox MinWidth="200" SelectedIndex="{Binding MonitorProfileIndex, Mode=TwoWay}">
+      <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+        <TextBlock Grid.Column="0" Classes="label" Text="Monitoramento do GitHub" />
+        <TextBlock Grid.Column="1" Classes="overridden" Margin="10,0,0,0" IsVisible="{Binding IsMonitorProfileOverridden}" />
+        <CheckBox Grid.Column="2" Classes="inherit" IsChecked="{Binding MonitorProfileUsesGlobal, Mode=TwoWay}"
+                  IsVisible="{Binding IsRepositoryScope}" />
+      </Grid>
+      <ComboBox MinWidth="200" SelectedIndex="{Binding MonitorProfileIndex, Mode=TwoWay}"
+                IsEnabled="{Binding CanEditMonitorProfile}">
         <ComboBoxItem Content="Desligado" />
         <ComboBoxItem Content="Econômico" />
         <ComboBoxItem Content="Equilibrado" />
         <ComboBoxItem Content="Agressivo" />
       </ComboBox>
       <TextBlock Classes="help"
-                 Text="Quão atento o app fica ao GitHub. Cada worktree tem a sua cadência, pelo estado do PR — de 30 s com a CI rodando a 30 min na branch nunca pushada —, e o perfil multiplica todas: econômico 2×, equilibrado 1×, agressivo ½. Em segundo plano, o triplo; minimizado, pausa." />
+                 Text="Quão atento o app fica ao GitHub. Cada worktree tem a sua cadência, pelo estado do PR — de 30 s com a CI rodando a 30 min na branch nunca pushada —, e o perfil multiplica todas: econômico 2×, equilibrado 1×, agressivo ½. Em segundo plano — janela sem foco ou aba de trás —, o triplo; minimizado, pausa." />
     </StackPanel>
 
     <StackPanel>
-      <CheckBox IsChecked="{Binding AssignIssueOnCreate, Mode=TwoWay}"
-                Content="Atribuir a issue a mim ao criar o worktree a partir dela" />
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+          <CheckBox IsChecked="{Binding NotifyPullRequestChanges, Mode=TwoWay}" IsEnabled="{Binding CanEditNotify}"
+                    Content="Notificar quando um PR mudar" />
+          <TextBlock Classes="overridden" IsVisible="{Binding IsNotifyOverridden}" />
+        </StackPanel>
+        <CheckBox Grid.Column="1" Classes="inherit" IsChecked="{Binding NotifyUsesGlobal, Mode=TwoWay}"
+                  IsVisible="{Binding IsRepositoryScope}" />
+      </Grid>
+      <TextBlock Classes="help"
+                 Text="Notificação do macOS quando o monitoramento vê checks, review, merge ou conflito mudarem, começando pelo nome do repositório. Desligada, a linha e a aba continuam com o sino." />
+    </StackPanel>
+
+    <StackPanel>
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+          <CheckBox IsChecked="{Binding AssignIssueOnCreate, Mode=TwoWay}" IsEnabled="{Binding CanEditAssignIssue}"
+                    Content="Atribuir a issue a mim ao criar o worktree a partir dela" />
+          <TextBlock Classes="overridden" IsVisible="{Binding IsAssignIssueOverridden}" />
+        </StackPanel>
+        <CheckBox Grid.Column="1" Classes="inherit" IsChecked="{Binding AssignIssueUsesGlobal, Mode=TwoWay}"
+                  IsVisible="{Binding IsRepositoryScope}" />
+      </Grid>
       <TextBlock Classes="help"
                  Text="Se o usuário do gh não estiver entre os assignees, o app o acrescenta (gh issue edit --add-assignee @me); quem já estava continua. É a única opção que escreve no GitHub. Se o GitHub recusar, o worktree é criado do mesmo jeito e o motivo aparece no rodapé." />
     </StackPanel>
 
     <StackPanel>
-      <StackPanel Orientation="Horizontal" Spacing="6">
-        <!-- IsChecked só de ida: ligar passa pelo aviso no Click, que é quem grava. -->
-        <CheckBox Name="AutoCleanupBox" IsChecked="{Binding AutoCleanup, Mode=OneWay}"
-                  Click="OnAutoCleanupClick" Content="Limpeza automática dos concluídos" />
-        <Button Content="ⓘ" Padding="6,0" VerticalAlignment="Center" Click="OnAutoCleanupInfoClick"
-                ToolTip.Tip="Reler o aviso: o que o git apaga junto e o que fica de fora" />
-      </StackPanel>
-      <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" IsEnabled="{Binding AutoCleanup}">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+          <!-- IsChecked só de ida: ligar passa pelo aviso no Click, que é quem grava. -->
+          <CheckBox Name="AutoCleanupBox" IsChecked="{Binding AutoCleanup, Mode=OneWay}"
+                    IsEnabled="{Binding CanEditAutoCleanup}"
+                    Click="OnAutoCleanupClick" Content="Limpeza automática dos concluídos" />
+          <Button Content="ⓘ" Padding="6,0" VerticalAlignment="Center" Click="OnAutoCleanupInfoClick"
+                  ToolTip.Tip="Reler o aviso: o que o git apaga junto e o que fica de fora" />
+          <TextBlock Classes="overridden" Margin="4,0,0,0" IsVisible="{Binding IsAutoCleanupOverridden}" />
+        </StackPanel>
+        <CheckBox Grid.Column="1" Classes="inherit" IsChecked="{Binding AutoCleanupUsesGlobal, Mode=TwoWay}"
+                  IsVisible="{Binding IsRepositoryScope}"
+                  ToolTip.Tip="A limpeza automática e a carência dela são sobrescritas juntas." />
+      </Grid>
+      <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" IsEnabled="{Binding CanEditAutoCleanupGrace}">
         <TextBlock Text="Remover" VerticalAlignment="Center" />
         <NumericUpDown Value="{Binding AutoCleanupGraceMinutes, Mode=TwoWay}" Minimum="1" Maximum="1440"
                        Increment="1" FormatString="0" Width="120" />
         <TextBlock Text="min depois de concluído" VerticalAlignment="Center" />
       </StackPanel>
       <TextBlock Classes="help"
-                 Text="Sem confirmação: o monitor remove os concluídos passada a carência, e o botão do rodapé vira Limpeza automática, com o histórico no tooltip. Pula os travados, os que têm um terminal aberto dentro e os que têm arquivo ignorado fora de bin/ e obj/ (.env, appsettings.Development.json) — o git os apagaria junto. Minimizado, pausa." />
+                 Text="Sem confirmação: o monitor remove os concluídos passada a carência, e o botão do rodapé vira Limpeza automática, com o histórico no tooltip. Roda em todas as abas em que estiver ligada, inclusive as de trás. Pula os travados, os que têm um terminal aberto dentro e os que têm arquivo ignorado fora de bin/ e obj/ (.env, appsettings.Development.json) — o git os apagaria junto. Minimizado, pausa." />
     </StackPanel>
 
     <Button Content="Fechar" Click="OnClose" HorizontalAlignment="Right" />

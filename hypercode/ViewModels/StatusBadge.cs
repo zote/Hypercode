@@ -23,6 +23,9 @@ public enum BadgeKind
     ReviewRequired,
     NeedsRebase,
     PrChanged,
+
+    /// <summary>Aba: algum PR do repositório com check falhando. Ponto, não ✕: ao lado do fechar da aba, um ✕ parece outro botão.</summary>
+    RepositoryChecksFailing,
 }
 
 public sealed record StatusBadge(BadgeKind Kind, string Tooltip)
@@ -139,6 +142,7 @@ public static class BadgeVisuals
         BadgeKind.ReviewRequired => CodeReview,
         BadgeKind.NeedsRebase => Alert,
         BadgeKind.PrChanged => BellFill,
+        BadgeKind.RepositoryChecksFailing => DotFill,
         _ => DotFill,
     };
 
@@ -165,6 +169,7 @@ public static class BadgeVisuals
         BadgeKind.ReviewRequired => Muted,
         BadgeKind.NeedsRebase => Attention,
         BadgeKind.PrChanged => Accent,
+        BadgeKind.RepositoryChecksFailing => Danger,
         _ => Muted,
     };
 }

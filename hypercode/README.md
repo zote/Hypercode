@@ -1,9 +1,13 @@
 # Hypercode
 
-App de macOS (C# + Avalonia) que lista os **worktrees** de um repositório git e, com
-duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `claude`.
+App de macOS (C# + Avalonia) que lista os **worktrees** de repositórios git — um por aba — e,
+com duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `claude`.
 
 ## Como é a tela
+
+```
+[ hypercode 14 ● 🗑4 × ][ zimps.infra 6 × ][ api 3 🔔 × ][+]        Atualizar  ?  ⚙
+```
 
 | Worktree | Branch | PR | Caminho |
 |---|---|---|---|
@@ -11,6 +15,9 @@ duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `c
 | `feat-login` | `feature/login` | `#412` | `/Users/…/repo-feat-login` |
 | `hotfix` | `hotfix/crash` | `#418` (merged) | `/Users/…/repo-hotfix` |
 
+- **Abas**: cada repositório aberto é uma aba, e todas continuam vivas em segundo plano — lista,
+  monitoramento, notificações e limpeza automática rodam nas de trás também. Detalhes em
+  [Abas](#abas).
 - **Duplo-clique** (ou `Enter`) em uma linha → nova janela do iTerm2 em `cd <worktree> && claude`.
 - **Botão direito** → ações do worktree. Detalhes abaixo.
 - O campo **Filtrar** (`⌘F`) mostra só as linhas cujo nome, branch, número ou título do PR
@@ -18,13 +25,14 @@ duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `c
   Não diferencia maiúsculas nem acentos. `Esc` limpa; `↓`/`Enter` desce para a lista.
 - **Clicar no cabeçalho** de uma coluna ordena por ela; clicar de novo inverte (▲/▼). O
   principal fica sempre no topo e, ordenando por PR, as linhas sem PR vão para o fim. A
-  escolha fica salva.
+  escolha fica salva, uma por repositório.
 - **Novo worktree…** (`⌘N`) cria um worktree com branch nova, a partir de um PR ou a partir de uma issue. Detalhes abaixo.
 - **Configurações…** (`⌘,`, no menu do app, ou o botão **⚙** ao lado do **?**) reúne as
   preferências: o **Comando** que o duplo-clique roda — troque `claude` por outra coisa
-  (`claude --resume`, `zsh`, etc.) —, o perfil do monitoramento, a atribuição de issue e a
-  limpeza automática. Cada
-  campo vale na hora e fica salvo; não há Salvar.
+  (`claude --resume`, `zsh`, etc.) —, o perfil do monitoramento, as notificações, a atribuição de
+  issue e a limpeza automática. Valem para todos os repositórios, e cada repositório pode
+  sobrescrever qualquer campo: o seletor do topo troca entre **Global** e um repositório, e ali
+  cada campo ganha **Usar o global**. Cada campo vale na hora e fica salvo; não há Salvar.
 - O botão **?** abre a legenda das etiquetas, da coluna PR e das regras da limpeza.
   Parar o mouse sobre a etiqueta de uma linha explica só as dela.
 - **Limpar concluídos** remove os worktrees com PR `merged` ou `closed` e poda os órfãos,
@@ -36,10 +44,40 @@ duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `c
   worktree — de 30 s com a CI rodando a 30 min na branch nunca pushada —, e avisa (notificação
   do macOS e sino na linha) quando checks, review, merge ou conflito mudam. O perfil fica nas
   configurações. Detalhes em [Monitoramento](#monitoramento).
-- O caminho do repositório e o comando ficam salvos em
+- As abas abertas e as preferências ficam salvas em
   `~/Library/Application Support/Hypercode/settings.json`. Quem vem da época em que o app se
   chamava Hypertree não perde nada: na primeira abertura, se essa pasta não existe, o app copia
   a antiga `~/Library/Application Support/Hypertree/` para ela (a antiga fica intacta).
+
+## Abas
+
+- **Abrir**: a aba **+**, `⌘O` ou arrastar a pasta do Finder para a janela. A pasta de um worktree
+  abre o repositório dono dele (o primeiro do `git worktree list`); repositório já aberto só ganha o
+  foco; pasta que não é repositório git mostra o motivo num diálogo e não cria aba.
+- **Trocar**: clique na aba ou `⌘1`…`⌘9`. A lista de cada aba já está carregada — trocar não relê
+  nada — e a seleção de cada uma é mantida.
+- **Reordenar**: arrastar a aba. A ordem fica salva.
+- **Fechar**: `⌘W`, o **×** ou o menu da aba, sempre com confirmação. Fechar só tira o repositório
+  da faixa e para de monitorá-lo — nada no disco é apagado. A carência da limpeza, a memória dos
+  PRs e o override do repositório ficam guardados para quando ele for reaberto.
+- **Ao abrir o app**, as abas voltam na mesma ordem, com a última selecionada à frente; ela carrega
+  primeiro e as outras em seguida, uma de cada vez.
+- O menu de contexto da aba tem **Configurações deste repositório…** (abre a tela já no escopo
+  dele) e **Revelar no Finder**.
+
+Ao lado do nome, a aba mostra:
+
+| | |
+|---|---|
+| número | quantos worktrees o repositório tem |
+| ponto vermelho | algum PR aberto com check falhando — o tooltip diz quais |
+| lixeira + número | quantos estão prontos para a limpeza, o mesmo do **Limpar concluídos** da aba |
+| sino | um PR mudou enquanto a aba estava atrás; some ao trazê-la para a frente |
+
+O tooltip da aba traz o caminho completo e o resumo dos indicadores.
+
+Quem vem da versão de um repositório só não perde nada: o `RepositoryPath` antigo vira a primeira
+aba — resolvido para o repositório dono, se era a pasta de um worktree — e a chave some do arquivo.
 
 ## Requisitos
 
@@ -246,6 +284,11 @@ pula:
 Os pulados ficam para o menu **Apagar o worktree…**. A remoção é definitiva (não passa pela
 Lixeira), a carência recomeça quando o app abre e, com a janela minimizada, nada é removido.
 
+A limpeza automática roda em todas as abas em que estiver ligada, inclusive as de trás. Ela pode
+ficar ligada só num repositório: no escopo dele, nas configurações, desmarque **Usar o global** —
+a opção e a carência são sobrescritas juntas. Uma aba aberta com o app já de pé também espera
+2 min antes de remover qualquer coisa.
+
 ## Novo worktree
 
 O diálogo tem três modos:
@@ -317,9 +360,11 @@ Fica de fora, de propósito:
 
 ## Monitoramento
 
-Com um repositório carregado, o app confere o remoto por conta própria. Cada worktree tem a sua
+Cada aba confere o remoto do seu repositório por conta própria. Cada worktree tem a sua
 cadência, que sai do estado do PR dele; um agendador em memória acorda a cada 10 s, vê quem venceu
-e manda **uma** consulta cobrindo todos eles — nunca uma por worktree.
+e manda **uma** consulta cobrindo todos eles — nunca uma por worktree. Com várias abas, **um
+repositório de cada vez** faz o fetch e a consulta: os tiques de todas coincidem, e juntos
+virariam uma rajada de `gh` e `git fetch`. Quem não conseguiu a vez tenta no tique seguinte.
 
 | Estado do worktree | Cadência |
 |---|---|
@@ -355,12 +400,15 @@ agressivo ½, ou desligado.
 
 | Janela | Cadências |
 |---|---|
-| ativa | as da tabela, vezes o perfil |
-| em segundo plano | o triplo |
+| ativa, aba à frente | as da tabela, vezes o perfil |
+| em segundo plano, ou aba de trás | o triplo |
 | minimizada | pausado; ao voltar o foco, o que venceu é conferido na hora |
 
+Trazer uma aba para a frente também confere na hora o que venceu nela.
+
 **Cota.** A resposta do GraphQL traz o `rateLimit` junto, de graça. A cota é de 5000 pontos/h e é
-**da conta**, não do app — outras ferramentas gastam dela. Passados 60 % de uso, o agendador recua:
+**da conta**, não do app — outras ferramentas gastam dela, e todas as abas dividem a mesma: a cota
+lida por uma vale para as outras. Passados 60 % de uso, o agendador recua:
 2× até 80 %, 4× até 90 %, 10× acima disso, até o horário do reset. Enquanto recua, o rodapé diz
 ("Monitor em recuo · …"), para a coluna PR parada não parecer travamento. O fetch não recua.
 
@@ -379,25 +427,31 @@ Sem `gh`, ou sem autenticação, a parte git continua; o problema aparece uma ve
 - PR mergeado, fechado ou reaberto;
 - conflito com a base apareceu, ou a base andou.
 
-Cada transição vira uma notificação do macOS (acima de três PRs de uma vez, uma só), uma frase no
-rodapé e o sino na linha, com a lista no tooltip. O sino fica até **Marcar como visto** ou abrir o
+Cada transição vira uma notificação do macOS (acima de três PRs de uma vez, uma só), que começa
+pelo nome do repositório, uma frase no rodapé da aba e o sino na linha, com a lista no tooltip —
+e, se a aba estava atrás, o sino na aba também. O sino da linha fica até **Marcar como visto** ou abrir o
 PR no navegador — e sobrevive a fechar o app. Como o estado fica gravado, o aviso não se repete ao
 reabrir; o que mudou com o app fechado é avisado uma vez, no primeiro carregamento. PR visto pela
 primeira vez não gera aviso. Enquanto o GitHub responde `UNKNOWN` na mergeabilidade (ele calcula
 sob demanda), vale o último valor conhecido, para o conflito não "sumir e voltar".
 
 A notificação sai por `display notification` do AppleScript, então o macOS a atribui ao Editor de
-Script — é o que dá sem assinar o app.
+Script — é o que dá sem assinar o app. Pelo mesmo motivo, clicar nela não leva à aba: o clique é
+do Editor de Script, não do Hypercode.
 
 Em `settings.json`:
 
 | Chave | Padrão | |
 |---|---|---|
+| `Repositories` | `[]` | as abas, na ordem da faixa — a raiz do worktree principal de cada repositório |
+| `SelectedRepository` | — | a aba que volta à frente ao abrir |
 | `MonitorProfile` | `balanced` | `off`, `economical`, `balanced` ou `aggressive` — o mesmo do seletor das configurações |
 | `NotifyPullRequestChanges` | `true` | `false` mantém o sino e o rodapé, sem notificação |
+| `RepositoryOverrides` | `{}` | por raiz de repositório, o que ele sobrescreve do global (`Command`, `MonitorProfile`, `NotifyPullRequestChanges`, `AssignIssueOnCreate`, `AutoCleanup` + `AutoCleanupGraceMinutes`) e a ordenação da lista dele; campo ausente segue o global |
 
 A chave antiga `MonitorIntervalMinutes`, do intervalo fixo, é migrada na leitura: `0` vira `off`,
-qualquer outro valor vira `balanced`. Ela some do arquivo no próximo salvamento.
+qualquer outro valor vira `balanced`. Ela some do arquivo no próximo salvamento. O mesmo vale para
+`RepositoryPath`, de antes das abas, que vira a primeira delas.
 
 ## Como os dados são obtidos
 
@@ -418,11 +472,14 @@ Um app aberto pelo Finder herda um `PATH` mínimo, então o Hypercode reconstró
 hypercode/
 ├── Program.cs                  ponto de entrada Avalonia
 ├── App.axaml(.cs)              tema e janela principal
-├── Views/MainWindow.axaml(.cs) UI e handlers (duplo-clique, menu, atalhos)
+├── Views/MainWindow.axaml(.cs) UI e handlers (abas, duplo-clique, menu, atalhos, arrastar)
 ├── Views/CreateWorktreeWindow.axaml(.cs) diálogo "Novo worktree"
-├── Views/SettingsWindow.axaml(.cs) tela de configurações (⌘,)
+├── Views/SettingsWindow.axaml(.cs) tela de configurações (⌘,), global ou por repositório
 ├── ViewModels/
-│   ├── MainViewModel.cs        carregamento, filtro, ordenação, status, ações
+│   ├── MainViewModel.cs        as abas: abrir, fechar, reordenar, restaurar
+│   ├── RepositoryViewModel.cs  um repositório: carregamento, filtro, ordenação, status, monitor, limpeza, ações
+│   ├── RepositoryHub.cs        o que as abas dividem: preferências, memória dos PRs, vez do remoto, cota
+│   ├── SettingsViewModel.cs    tela de configurações, com o escopo e o "usar o global"
 │   ├── CreateWorktreeViewModel.cs  diálogo "Novo worktree"
 │   └── WorktreeRow.cs          uma linha da lista
 └── Services/
@@ -437,5 +494,5 @@ hypercode/
     ├── ClaudeSessions.cs       detecta sessão do Claude Code para o "Retomar"
     ├── ProcessRunner.cs        execução de processos com timeout
     ├── ExecutableLocator.cs    resolução de PATH/binários
-    └── SettingsStore.cs        preferências em JSON
+    └── SettingsStore.cs        preferências em JSON, override por repositório e migração
 ```
