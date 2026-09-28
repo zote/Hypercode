@@ -196,7 +196,7 @@
 
     <!-- Rodapé -->
     <Border Grid.Row="4" BorderThickness="0,1,0,0" BorderBrush="#22808080" Padding="16,10">
-      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
         <ProgressBar Grid.Column="0" Width="80" Height="4" IsIndeterminate="True"
                      VerticalAlignment="Center" Margin="0,0,12,0"
                      IsVisible="{Binding IsBusy}" />
@@ -207,10 +207,15 @@
                    Foreground="#C9822B"
                    Text="{Binding MonitorNotice}" IsVisible="{Binding HasMonitorNotice}"
                    ToolTip.Tip="A cota de consultas GraphQL do GitHub (5000/h, da conta inteira — outras ferramentas gastam dela também) passou de 60 %. Todas as cadências ficam mais longas até o reset ou até o consumo baixar." />
-        <Button Grid.Column="3" Content="{Binding CleanupButtonLabel}" Margin="0,0,8,0"
+        <!-- Fica enquanto o FSEvents não subiu: a lista não acompanha o git na hora. -->
+        <TextBlock Grid.Column="3" VerticalAlignment="Center" Margin="0,0,12,0" FontSize="11"
+                   Foreground="#C9822B"
+                   Text="{Binding WatcherNotice}" IsVisible="{Binding HasWatcherNotice}"
+                   ToolTip.Tip="O acompanhamento do git dir (FSEvents) não ficou pronto a tempo — comum em disco externo ou máquina sob carga. A lista é relida periodicamente e o app tenta de novo; o Atualizar relê na hora." />
+        <Button Grid.Column="4" Content="{Binding CleanupButtonLabel}" Margin="0,0,8,0"
                 Click="OnCleanupClick" IsEnabled="{Binding CanCleanupManually}"
                 ToolTip.Tip="{Binding CleanupToolTip}" ToolTip.ShowOnDisabled="True" />
-        <Button Grid.Column="4" Content="Abrir no iTerm2" Click="OnOpenTerminalClick"
+        <Button Grid.Column="5" Content="Abrir no iTerm2" Click="OnOpenTerminalClick"
                 IsEnabled="{Binding SelectedWorktree, Converter={x:Static ObjectConverters.IsNotNull}}" />
       </Grid>
     </Border>

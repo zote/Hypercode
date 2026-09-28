@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Hypercode.Services;
 
 /// <summary>O que mudou no git dir, do mais barato ao mais caro de reler.</summary>
@@ -30,19 +32,21 @@ public sealed class RepositoryWatcher : IDisposable
         "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_LOG", "rebase-merge", "rebase-apply",
     };
 
+    private static readonly ConcurrentDictionary<string, Task<RepositoryWatcher>> Stalled = new(StringComparer.Ordinal);
+
     private readonly FileSystemWatcher _watcher;
     private readonly Action<RepositoryChange> _onChanged;
     private readonly SynchronizationContext? _context;
     private readonly Timer _timer;
     private readonly object _gate = new();
     private RepositoryChange _pending;
+    private volatile bool _disposed;
 
-    /// <param name="onChanged">Chamado no contexto de sincronização de quem criou (a UI).</param>
-    public RepositoryWatcher(string gitCommonDir, Action<RepositoryChange> onChanged)
+    private RepositoryWatcher(string gitCommonDir, Action<RepositoryChange> onChanged, SynchronizationContext? context)
     {
         GitCommonDir = Path.TrimEndingDirectorySeparator(gitCommonDir);
         _onChanged = onChanged;
-        _context = SynchronizationContext.Current;
+        _context = context;
         _timer = new Timer(_ => Flush(), null, Timeout.Infinite, Timeout.Infinite);
 
         _watcher = new FileSystemWatcher(GitCommonDir)
@@ -59,7 +63,54 @@ public sealed class RepositoryWatcher : IDisposable
         // Buffer estourado ou watcher perdido: não dá para saber o que mudou, relê tudo.
         _watcher.Error += (_, _) => Schedule(RepositoryChange.Worktrees);
 
-        _watcher.EnableRaisingEvents = true;
+        try
+        {
+            _watcher.EnableRaisingEvents = true;
+        }
+        catch
+        {
+            _watcher.Dispose();
+            _timer.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Cria o watcher fora da thread de quem chama. Ligar o FileSystemWatcher registra o
+    /// FSEvents de forma síncrona, e num volume lento ou numa máquina sob carga isso leva
+    /// minutos — na UI, congelaria o app. Se não fica pronto em <paramref name="timeout"/>,
+    /// devolve null e descarta o watcher quando (e se) ele terminar de subir.
+    /// </summary>
+    /// <param name="onChanged">Chamado em <paramref name="context"/> — capturado por quem chama,
+    /// porque na thread do pool não há contexto nenhum para capturar.</param>
+    public static async Task<RepositoryWatcher?> CreateAsync(
+        string gitCommonDir,
+        Action<RepositoryChange> onChanged,
+        SynchronizationContext? context,
+        TimeSpan timeout)
+    {
+        var key = Path.TrimEndingDirectorySeparator(gitCommonDir);
+
+        // Uma subida que estourou o prazo segue presa numa thread do pool; a próxima tentativa
+        // espera por ela em vez de prender outra.
+        var creation = Stalled.TryRemove(key, out var stalled)
+            ? stalled
+            : Task.Run(() => new RepositoryWatcher(gitCommonDir, onChanged, context));
+
+        if (await Task.WhenAny(creation, Task.Delay(timeout)).ConfigureAwait(false) == creation)
+            return await creation.ConfigureAwait(false);
+
+        Stalled[key] = creation;
+        _ = creation.ContinueWith(
+            task =>
+            {
+                // Ninguém veio buscar: descarta.
+                if (Stalled.TryRemove(KeyValuePair.Create(key, task))) task.Result.Dispose();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnRanToCompletion,
+            TaskScheduler.Default);
+        return null;
     }
 
     public string GitCommonDir { get; }
@@ -130,14 +181,15 @@ public sealed class RepositoryWatcher : IDisposable
             _pending = RepositoryChange.None;
         }
 
-        if (change == RepositoryChange.None) return;
+        if (change == RepositoryChange.None || _disposed) return;
 
         if (_context is null) _onChanged(change);
-        else _context.Post(_ => _onChanged(change), null);
+        else _context.Post(_ => { if (!_disposed) _onChanged(change); }, null);
     }
 
     public void Dispose()
     {
+        _disposed = true;
         _watcher.EnableRaisingEvents = false;
         _watcher.Dispose();
         _timer.Dispose();
