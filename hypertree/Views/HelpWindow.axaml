@@ -1,0 +1,92 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Hypertree.Views"
+        x:Class="Hypertree.Views.HelpWindow"
+        Title="Ajuda — Hypertree"
+        Width="720" Height="680"
+        MinWidth="480" MinHeight="380"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.h2">
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,18,0,6" />
+    </Style>
+    <Style Selector="TextBlock.p">
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+      <Setter Property="LineHeight" Value="19" />
+    </Style>
+    <Style Selector="TextBlock.tag">
+      <Setter Property="FontFamily" Value="Menlo,Consolas,monospace" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,10,0,2" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Opacity" Value="0.6" />
+    </Style>
+  </Window.Styles>
+
+  <Window.Resources>
+    <DataTemplate x:Key="LegendTemplate">
+      <Grid ColumnDefinitions="28,*" Margin="0,0,0,11">
+        <PathIcon Grid.Column="0" Width="15" Height="15"
+                  VerticalAlignment="Top" HorizontalAlignment="Left" Margin="0,2,0,0"
+                  Data="{Binding PathData, Converter={x:Static views:BadgeConverter.ToGeometry}}"
+                  Foreground="{Binding ColorHex, Converter={x:Static views:BadgeConverter.ToBrush}}" />
+        <StackPanel Grid.Column="1" Spacing="1">
+          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Opacity="0.72" LineHeight="18" />
+        </StackPanel>
+      </Grid>
+    </DataTemplate>
+  </Window.Resources>
+
+  <Grid RowDefinitions="*,Auto" Margin="22,18,22,18">
+    <ScrollViewer Grid.Row="0">
+      <StackPanel MaxWidth="600" HorizontalAlignment="Left">
+
+        <TextBlock Classes="h2" Margin="0,0,0,10" Text="Ícones — estado do worktree" />
+        <ItemsControl ItemsSource="{Binding WorktreeLegend}" ItemTemplate="{StaticResource LegendTemplate}" />
+
+        <TextBlock Classes="h2" Margin="0,18,0,10" Text="Ícones — pull request" />
+        <ItemsControl ItemsSource="{Binding PullRequestLegend}" ItemTemplate="{StaticResource LegendTemplate}" />
+
+        <TextBlock Classes="h2" Margin="0,0,0,6" Text="Etiquetas abaixo do nome do worktree" />
+        <TextBlock Classes="p muted"
+                   Text="Vêm do git worktree list --porcelain e só aparecem quando se aplicam. Passar o mouse sobre elas na lista mostra a explicação da linha." />
+
+        <TextBlock Classes="tag" Text="principal" />
+        <TextBlock Classes="p" Text="É o worktree original do repositório, onde fica o diretório .git de verdade. Os demais são vinculados, criados com git worktree add. Este não pode ser removido com git worktree remove." />
+
+        <TextBlock Classes="tag" Text="travado" />
+        <TextBlock Classes="p" Text="Alguém rodou git worktree lock aqui, opcionalmente com um motivo (que aparece no tooltip). O git não o remove no prune, e a limpeza do Hypertree também o ignora de propósito — travar é justamente pedir que ninguém mexa. Destrave com git worktree unlock." />
+
+        <TextBlock Classes="tag" Text="órfão" />
+        <TextBlock Classes="p" Text="O git marcou como prunable: o ponteiro aponta para uma pasta que não existe mais, normalmente porque o diretório foi apagado na mão. Um git worktree prune limpa os metadados." />
+
+        <TextBlock Classes="tag" Text="bare" />
+        <TextBlock Classes="p" Text="Repositório sem árvore de trabalho — não há arquivos para abrir no terminal." />
+
+        <TextBlock Classes="tag" Text="draft · merged · closed" />
+        <TextBlock Classes="p" Text="Estado do PR da branch, mostrado quando ele não está simplesmente aberto. draft é um PR aberto como rascunho; merged foi integrado; closed foi fechado sem merge." />
+
+        <TextBlock Classes="h2" Text="Coluna PR" />
+        <TextBlock Classes="p" Text="Vem de gh pr list, casando o headRefName do PR com a branch do worktree. Havendo mais de um PR para a mesma branch, o app prefere o aberto, depois o mergeado, depois o fechado. Sem o gh instalado e autenticado a coluna fica vazia e o resto continua funcionando." />
+
+        <TextBlock Classes="h2" Text="Limpar concluídos" />
+        <TextBlock Classes="p" Text="Junta os worktrees cujo PR está merged ou closed, mais os órfãos, e remove com git worktree remove — sem --force. Isso é intencional: se houver alteração não commitada, o git recusa e o Hypertree informa em vez de apagar seu trabalho." />
+        <TextBlock Classes="p" Text="A branch local não é tocada, só o worktree. O principal, os bare e os travados nunca entram. Órfãos são resolvidos com git worktree prune ao final." />
+        <TextBlock Classes="p" Text="Antes de remover qualquer coisa, o app lista os candidatos e pede confirmação." />
+
+        <TextBlock Classes="h2" Text="Abrir no terminal" />
+        <TextBlock Classes="p" Text="Duplo-clique ou Enter abre uma janela nova do iTerm2 na pasta do worktree e roda o comando do campo Comando (por padrão claude). Sem iTerm2 instalado, usa o Terminal.app. Na primeira vez o macOS pede permissão de automação." />
+
+      </StackPanel>
+    </ScrollViewer>
+
+    <Button Grid.Row="1" Content="Fechar" HorizontalAlignment="Right" Margin="0,16,0,0"
+            Click="OnClose" IsDefault="True" IsCancel="True" />
+  </Grid>
+</Window>

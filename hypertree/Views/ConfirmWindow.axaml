@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Hypertree.Views.ConfirmWindow"
+        Title="Confirmar"
+        Width="620" Height="440"
+        MinWidth="420" MinHeight="260"
+        WindowStartupLocation="CenterOwner">
+
+  <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+    <TextBlock Grid.Row="0" Name="HeadlineText" FontSize="15" FontWeight="SemiBold"
+               TextWrapping="Wrap" Margin="0,0,0,12" />
+
+    <Border Grid.Row="1" BorderThickness="1" BorderBrush="#33808080" CornerRadius="6" Padding="12">
+      <ScrollViewer>
+        <TextBlock Name="BodyText" TextWrapping="Wrap" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
+      </ScrollViewer>
+    </Border>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+      <Button Name="CancelButton" Content="Cancelar" Click="OnCancel" IsCancel="True" />
+      <Button Name="ConfirmButton" Content="Remover" Click="OnConfirm" IsDefault="True" />
+    </StackPanel>
+  </Grid>
+</Window>
