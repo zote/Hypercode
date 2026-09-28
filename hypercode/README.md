@@ -19,7 +19,7 @@ duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `c
 - **Clicar no cabeçalho** de uma coluna ordena por ela; clicar de novo inverte (▲/▼). O
   principal fica sempre no topo e, ordenando por PR, as linhas sem PR vão para o fim. A
   escolha fica salva.
-- **Novo worktree…** (`⌘N`) cria um worktree com branch nova ou a partir de um PR. Detalhes abaixo.
+- **Novo worktree…** (`⌘N`) cria um worktree com branch nova, a partir de um PR ou a partir de uma issue. Detalhes abaixo.
 - O campo **Comando** deixa você trocar `claude` por outra coisa (`claude --resume`, `zsh`, etc.).
 - O botão **?** abre a legenda das etiquetas, da coluna PR e das regras da limpeza.
   Parar o mouse sobre a etiqueta de uma linha explica só as dela.
@@ -214,7 +214,7 @@ O app lista os candidatos com o motivo de cada um e pede confirmação antes de 
 
 ## Novo worktree
 
-O diálogo tem dois modos:
+O diálogo tem três modos:
 
 - **Branch nova**: nome da branch + base (padrão: a branch default do remoto, `origin/HEAD`;
   o campo sugere as branches locais e remotas). Se a base é remota, o app faz `git fetch` só
@@ -225,6 +225,13 @@ O diálogo tem dois modos:
   - PR do próprio repo → `fetch` da branch e `worktree add --track`, pronta para push;
   - PR de fork → `fetch <remoto> pull/<n>/head` direto para a branch local, sem upstream;
   - branch local já existente → usada como está (sem pull).
+- **A partir de uma issue**: número, `#número` ou URL. O app consulta a issue com
+  `gh issue view`, mostra título e estado e sugere a branch `claude/issue-<n>-<slug>` — o
+  padrão do `AGENTS.md`, com o slug tirado das primeiras palavras do título (sem acento, sem
+  artigos e preposições). Branch e base são editáveis; para o git é uma branch nova como no
+  primeiro modo. Issue fechada é aceita com aviso; número de PR é recusado (use o modo PR).
+  Se a branch já existe localmente o botão Criar fica desabilitado; se existe só no remoto,
+  aparece um aviso.
 
 A pasta sugerida é `<pai do repo>/<repo>.worktrees/<branch>`, com `/` virando `-`
 (`feature/login` → `meu-repo.worktrees/feature-login`). Dá para editar; apagar o campo volta
@@ -349,7 +356,7 @@ hypercode/
 │   └── WorktreeRow.cs          uma linha da lista
 └── Services/
     ├── GitService.cs           parser do `worktree list --porcelain` e helpers de git
-    ├── WorktreeCreator.cs      criação de worktree (branch nova / PR) e cópia do .worktreeinclude
+    ├── WorktreeCreator.cs      criação de worktree (branch nova / PR / issue) e cópia do .worktreeinclude
     ├── GitHubService.cs        leitura dos PRs via gh
     ├── RepositoryWatcher.cs    observa o git dir e avisa o que precisa ser relido
     ├── PullRequestMemory.cs    último estado visto de cada PR e as transições

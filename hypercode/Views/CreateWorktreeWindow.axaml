@@ -24,6 +24,7 @@
     <StackPanel Orientation="Horizontal" Spacing="20" IsEnabled="{Binding IsNotBusy}">
       <RadioButton GroupName="mode" Content="Branch nova" IsChecked="{Binding IsNewBranchMode, Mode=TwoWay}" />
       <RadioButton GroupName="mode" Content="A partir de um PR" IsChecked="{Binding IsPullRequestMode, Mode=TwoWay}" />
+      <RadioButton GroupName="mode" Content="A partir de uma issue" IsChecked="{Binding IsIssueMode, Mode=TwoWay}" />
     </StackPanel>
 
     <!-- Branch nova -->
@@ -56,6 +57,35 @@
       <TextBlock Grid.Row="2" Grid.Column="1" Classes="hint"
                  Text="{Binding PullRequestSummary}"
                  IsVisible="{Binding PullRequestSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    </Grid>
+
+    <!-- A partir de uma issue -->
+    <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,4,Auto,8,Auto,4,Auto,8,Auto"
+          IsVisible="{Binding IsIssueMode}" IsEnabled="{Binding IsNotBusy}">
+      <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Issue" />
+      <TextBox Grid.Row="0" Grid.Column="1" Name="IssueBox"
+               Text="{Binding IssueNumberText, Mode=TwoWay}" Watermark="34, #34 ou a URL da issue"
+               KeyDown="OnFieldKeyDown" />
+      <TextBlock Grid.Row="2" Grid.Column="1" Classes="hint"
+                 Text="{Binding IssueSummary}"
+                 IsVisible="{Binding IssueSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+      <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Branch" />
+      <TextBox Grid.Row="4" Grid.Column="1"
+               Text="{Binding IssueBranchName, Mode=TwoWay}" Watermark="claude/issue-34-assunto"
+               KeyDown="OnFieldKeyDown" />
+      <TextBlock Grid.Row="6" Grid.Column="1" Classes="hint" Foreground="#D29922"
+                 Text="{Binding IssueBranchWarning}"
+                 IsVisible="{Binding IssueBranchWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+      <TextBlock Grid.Row="8" Grid.Column="0" Classes="label" Text="A partir de" />
+      <AutoCompleteBox Grid.Row="8" Grid.Column="1"
+                       Text="{Binding BaseRef, Mode=TwoWay}"
+                       ItemsSource="{Binding Branches}"
+                       FilterMode="ContainsOrdinal"
+                       MinimumPrefixLength="0"
+                       Watermark="origin/main"
+                       KeyDown="OnFieldKeyDown" />
     </Grid>
 
     <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,4,Auto" IsEnabled="{Binding IsNotBusy}">

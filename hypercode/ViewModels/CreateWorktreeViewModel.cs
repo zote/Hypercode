@@ -3,19 +3,30 @@ using Hypercode.Services;
 namespace Hypercode.ViewModels;
 
 /// <summary>
-/// Diálogo "Novo worktree": branch nova a partir de uma base, ou a branch de um PR.
+/// Diálogo "Novo worktree": branch nova a partir de uma base, a branch de um PR, ou a branch
+/// de trabalho de uma issue (claude/issue-&lt;n&gt;-&lt;slug&gt;, sugerida pelo título).
 /// A pasta é sugerida em &lt;repo&gt;.worktrees/&lt;branch&gt; até o usuário editá-la.
 /// </summary>
 public sealed class CreateWorktreeViewModel : ObservableObject
 {
+    private enum CreateMode { NewBranch, PullRequest, Issue }
+
     private readonly string _mainWorktreePath;
 
-    private bool _isPullRequestMode;
+    private CreateMode _mode;
+    private string? _remote;
     private string _branchName = string.Empty;
     private string _baseRef = string.Empty;
     private string _pullRequestNumberText = string.Empty;
     private PullRequestHead? _pullRequest;
     private string? _pullRequestSummary;
+    private string _issueNumberText = string.Empty;
+    private IssueInfo? _issue;
+    private string? _issueSummary;
+    private string _issueBranchName = string.Empty;
+    private string? _suggestedIssueBranch;
+    private string? _issueBranchWarning;
+    private bool _issueBranchExistsLocally;
     private string _worktreePath = string.Empty;
     private bool _pathEditedByUser;
     private bool _openTerminal;
@@ -23,6 +34,8 @@ public sealed class CreateWorktreeViewModel : ObservableObject
     private string? _progressMessage;
     private bool _isBusy;
     private CancellationTokenSource? _lookupCancellation;
+    private CancellationTokenSource? _issueLookupCancellation;
+    private CancellationTokenSource? _branchCheckCancellation;
 
     public CreateWorktreeViewModel(string mainWorktreePath, bool openTerminal, string command)
     {
@@ -46,19 +59,35 @@ public sealed class CreateWorktreeViewModel : ObservableObject
 
     public IReadOnlyList<string> Branches { get; private set; } = Array.Empty<string>();
 
+    // Os RadioButtons desmarcam o anterior com false; só o true troca o modo.
     public bool IsNewBranchMode
     {
-        get => !_isPullRequestMode;
-        set => IsPullRequestMode = !value;
+        get => _mode == CreateMode.NewBranch;
+        set { if (value) Mode = CreateMode.NewBranch; }
     }
 
     public bool IsPullRequestMode
     {
-        get => _isPullRequestMode;
+        get => _mode == CreateMode.PullRequest;
+        set { if (value) Mode = CreateMode.PullRequest; }
+    }
+
+    public bool IsIssueMode
+    {
+        get => _mode == CreateMode.Issue;
+        set { if (value) Mode = CreateMode.Issue; }
+    }
+
+    private CreateMode Mode
+    {
+        get => _mode;
         set
         {
-            if (!SetProperty(ref _isPullRequestMode, value)) return;
+            if (_mode == value) return;
+            _mode = value;
             RaisePropertyChanged(nameof(IsNewBranchMode));
+            RaisePropertyChanged(nameof(IsPullRequestMode));
+            RaisePropertyChanged(nameof(IsIssueMode));
             ErrorMessage = null;
             SuggestPath();
             RaiseCanCreate();
@@ -100,6 +129,45 @@ public sealed class CreateWorktreeViewModel : ObservableObject
     {
         get => _pullRequestSummary;
         private set => SetProperty(ref _pullRequestSummary, value);
+    }
+
+    /// <summary>Aceita 34, #34 ou a URL da issue.</summary>
+    public string IssueNumberText
+    {
+        get => _issueNumberText;
+        set
+        {
+            if (!SetProperty(ref _issueNumberText, value ?? string.Empty)) return;
+            _ = LookupIssueAsync();
+        }
+    }
+
+    public string? IssueSummary
+    {
+        get => _issueSummary;
+        private set => SetProperty(ref _issueSummary, value);
+    }
+
+    /// <summary>
+    /// Sugerida a partir da issue, mas editável. Enquanto o usuário não mexer, trocar o número
+    /// troca a sugestão; depois de editada, fica como ele deixou.
+    /// </summary>
+    public string IssueBranchName
+    {
+        get => _issueBranchName;
+        set
+        {
+            if (!SetProperty(ref _issueBranchName, value ?? string.Empty)) return;
+            SuggestPath();
+            RaiseCanCreate();
+            _ = CheckIssueBranchAsync();
+        }
+    }
+
+    public string? IssueBranchWarning
+    {
+        get => _issueBranchWarning;
+        private set => SetProperty(ref _issueBranchWarning, value);
     }
 
     public string WorktreePath
@@ -157,9 +225,15 @@ public sealed class CreateWorktreeViewModel : ObservableObject
     public bool CanCreate =>
         !_isBusy
         && _worktreePath.Trim().Length > 0
-        && (_isPullRequestMode
-            ? _pullRequest is not null
-            : _branchName.Trim().Length > 0 && _baseRef.Trim().Length > 0);
+        && _mode switch
+        {
+            CreateMode.PullRequest => _pullRequest is not null,
+            CreateMode.Issue => _issue is not null
+                && !_issueBranchExistsLocally
+                && _issueBranchName.Trim().Length > 0
+                && _baseRef.Trim().Length > 0,
+            _ => _branchName.Trim().Length > 0 && _baseRef.Trim().Length > 0,
+        };
 
     private void RaiseCanCreate() => RaisePropertyChanged(nameof(CanCreate));
 
@@ -171,9 +245,9 @@ public sealed class CreateWorktreeViewModel : ObservableObject
             Branches = await GitService.ListBranchesAsync(_mainWorktreePath).ConfigureAwait(true);
             RaisePropertyChanged(nameof(Branches));
 
-            var remote = await WorktreeCreator.PreferredRemoteAsync(_mainWorktreePath).ConfigureAwait(true);
+            _remote = await WorktreeCreator.PreferredRemoteAsync(_mainWorktreePath).ConfigureAwait(true);
             if (_baseRef.Length == 0
-                && await GitService.ResolveDefaultBaseAsync(_mainWorktreePath, remote ?? "origin").ConfigureAwait(true) is { } defaultBase)
+                && await GitService.ResolveDefaultBaseAsync(_mainWorktreePath, _remote ?? "origin").ConfigureAwait(true) is { } defaultBase)
             {
                 BaseRef = defaultBase;
             }
@@ -191,16 +265,26 @@ public sealed class CreateWorktreeViewModel : ObservableObject
 
         IsBusy = true;
         ErrorMessage = null;
-        ProgressMessage = _isPullRequestMode ? $"Baixando o PR #{_pullRequest!.Number}…" : "Atualizando a base e criando…";
+        ProgressMessage = _mode == CreateMode.PullRequest
+            ? $"Baixando o PR #{_pullRequest!.Number}…"
+            : "Atualizando a base e criando…";
 
         try
         {
             var path = MainViewModel.ExpandHome(_worktreePath.Trim());
 
-            return _isPullRequestMode
-                ? await WorktreeCreator.CreateFromPullRequestAsync(_mainWorktreePath, _pullRequest!, path).ConfigureAwait(true)
-                : await WorktreeCreator.CreateFromNewBranchAsync(
-                    _mainWorktreePath, _branchName.Trim(), _baseRef.Trim(), path).ConfigureAwait(true);
+            // Para o git, a issue é só uma branch nova: ela alimenta as sugestões e mais nada.
+            return _mode switch
+            {
+                CreateMode.PullRequest => await WorktreeCreator
+                    .CreateFromPullRequestAsync(_mainWorktreePath, _pullRequest!, path).ConfigureAwait(true),
+                CreateMode.Issue => await WorktreeCreator
+                    .CreateFromNewBranchAsync(_mainWorktreePath, _issueBranchName.Trim(), _baseRef.Trim(), path)
+                    .ConfigureAwait(true),
+                _ => await WorktreeCreator
+                    .CreateFromNewBranchAsync(_mainWorktreePath, _branchName.Trim(), _baseRef.Trim(), path)
+                    .ConfigureAwait(true),
+            };
         }
         catch (Exception exception)
         {
@@ -218,7 +302,12 @@ public sealed class CreateWorktreeViewModel : ObservableObject
     {
         if (_pathEditedByUser) return;
 
-        var branch = _isPullRequestMode ? _pullRequest?.HeadRefName : _branchName.Trim();
+        var branch = _mode switch
+        {
+            CreateMode.PullRequest => _pullRequest?.HeadRefName,
+            CreateMode.Issue => _issueBranchName.Trim(),
+            _ => _branchName.Trim(),
+        };
         var suggestion = string.IsNullOrEmpty(branch) ? string.Empty : WorktreeCreator.SuggestPath(_mainWorktreePath, branch);
 
         if (SetProperty(ref _worktreePath, suggestion, nameof(WorktreePath))) RaiseCanCreate();
@@ -234,7 +323,7 @@ public sealed class CreateWorktreeViewModel : ObservableObject
         SuggestPath();
         RaiseCanCreate();
 
-        if (ParsePullRequestNumber(_pullRequestNumberText) is not { } number)
+        if (ParseNumber(_pullRequestNumberText) is not { } number)
         {
             PullRequestSummary = _pullRequestNumberText.Trim().Length == 0 ? null : "Informe o número do PR (ex.: 412 ou #412).";
             return;
@@ -269,11 +358,109 @@ public sealed class CreateWorktreeViewModel : ObservableObject
         }
     }
 
-    private static int? ParsePullRequestNumber(string text)
+    /// <summary>Consulta a issue pelo gh, esperando o usuário parar de digitar.</summary>
+    private async Task LookupIssueAsync()
+    {
+        _issueLookupCancellation?.Cancel();
+        var cancellation = _issueLookupCancellation = new CancellationTokenSource();
+
+        _issue = null;
+        RaiseCanCreate();
+
+        if (ParseNumber(_issueNumberText) is not { } number)
+        {
+            IssueSummary = _issueNumberText.Trim().Length == 0 ? null : "Informe o número da issue (ex.: 34 ou #34).";
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(400, cancellation.Token).ConfigureAwait(true);
+            IssueSummary = $"Buscando a issue #{number}…";
+
+            var issue = await GitHubService
+                .GetIssueAsync(_mainWorktreePath, number, cancellation.Token)
+                .ConfigureAwait(true);
+
+            if (cancellation.IsCancellationRequested) return;
+
+            if (issue.IsPullRequest)
+            {
+                IssueSummary = $"#{issue.Number} é um pull request, não uma issue — use \"A partir de um PR\".";
+                return;
+            }
+
+            _issue = issue;
+            IssueSummary = $"#{issue.Number} · {issue.Title}\n"
+                + (issue.IsClosed ? "issue fechada — confira se o número é esse mesmo" : "issue aberta");
+
+            // Só substitui o que ainda é sugestão nossa; o nome que o usuário escreveu fica.
+            var suggestion = WorktreeCreator.SuggestIssueBranch(issue.Number, issue.Title);
+            if (_issueBranchName.Trim().Length == 0 || _issueBranchName == _suggestedIssueBranch)
+            {
+                _suggestedIssueBranch = suggestion;
+                IssueBranchName = suggestion;
+            }
+
+            RaiseCanCreate();
+        }
+        catch (OperationCanceledException)
+        {
+            // Digitou de novo — outra consulta assumiu.
+        }
+        catch (Exception exception)
+        {
+            if (!cancellation.IsCancellationRequested) IssueSummary = exception.Message;
+        }
+    }
+
+    /// <summary>
+    /// Avisa antes de criar se a branch já existe. Local bloqueia (o worktree add falharia);
+    /// só no remoto é aviso — alguém pode já ter começado, mas criar ainda é possível.
+    /// </summary>
+    private async Task CheckIssueBranchAsync()
+    {
+        _branchCheckCancellation?.Cancel();
+        var cancellation = _branchCheckCancellation = new CancellationTokenSource();
+
+        _issueBranchExistsLocally = false;
+        IssueBranchWarning = null;
+
+        var branch = _issueBranchName.Trim();
+        if (branch.Length == 0) return;
+
+        try
+        {
+            await Task.Delay(250, cancellation.Token).ConfigureAwait(true);
+
+            var local = await GitService
+                .RefExistsAsync(_mainWorktreePath, $"refs/heads/{branch}", cancellation.Token)
+                .ConfigureAwait(true);
+            var remote = !local && _remote is not null && await GitService
+                .RefExistsAsync(_mainWorktreePath, $"refs/remotes/{_remote}/{branch}", cancellation.Token)
+                .ConfigureAwait(true);
+
+            if (cancellation.IsCancellationRequested) return;
+
+            _issueBranchExistsLocally = local;
+            IssueBranchWarning = local
+                ? $"A branch '{branch}' já existe neste repositório. Escolha outro nome."
+                : remote
+                    ? $"Já existe {_remote}/{branch}: alguém pode ter começado essa issue. Se há PR, prefira \"A partir de um PR\"."
+                    : null;
+            RaiseCanCreate();
+        }
+        catch (OperationCanceledException)
+        {
+            // Editou de novo — outra checagem assumiu.
+        }
+    }
+
+    private static int? ParseNumber(string text)
     {
         var value = text.Trim().TrimEnd('/');
 
-        // https://github.com/dono/repo/pull/412 → 412
+        // https://github.com/dono/repo/pull/412 → 412; …/issues/34 → 34
         var slash = value.LastIndexOf('/');
         if (slash >= 0) value = value[(slash + 1)..];
 
