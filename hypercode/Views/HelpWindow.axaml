@@ -85,8 +85,9 @@
         <TextBlock Classes="p" Text="Vem de gh pr list, casando o headRefName do PR com a branch do worktree. Havendo mais de um PR para a mesma branch, o app prefere o aberto, depois o mergeado, depois o fechado. Sem o gh instalado e autenticado a coluna fica vazia e o resto continua funcionando." />
 
         <TextBlock Classes="h2" Text="Limpar concluídos" />
-        <TextBlock Classes="p" Text="Junta os worktrees cujo PR está merged ou closed, mais os órfãos, e remove com git worktree remove — sem --force. Isso é intencional: se houver alteração não commitada, o git recusa e o Hypercode informa em vez de apagar seu trabalho." />
+        <TextBlock Classes="p" Text="Junta os worktrees cujo PR está merged ou closed, mais os órfãos e os de branch remota apagada (upstream gone) cujo HEAD já está contido na base remota — origin/HEAD, verificado com git merge-base --is-ancestor —, e remove com git worktree remove — sem --force. Isso é intencional: se houver alteração não commitada, o git recusa e o Hypercode informa em vez de apagar seu trabalho." />
         <TextBlock Classes="p" Text="A branch local não é tocada, só o worktree. O principal, os bare e os travados nunca entram. Órfãos são resolvidos com git worktree prune ao final." />
+        <TextBlock Classes="p" Text="Branch remota apagada sem estar na base fica de fora: pode ter sido apagada sem merge. Squash e rebase merge reescrevem os commits, então o HEAD não aparece na base — nesses casos a limpeza depende de o PR ser encontrado." />
         <TextBlock Classes="p" Text="Antes de remover qualquer coisa, o app lista os candidatos e pede confirmação." />
 
         <TextBlock Classes="h2" Text="Abrir no terminal" />
