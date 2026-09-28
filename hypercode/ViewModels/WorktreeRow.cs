@@ -36,6 +36,7 @@ public sealed class WorktreeRow : ObservableObject
                 RaisePropertyChanged(nameof(HasPullRequest));
                 RaisePropertyChanged(nameof(BaseBranch));
                 RaisePropertyChanged(nameof(CanUpdateFromBase));
+                RaisePropertyChanged(nameof(CanRerunFailedChecks));
                 RefreshTags();
             }
         }
@@ -337,6 +338,14 @@ public sealed class WorktreeRow : ObservableObject
         && Worktree.Branch is not null
         && BaseBranch is not null
         && (_pullRequest!.IsBehindBase || _pullRequest.HasConflicts || _baseDistance is { Behind: > 0 });
+
+    /// <summary>
+    /// PR aberto com checks falhando e ao menos um deles de um workflow run do Actions — o que
+    /// o `gh run rerun --failed` sabe rodar de novo. Falha só de StatusContext (CI externo) não conta.
+    /// </summary>
+    public bool CanRerunFailedChecks =>
+        _pullRequest is { IsOpen: true, Checks: ChecksState.Failing } pullRequest
+        && pullRequest.FailedWorkflowRuns.Count > 0;
 
     /// <summary>
     /// Há sessão do Claude Code gravada para esta pasta — condição para o `claude --continue`

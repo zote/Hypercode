@@ -1803,6 +1803,110 @@ public sealed class MainViewModel : ObservableObject
             return null;
         });
 
+    /// <summary>"Rodar novamente os checks que falharam" numa linha, com o resultado no rodapé.</summary>
+    public async Task RerunFailedChecksAsync(WorktreeRow row)
+    {
+        if (!row.CanRerunFailedChecks) return;
+
+        IsBusy = true;
+        StatusMessage = $"Reenfileirando os checks de #{row.PullRequest!.Number}…";
+
+        try
+        {
+            StatusMessage = $"#{row.PullRequest.Number}: {await RerunFailedChecksCoreAsync(row).ConfigureAwait(true)}";
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"#{row.PullRequest.Number}: checks não reenfileirados · {exception.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        await RefreshAfterRerunAsync(new[] { row }).ConfigureAwait(true);
+    }
+
+    /// <summary>Em lote: uma linha por worktree no relatório, e a reconsulta dos PRs no fim.</summary>
+    public async Task<BatchOutcome> RerunFailedChecksManyAsync(IReadOnlyList<WorktreeRow> rows)
+    {
+        var targets = rows.Where(row => row.CanRerunFailedChecks).ToList();
+
+        var outcome = await RunBatchAsync("Rodar novamente os checks", "Reenfileirando", rows, row => row.CanRerunFailedChecks,
+            BatchConcurrency, RerunFailedChecksCoreAsync).ConfigureAwait(true);
+
+        await RefreshAfterRerunAsync(targets).ConfigureAwait(true);
+        return outcome;
+    }
+
+    /// <summary>
+    /// Um `gh run rerun --failed` por workflow run com job falho no último commit do PR. Lança
+    /// se algum run for recusado — com o que deu certo junto, para o relatório não mentir.
+    /// </summary>
+    private async Task<string?> RerunFailedChecksCoreAsync(WorktreeRow row)
+    {
+        var pullRequest = row.PullRequest!;
+        var runs = pullRequest.FailedWorkflowRuns;
+        var errors = new List<string>();
+
+        foreach (var runId in runs)
+        {
+            try
+            {
+                await GitHubService.RerunFailedJobsAsync(row.FullPath, runId, pullRequest.Repository).ConfigureAwait(true);
+            }
+            catch (Exception exception)
+            {
+                errors.Add(exception.Message);
+            }
+        }
+
+        var queued = runs.Count - errors.Count;
+        if (errors.Count == 0) return $"{queued} workflow(s) reenfileirado(s)";
+
+        var failures = string.Join(" · ", errors);
+        throw new InvalidOperationException(queued == 0 ? failures : $"{queued} de {runs.Count} reenfileirado(s) · {failures}");
+    }
+
+    /// <summary>
+    /// Depois do disparo, o badge não espera o ciclo do monitor: consulta já os PRs das linhas
+    /// e promove as branches, porque o GitHub pode levar uns segundos para mostrar os jobs de
+    /// novo na fila — a próxima consulta, 30 s depois, pega o que esta não viu.
+    /// </summary>
+    private async Task RefreshAfterRerunAsync(IReadOnlyList<WorktreeRow> rows)
+    {
+        if (rows.Count == 0 || _loadedRepositoryPath is not { } path) return;
+
+        var now = DateTimeOffset.UtcNow;
+        var branches = rows.Select(row => row.Worktree.Branch).OfType<string>().ToList();
+        foreach (var branch in branches) _scheduler.Promote(branch, MonitorScheduler.RerunPromotion, now);
+
+        var cancellationToken = _monitorCancellation?.Token ?? default;
+
+        try
+        {
+            await Task.Delay(RerunSettleDelay, cancellationToken).ConfigureAwait(true);
+
+            var lookup = await GitHubService.LoadPullRequestsAsync(path, QueryNames(rows), cancellationToken).ConfigureAwait(true);
+            if (lookup.Failed || cancellationToken.IsCancellationRequested || _loadedRepositoryPath != path) return;
+
+            _scheduler.MarkChecked(branches, DateTimeOffset.UtcNow);
+            _scheduler.RecordBudget(lookup.Budget);
+            ApplyPullRequests(lookup, branches.ToHashSet(StringComparer.Ordinal));
+        }
+        catch (OperationCanceledException)
+        {
+            // Repositório trocado ou monitoramento desligado.
+        }
+        catch (Exception)
+        {
+            // A reconsulta é só adiantamento: o monitoramento tenta de novo no ciclo dele.
+        }
+    }
+
+    /// <summary>Folga para o GitHub recriar os check runs antes de reconsultar.</summary>
+    private static readonly TimeSpan RerunSettleDelay = TimeSpan.FromSeconds(3);
+
     /// <summary>
     /// "Puxar do remoto" em lote. Equivale a um git pull --ff-only em cada worktree, mas com
     /// o fetch feito uma vez por remoto antes: pulls paralelos no mesmo repositório brigam
