@@ -7,6 +7,12 @@ public sealed class MainViewModel : ObservableObject
 {
     private readonly Settings _settings;
     private CancellationTokenSource? _loadCancellation;
+    private RepositoryWatcher? _watcher;
+    private RepositoryChange _pendingChange;
+    private bool _isRefreshing;
+
+    /// <summary>Repositório do último carregamento bem-sucedido — é o que o watcher observa.</summary>
+    private string? _loadedRepositoryPath;
 
     private string _repositoryPath = string.Empty;
     private string _command = "claude";
@@ -308,38 +314,63 @@ public sealed class MainViewModel : ObservableObject
     public IReadOnlyList<string> LastCleanupSkipped { get; private set; } = Array.Empty<string>();
 
     /// <summary>Carrega os worktrees e, em seguida, enriquece a lista com os PRs.</summary>
-    public async Task LoadAsync(string? selectPath = null)
+    public Task LoadAsync(string? selectPath = null) => LoadCoreAsync(selectPath, background: false);
+
+    /// <summary>
+    /// Em background (disparado pelo <see cref="RepositoryWatcher"/>) o carregamento é
+    /// silencioso: não trava os botões, não mexe no rodapé, usa o repositório do último
+    /// carregamento — não o que estiver meio digitado no campo — e, se o git devolver a
+    /// mesma lista, para por aí. Devolve se a lista foi refeita.
+    /// </summary>
+    private async Task<bool> LoadCoreAsync(string? selectPath, bool background)
     {
-        var path = RepositoryPath.Trim();
-        if (path.Length == 0)
+        var path = background ? _loadedRepositoryPath : RepositoryPath.Trim();
+        if (string.IsNullOrEmpty(path))
         {
-            StatusMessage = "Informe o caminho de um repositório git.";
-            return;
+            if (!background) StatusMessage = "Informe o caminho de um repositório git.";
+            return false;
         }
 
         path = ExpandHome(path);
 
         if (!Directory.Exists(path))
         {
-            StatusMessage = $"A pasta '{path}' não existe.";
-            return;
+            if (!background) StatusMessage = $"A pasta '{path}' não existe.";
+            return false;
         }
 
         _loadCancellation?.Cancel();
         _loadCancellation = new CancellationTokenSource();
         var cancellationToken = _loadCancellation.Token;
 
-        IsBusy = true;
-        HasStartedOnce = true;
-        StatusMessage = "Lendo worktrees…";
+        if (!background)
+        {
+            IsBusy = true;
+            HasStartedOnce = true;
+            StatusMessage = "Lendo worktrees…";
+        }
 
         try
         {
             var worktrees = await GitService.ListWorktreesAsync(path, cancellationToken).ConfigureAwait(true);
 
+            if (background && worktrees.SequenceEqual(Worktrees.Select(row => row.Worktree))) return false;
+
+            // Linha que não mudou herda PR e estado: a lista não pisca enquanto relê.
+            var previous = Worktrees.ToDictionary(row => row.Worktree);
+
             Worktrees.Clear();
             foreach (var worktree in worktrees)
-                Worktrees.Add(new WorktreeRow(worktree));
+            {
+                var row = new WorktreeRow(worktree);
+                if (previous.TryGetValue(worktree, out var old))
+                {
+                    row.PullRequest = old.PullRequest;
+                    row.Status = old.Status;
+                }
+
+                Worktrees.Add(row);
+            }
 
             ApplyView();
             RaisePropertyChanged(nameof(MainWorktreePath));
@@ -348,34 +379,40 @@ public sealed class MainViewModel : ObservableObject
                 ?? VisibleWorktrees.FirstOrDefault();
             RaiseCleanupState();
 
-            var root = await GitService.TryResolveRepositoryRootAsync(path, cancellationToken).ConfigureAwait(true);
-            _settings.RepositoryPath = root ?? path;
-            RepositoryPath = root ?? path;
-            PersistSettings();
-
-            StatusMessage = worktrees.Count switch
+            if (!background)
             {
-                0 => "Nenhum worktree encontrado.",
-                1 => "1 worktree. Buscando PRs…",
-                _ => $"{worktrees.Count} worktrees. Buscando PRs…",
-            };
+                var root = await GitService.TryResolveRepositoryRootAsync(path, cancellationToken).ConfigureAwait(true);
+                _settings.RepositoryPath = root ?? path;
+                RepositoryPath = root ?? path;
+                PersistSettings();
+                _loadedRepositoryPath = path;
+
+                await WatchAsync(path, cancellationToken).ConfigureAwait(true);
+
+                StatusMessage = worktrees.Count switch
+                {
+                    0 => "Nenhum worktree encontrado.",
+                    1 => "1 worktree. Buscando PRs…",
+                    _ => $"{worktrees.Count} worktrees. Buscando PRs…",
+                };
+            }
 
             // O estado local de cada worktree é lido em paralelo com a consulta ao GitHub.
             var statusesTask = LoadStatusesAsync(Worktrees.ToList(), cancellationToken);
 
             var lookup = await GitHubService.LoadPullRequestsAsync(path, cancellationToken).ConfigureAwait(true);
 
-            if (cancellationToken.IsCancellationRequested) return;
+            if (cancellationToken.IsCancellationRequested) return true;
 
             var matched = 0;
             foreach (var row in Worktrees)
             {
-                if (row.Worktree.Branch is { } branch && lookup.ByBranch.TryGetValue(branch, out var pullRequest))
-                {
-                    row.PullRequest = pullRequest;
-                    matched++;
-                }
+                row.PullRequest = row.Worktree.Branch is { } branch
+                                  && lookup.ByBranch.TryGetValue(branch, out var pullRequest)
+                    ? pullRequest
+                    : null;
 
+                if (row.PullRequest is not null) matched++;
                 row.RefreshTags();
             }
 
@@ -386,24 +423,118 @@ public sealed class MainViewModel : ObservableObject
 
             await statusesTask.ConfigureAwait(true);
 
-            var summary = Worktrees.Count == 1 ? "1 worktree" : $"{Worktrees.Count} worktrees";
-            StatusMessage = lookup.Warning is { } warning
-                ? $"{summary} · {warning}"
-                : $"{summary} · {matched} com PR";
+            if (!background)
+            {
+                var summary = Worktrees.Count == 1 ? "1 worktree" : $"{Worktrees.Count} worktrees";
+                StatusMessage = lookup.Warning is { } warning
+                    ? $"{summary} · {warning}"
+                    : $"{summary} · {matched} com PR";
+            }
+
+            return true;
         }
         catch (OperationCanceledException)
         {
             // Outro carregamento tomou o lugar deste.
+            return false;
         }
         catch (Exception exception)
         {
+            // Em background, uma falha passageira não apaga a lista que já está na tela.
+            if (background) return false;
+
             Worktrees.Clear();
             ApplyView();
+            StopWatching();
             StatusMessage = exception.Message;
+            return false;
         }
         finally
         {
-            IsBusy = false;
+            if (!background) IsBusy = false;
+        }
+    }
+
+    /// <summary>Passa a observar o git dir do repositório carregado, se ainda não observa.</summary>
+    private async Task WatchAsync(string repositoryPath, CancellationToken cancellationToken)
+    {
+        var gitDir = await GitService.TryResolveCommonGitDirAsync(repositoryPath, cancellationToken).ConfigureAwait(true);
+
+        if (gitDir is not null && _watcher is not null && PathsEqual(_watcher.GitCommonDir, gitDir)) return;
+
+        StopWatching();
+        if (gitDir is null) return;
+
+        try
+        {
+            _watcher = new RepositoryWatcher(gitDir, OnRepositoryChanged);
+        }
+        catch (Exception)
+        {
+            // Sem watcher o app segue funcionando: resta o botão Atualizar.
+            _watcher = null;
+        }
+    }
+
+    private void StopWatching()
+    {
+        _watcher?.Dispose();
+        _watcher = null;
+    }
+
+    /// <summary>
+    /// Mudança vinda do watcher. Roda na UI; eventos que chegam durante uma releitura se
+    /// acumulam e viram uma só releitura depois dela. Se o app está no meio de uma operação
+    /// sua (carregar, limpar, apagar), espera: ela mesma relê a lista no fim.
+    /// </summary>
+    private async void OnRepositoryChanged(RepositoryChange change)
+    {
+        _pendingChange |= change;
+        if (_isRefreshing) return;
+
+        _isRefreshing = true;
+        try
+        {
+            while (_pendingChange != RepositoryChange.None)
+            {
+                if (IsBusy)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(true);
+                    continue;
+                }
+
+                var pending = _pendingChange;
+                _pendingChange = RepositoryChange.None;
+
+                // Se a lista foi refeita, o estado de todas as linhas já foi relido junto.
+                if (pending.HasFlag(RepositoryChange.Worktrees)
+                    && await LoadCoreAsync(SelectedWorktree?.FullPath, background: true).ConfigureAwait(true))
+                    continue;
+
+                if (pending.HasFlag(RepositoryChange.Status)) await RefreshStatusesAsync().ConfigureAwait(true);
+            }
+        }
+        catch (Exception)
+        {
+            // Atualização automática é conveniência: se falhar, o botão Atualizar resolve.
+            _pendingChange = RepositoryChange.None;
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    /// <summary>Relê só o `git status` das linhas — para commit, fetch, push, rebase…</summary>
+    private async Task RefreshStatusesAsync()
+    {
+        try
+        {
+            await LoadStatusesAsync(Worktrees.ToList(), _loadCancellation?.Token ?? default).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // Um carregamento completo começou e vai reler tudo.
         }
     }
 
