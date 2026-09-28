@@ -1,8 +1,8 @@
 namespace Hypertree.Services;
 
 /// <summary>
-/// Abre uma nova janela do iTerm2 na pasta indicada e roda um comando.
-/// Se o iTerm2 não estiver instalado, cai para o Terminal.app.
+/// Abre uma nova janela do iTerm2 na pasta indicada e roda um comando, com um título
+/// opcional na sessão/aba. Se o iTerm2 não estiver instalado, cai para o Terminal.app.
 /// </summary>
 public static class TerminalLauncher
 {
@@ -18,6 +18,7 @@ public static class TerminalLauncher
     public static async Task LaunchAsync(
         string directory,
         string command,
+        string? title = null,
         CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(directory))
@@ -26,8 +27,8 @@ public static class TerminalLauncher
         var shellCommand = $"cd {QuoteForShell(directory)} && {command}";
 
         var script = IsITerm2Available
-            ? BuildITerm2Script(shellCommand)
-            : BuildTerminalAppScript(shellCommand);
+            ? BuildITerm2Script(shellCommand, title)
+            : BuildTerminalAppScript(shellCommand, title);
 
         var result = await ProcessRunner.RunAsync(
             "/usr/bin/osascript",
@@ -48,24 +49,39 @@ public static class TerminalLauncher
         => ProcessRunner.RunAsync("/usr/bin/open", new[] { url }, null, TimeSpan.FromSeconds(10), cancellationToken);
 
     // A referência por bundle id evita a ambiguidade entre os nomes "iTerm" e "iTerm2".
-    internal static string BuildITerm2Script(string shellCommand) =>
-        $"""
-         tell application id "{ITerm2BundleId}"
-             set targetWindow to (create window with default profile)
-             tell current session of targetWindow
-                 write text "{EscapeForAppleScript(shellCommand)}"
-             end tell
-             activate
-         end tell
-         """;
+    internal static string BuildITerm2Script(string shellCommand, string? title = null)
+    {
+        var setTitle = string.IsNullOrWhiteSpace(title)
+            ? ""
+            : $"set name to \"{EscapeForAppleScript(title)}\"";
 
-    internal static string BuildTerminalAppScript(string shellCommand) =>
-        $"""
-         tell application "Terminal"
-             do script "{EscapeForAppleScript(shellCommand)}"
-             activate
-         end tell
-         """;
+        return $"""
+                tell application id "{ITerm2BundleId}"
+                    set targetWindow to (create window with default profile)
+                    tell current session of targetWindow
+                        {setTitle}
+                        write text "{EscapeForAppleScript(shellCommand)}"
+                    end tell
+                    activate
+                end tell
+                """;
+    }
+
+    // "custom title" é o título da aba que o Terminal.app mostra no lugar do automático.
+    internal static string BuildTerminalAppScript(string shellCommand, string? title = null)
+    {
+        var setTitle = string.IsNullOrWhiteSpace(title)
+            ? ""
+            : $"set custom title of targetTab to \"{EscapeForAppleScript(title)}\"";
+
+        return $"""
+                tell application "Terminal"
+                    set targetTab to do script "{EscapeForAppleScript(shellCommand)}"
+                    {setTitle}
+                    activate
+                end tell
+                """;
+    }
 
     private static string? FindITerm2()
     {

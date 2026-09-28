@@ -418,7 +418,7 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
-            await TerminalLauncher.LaunchAsync(row.FullPath, command).ConfigureAwait(true);
+            await TerminalLauncher.LaunchAsync(row.FullPath, command, TerminalTitle(row)).ConfigureAwait(true);
             StatusMessage = $"{TerminalLauncher.TerminalName} aberto em {row.Name} · {command}";
         }
         catch (Exception exception)
@@ -426,6 +426,10 @@ public sealed class MainViewModel : ObservableObject
             StatusMessage = exception.Message;
         }
     }
+
+    /// <summary>Título da janela do terminal: nome do worktree e, se diferente, a branch.</summary>
+    internal static string TerminalTitle(WorktreeRow row)
+        => row.Branch == row.Name ? row.Name : $"{row.Name} · {row.Branch}";
 
     public async Task RevealAsync(WorktreeRow? row)
     {
