@@ -61,6 +61,10 @@ cp -R dist/Hypertree.app /Applications/   # opcional
 
 O bundle é autocontido: quem for usar não precisa ter o .NET instalado.
 
+O ícone vem de `Assets/icon.icns`, que é gerado a partir de `Assets/icon.svg`. Depois de
+editar o SVG, rode `Assets/make-icon.sh` e commite os dois arquivos — o script só usa o que
+já vem com o macOS (`swift`, `sips` e `iconutil`).
+
 ## Permissão de automação
 
 Na primeira vez que você der duplo-clique numa linha, o macOS pergunta se o Hypertree
