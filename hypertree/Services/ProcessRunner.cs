@@ -6,12 +6,25 @@ public sealed record ProcessResult(int ExitCode, string StandardOutput, string S
 {
     public bool Success => ExitCode == 0;
 
-    public string FirstErrorLine =>
-        StandardError
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(line => line.Trim())
-            .FirstOrDefault(line => line.Length > 0)
-        ?? $"o processo terminou com código {ExitCode}";
+    /// <summary>
+    /// A primeira linha do stderr que diz o que houve. As "hint:" do git vêm antes do
+    /// "fatal:" e só sugerem saídas — ficam de fora quando há outra linha.
+    /// </summary>
+    public string FirstErrorLine
+    {
+        get
+        {
+            var lines = StandardError
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0)
+                .ToList();
+
+            return lines.FirstOrDefault(line => !line.StartsWith("hint:", StringComparison.Ordinal))
+                   ?? lines.FirstOrDefault()
+                   ?? $"o processo terminou com código {ExitCode}";
+        }
+    }
 }
 
 public static class ProcessRunner

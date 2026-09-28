@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -187,37 +188,122 @@ public partial class MainWindow : Window
         if (ViewModel is { } viewModel) await viewModel.LaunchAsync(viewModel.SelectedWorktree);
     }
 
-    // Os itens do menu de contexto herdam o DataContext da linha clicada,
-    // então agem sobre ela mesmo que a seleção não tenha mudado.
+    // O menu é da lista, não da linha: age sobre a seleção inteira. Com uma linha só, cada
+    // item segue o caminho de sempre; com várias, vira lote e termina num relatório.
+
+    /// <summary>Linhas-alvo do menu, na ordem da lista.</summary>
+    private IReadOnlyList<WorktreeRow> MenuTargets()
+        => ViewModel?.SelectedRowsInViewOrder() ?? Array.Empty<WorktreeRow>();
+
+    private void OnListContextMenuOpening(object? sender, CancelEventArgs e)
+    {
+        var rows = MenuTargets();
+        if (rows.Count == 0)
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        Configure(LaunchMenuItem, "Abrir no iTerm2 rodando o comando", rows, row => row.CanLaunch);
+        Configure(ShellMenuItem, "Abrir o terminal", rows, row => row.CanLaunch);
+        Configure(ResumeClaudeMenuItem, "Retomar a sessão do claude", rows, row => row.HasClaudeSession);
+        Configure(RevealMenuItem, "Revelar no Finder", rows, _ => true);
+        Configure(OpenPullRequestMenuItem, "Abrir PR no navegador", rows, row => row.HasPullRequest);
+        Configure(UpdateBranchMenuItem, "Puxar do remoto (pull)", rows, row => row.CanUpdateBranch);
+        Configure(RemoveMenuItem, rows.Count > 1 ? "Apagar os worktrees…" : "Apagar o worktree…", rows, row => row.CanRemove);
+
+        // Merge ou rebase é uma escolha por worktree, feita num diálogo: não vira lote.
+        UpdateFromBaseMenuItem.Header = "Atualizar a partir da base…";
+        UpdateFromBaseMenuItem.IsEnabled = rows.Count == 1 && rows[0].CanUpdateFromBase;
+    }
+
+    /// <summary>Com várias linhas, o rótulo diz em quantas a ação vale; basta uma para habilitar.</summary>
+    private static void Configure(MenuItem item, string label, IReadOnlyList<WorktreeRow> rows, Func<WorktreeRow, bool> supports)
+    {
+        var count = rows.Count(supports);
+        item.Header = rows.Count > 1 ? $"{label} ({count})" : label;
+        item.IsEnabled = count > 0;
+    }
+
+    private async Task ShowBatchReportAsync(BatchOutcome outcome)
+        => await new ConfirmWindow(
+            outcome.Action,
+            outcome.Summary,
+            outcome.Report,
+            "Entendi").ShowDialog<bool>(this);
+
+    /// <summary>Uma janela por worktree: acima do limite, pergunta antes de abrir todas.</summary>
+    private async Task<bool> ConfirmWindowsAsync(string what, IReadOnlyList<WorktreeRow> rows, Func<WorktreeRow, bool> supports)
+    {
+        var targets = rows.Where(supports).ToList();
+        if (targets.Count <= MainViewModel.WindowConfirmationThreshold) return true;
+
+        return await new ConfirmWindow(
+            what,
+            $"Abrir {targets.Count} janelas de uma vez?",
+            string.Join("\n", targets.Select(row => $"{row.Name}  —  {row.Branch}")),
+            $"Abrir {targets.Count}").ShowDialog<bool>(this);
+    }
+
+    /// <summary>Abrir janelas em lote: só há relatório se algo falhou ou ficou de fora.</summary>
+    private async Task OpenManyAsync(
+        string what,
+        IReadOnlyList<WorktreeRow> rows,
+        Func<WorktreeRow, bool> supports,
+        Func<IReadOnlyList<WorktreeRow>, Task<BatchOutcome>> open)
+    {
+        if (!await ConfirmWindowsAsync(what, rows, supports)) return;
+
+        var outcome = await open(rows);
+        if (outcome.HasProblems) await ShowBatchReportAsync(outcome);
+    }
+
     private async void OnOpenTerminalMenuClick(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is { } viewModel)
-            await viewModel.LaunchAsync(RowOf(sender) ?? viewModel.SelectedWorktree);
+        if (ViewModel is not { } viewModel) return;
+
+        var rows = MenuTargets();
+        if (rows.Count == 1) await viewModel.LaunchAsync(rows[0]);
+        else await OpenManyAsync("Abrir no iTerm2", rows, row => row.CanLaunch, viewModel.LaunchManyAsync);
     }
 
     private async void OnOpenShellMenuClick(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is { } viewModel)
-            await viewModel.OpenShellAsync(RowOf(sender) ?? viewModel.SelectedWorktree);
+        if (ViewModel is not { } viewModel) return;
+
+        var rows = MenuTargets();
+        if (rows.Count == 1) await viewModel.OpenShellAsync(rows[0]);
+        else await OpenManyAsync("Abrir o terminal", rows, row => row.CanLaunch, viewModel.OpenShellManyAsync);
     }
 
     private async void OnResumeClaudeMenuClick(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is { } viewModel)
-            await viewModel.ResumeClaudeAsync(RowOf(sender) ?? viewModel.SelectedWorktree);
+        if (ViewModel is not { } viewModel) return;
+
+        var rows = MenuTargets();
+        if (rows.Count == 1) await viewModel.ResumeClaudeAsync(rows[0]);
+        else await OpenManyAsync("Retomar a sessão do claude", rows, row => row.HasClaudeSession, viewModel.ResumeClaudeManyAsync);
     }
 
     private async void OnUpdateBranchMenuClick(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is { } viewModel)
-            await viewModel.UpdateBranchAsync(RowOf(sender) ?? viewModel.SelectedWorktree);
+        if (ViewModel is not { } viewModel) return;
+
+        var rows = MenuTargets();
+        if (rows.Count == 1)
+        {
+            await viewModel.UpdateBranchAsync(rows[0]);
+            return;
+        }
+
+        await ShowBatchReportAsync(await viewModel.UpdateBranchesAsync(rows));
     }
 
     // Fetch e checagens primeiro, para o diálogo mostrar a base e quantos commits vêm; só
     // então a escolha entre merge e rebase. Recusa e conflito viram diálogo, não só rodapé.
     private async void OnUpdateFromBaseMenuClick(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is not { } viewModel || (RowOf(sender) ?? viewModel.SelectedWorktree) is not { } row) return;
+        if (ViewModel is not { } viewModel || MenuTargets() is not [var row]) return;
         if (!row.CanUpdateFromBase) return;
 
         var plan = await viewModel.PrepareBaseUpdateAsync(row);
@@ -260,8 +346,16 @@ public partial class MainWindow : Window
     // não versionado), explica o motivo e só então oferece forçar — o que descarta o trabalho.
     private async void OnRemoveWorktreeMenuClick(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is not { } viewModel || (RowOf(sender) ?? viewModel.SelectedWorktree) is not { } row) return;
-        if (!row.CanRemove) return;
+        if (ViewModel is not { } viewModel) return;
+
+        var rows = MenuTargets();
+        if (rows.Count > 1)
+        {
+            await RemoveManyAsync(viewModel, rows);
+            return;
+        }
+
+        if (rows is not [var row] || !row.CanRemove) return;
 
         var confirmed = await new ConfirmWindow(
             "Apagar o worktree",
@@ -283,15 +377,42 @@ public partial class MainWindow : Window
         if (forced) await viewModel.RemoveWorktreeAsync(row, force: true);
     }
 
+    // Em lote é uma confirmação só, sem a segunda etapa de forçar: quem o git recusar fica,
+    // e o relatório diz por quê.
+    private async Task RemoveManyAsync(MainViewModel viewModel, IReadOnlyList<WorktreeRow> rows)
+    {
+        var targets = rows.Where(row => row.CanRemove).ToList();
+        if (targets.Count == 0) return;
+
+        var headline = $"Apagar {targets.Count} worktree(s)? A branch local não é tocada, só o worktree."
+                       + (targets.Count < rows.Count ? $" O principal e o bare ficam de fora ({rows.Count - targets.Count})." : string.Empty);
+
+        var confirmed = await new ConfirmWindow(
+            "Apagar os worktrees",
+            headline,
+            MainViewModel.BuildBatchRemovalSummary(targets),
+            $"Apagar {targets.Count}").ShowDialog<bool>(this);
+
+        if (!confirmed) return;
+
+        await ShowBatchReportAsync(await viewModel.RemoveWorktreesAsync(rows));
+    }
+
     private async void OnRevealMenuClick(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is { } viewModel)
-            await viewModel.RevealAsync(RowOf(sender) ?? viewModel.SelectedWorktree);
+        if (ViewModel is not { } viewModel) return;
+
+        var rows = MenuTargets();
+        if (rows.Count == 1) await viewModel.RevealAsync(rows[0]);
+        else if (await viewModel.RevealManyAsync(rows) is { HasProblems: true } outcome) await ShowBatchReportAsync(outcome);
     }
 
     private async void OnOpenPullRequestMenuClick(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is { } viewModel)
-            await viewModel.OpenPullRequestAsync(RowOf(sender) ?? viewModel.SelectedWorktree);
+        if (ViewModel is not { } viewModel) return;
+
+        var rows = MenuTargets();
+        if (rows.Count == 1) await viewModel.OpenPullRequestAsync(rows[0]);
+        else await OpenManyAsync("Abrir PR no navegador", rows, row => row.HasPullRequest, viewModel.OpenPullRequestsAsync);
     }
 }

@@ -152,6 +152,25 @@ public static class GitService
         => RunAsync(worktreePath, new[] { "pull", "--ff-only" }, TimeSpan.FromSeconds(90), cancellationToken);
 
     /// <summary>
+    /// Metade de rede do pull em lote: atualiza as refs remotas uma vez só. Vários `git pull`
+    /// em paralelo no mesmo repositório disputam o lock dessas refs e falham com "cannot lock ref".
+    /// </summary>
+    public static Task<ProcessResult> FetchRemoteAsync(
+        string repositoryPath,
+        string remote,
+        CancellationToken cancellationToken = default)
+        => RunAsync(repositoryPath, new[] { "fetch", remote }, TimeSpan.FromSeconds(90), cancellationToken);
+
+    /// <summary>
+    /// Metade local do pull em lote: fast-forward da branch até o upstream já buscado. Só mexe
+    /// na branch e no índice do próprio worktree, então roda em paralelo com os demais.
+    /// </summary>
+    public static Task<ProcessResult> MergeUpstreamFastForwardAsync(
+        string worktreePath,
+        CancellationToken cancellationToken = default)
+        => RunAsync(worktreePath, new[] { "merge", "--ff-only", "@{upstream}" }, TimeSpan.FromSeconds(60), cancellationToken);
+
+    /// <summary>
     /// Remoto onde mora a base do PR: o do upstream da branch, caindo para origin. A base
     /// é comparada como &lt;remoto&gt;/&lt;base&gt;, que é o que o GitHub enxerga — não a cópia local.
     /// </summary>

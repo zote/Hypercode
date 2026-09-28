@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using Hypertree.Services;
 
 namespace Hypertree.ViewModels;
@@ -18,7 +19,6 @@ public sealed class MainViewModel : ObservableObject
     private string _command = "claude";
     private string _statusMessage = "Escolha um repositório git para listar os worktrees.";
     private bool _isBusy;
-    private WorktreeRow? _selectedWorktree;
     private string _filterText = string.Empty;
     private SortColumn _sortColumn;
     private bool _sortDescending;
@@ -30,6 +30,8 @@ public sealed class MainViewModel : ObservableObject
         _command = string.IsNullOrWhiteSpace(_settings.Command) ? "claude" : _settings.Command;
         _sortColumn = ParseSortColumn(_settings.SortColumn);
         _sortDescending = _settings.SortDescending;
+
+        SelectedWorktrees.CollectionChanged += OnSelectionChanged;
     }
 
     /// <summary>Todos os worktrees do repositório, na ordem do git. É a base da limpeza.</summary>
@@ -125,14 +127,13 @@ public sealed class MainViewModel : ObservableObject
 
         if (!result.SequenceEqual(VisibleWorktrees))
         {
-            var selected = SelectedWorktree;
+            // Pelo caminho, não pela instância: um recarregamento troca todas as linhas.
+            var selectedPaths = SelectedWorktrees.Select(row => row.FullPath).ToList();
 
             VisibleWorktrees.Clear();
             foreach (var row in result) VisibleWorktrees.Add(row);
 
-            SelectedWorktree = selected is not null && result.Contains(selected)
-                ? selected
-                : result.FirstOrDefault();
+            SelectPaths(selectedPaths);
         }
 
         RaisePropertyChanged(nameof(HasHiddenRows));
@@ -180,10 +181,44 @@ public sealed class MainViewModel : ObservableObject
 
     public bool IsNotBusy => !_isBusy;
 
+    /// <summary>
+    /// Linhas selecionadas na lista (⌘-clique e ⇧-clique), na ordem em que foram escolhidas.
+    /// É o alvo do menu de contexto; ligada ao SelectedItems do ListBox.
+    /// </summary>
+    public ObservableCollection<WorktreeRow> SelectedWorktrees { get; } = new();
+
+    /// <summary>
+    /// A primeira linha selecionada — o alvo das ações de uma linha só (Enter, duplo-clique,
+    /// botão do rodapé). Atribuir troca a seleção inteira por ela.
+    /// </summary>
     public WorktreeRow? SelectedWorktree
     {
-        get => _selectedWorktree;
-        set => SetProperty(ref _selectedWorktree, value);
+        get => SelectedWorktrees.FirstOrDefault();
+        set => ReplaceSelection(value is null ? Array.Empty<WorktreeRow>() : new[] { value });
+    }
+
+    /// <summary>A seleção na ordem da lista, que é a ordem dos diálogos e relatórios.</summary>
+    public IReadOnlyList<WorktreeRow> SelectedRowsInViewOrder()
+        => VisibleWorktrees.Where(SelectedWorktrees.Contains).ToList();
+
+    private void OnSelectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => RaisePropertyChanged(nameof(SelectedWorktree));
+
+    /// <summary>Seleciona as linhas visíveis desses caminhos; se nenhuma sobrou, a primeira.</summary>
+    private void SelectPaths(IReadOnlyCollection<string> paths)
+    {
+        var rows = VisibleWorktrees.Where(row => paths.Any(path => PathsEqual(row.FullPath, path))).ToList();
+        if (rows.Count == 0 && VisibleWorktrees.FirstOrDefault() is { } first) rows.Add(first);
+
+        ReplaceSelection(rows);
+    }
+
+    private void ReplaceSelection(IReadOnlyList<WorktreeRow> rows)
+    {
+        if (rows.SequenceEqual(SelectedWorktrees)) return;
+
+        SelectedWorktrees.Clear();
+        foreach (var row in rows) SelectedWorktrees.Add(row);
     }
 
     public bool HasStartedOnce { get; private set; }
@@ -233,6 +268,26 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Texto do diálogo de "Apagar os worktrees" em lote, no formato do da limpeza. Em lote
+    /// não há segunda confirmação para forçar: o worktree sujo ou travado fica e vai para o relatório.
+    /// </summary>
+    public static string BuildBatchRemovalSummary(IReadOnlyList<WorktreeRow> rows)
+        => string.Join(
+            "\n",
+            rows.Select(row =>
+            {
+                var notes = new List<string>();
+                if (row.Worktree.IsPrunable) notes.Add("órfão: só o prune");
+                else if (row.Worktree.IsLocked) notes.Add("travado: o git vai recusar");
+                else if (row.Status.HasUncommittedChanges) notes.Add("alterações não commitadas: o git vai recusar");
+                if (row.PullRequest is { IsOpen: true } pullRequest) notes.Add($"PR #{pullRequest.Number} ainda aberto");
+
+                return $"{row.Name}  —  {row.Branch}\n"
+                       + (notes.Count > 0 ? $"    {string.Join(" · ", notes)}\n" : string.Empty)
+                       + $"    {row.FullPath}\n";
+            }));
+
+    /// <summary>
     /// Remove os worktrees concluídos. Os órfãos não são removidos um a um: um único
     /// git worktree prune no final resolve todos. Nada usa --force.
     /// </summary>
@@ -240,13 +295,35 @@ public sealed class MainViewModel : ObservableObject
     {
         if (rows.Count == 0) return;
 
+        // O git recusa remover worktree travado. Como só chegam aqui os de lock de
+        // ferramenta (o manual fica de fora), destravamos antes.
+        var outcome = await RemoveManyAsync(rows, "Removendo worktrees concluídos…", unlockFirst: true).ConfigureAwait(true);
+
+        LastCleanupSkipped = outcome.Failed;
+
+        var parts = new List<string>();
+        if (outcome.Removed > 0) parts.Add($"{outcome.Removed} removido(s)");
+        if (outcome.Orphans > 0) parts.Add($"{outcome.Orphans} órfão(s) podado(s)");
+        if (outcome.Failed.Count > 0) parts.Add($"{outcome.Failed.Count} mantido(s) — ver detalhes");
+        if (parts.Count == 0) parts.Add("nada a fazer");
+
+        StatusMessage = "Limpeza: " + string.Join(" · ", parts);
+    }
+
+    /// <summary>
+    /// Núcleo da limpeza e do "Apagar os worktrees" em lote. Um de cada vez — todos mexem nos
+    /// metadados do mesmo repositório —, órfãos com um prune só no fim, sem --force, e a lista
+    /// relida ao terminar.
+    /// </summary>
+    private async Task<RemovalOutcome> RemoveManyAsync(IReadOnlyList<WorktreeRow> rows, string activity, bool unlockFirst)
+    {
         var repositoryPath = ExpandHome(RepositoryPath.Trim());
         var removed = new List<string>();
-        var skipped = new List<string>();
-        var orphans = 0;
+        var failed = new List<string>();
+        var orphans = new List<string>();
 
         IsBusy = true;
-        StatusMessage = "Removendo worktrees concluídos…";
+        StatusMessage = activity;
 
         try
         {
@@ -254,15 +331,13 @@ public sealed class MainViewModel : ObservableObject
             {
                 if (row.Worktree.IsPrunable)
                 {
-                    orphans++;
+                    orphans.Add(row.Name);
                     continue;
                 }
 
                 try
                 {
-                    // O git recusa remover worktree travado. Como só chegam aqui os de lock
-                    // de ferramenta (o manual fica de fora), destravamos antes.
-                    if (row.Worktree.IsLocked)
+                    if (unlockFirst && row.Worktree.IsLocked)
                         await GitService
                             .UnlockWorktreeAsync(repositoryPath, row.FullPath)
                             .ConfigureAwait(true);
@@ -272,23 +347,29 @@ public sealed class MainViewModel : ObservableObject
                         .ConfigureAwait(true);
 
                     if (result.Success) removed.Add(row.Name);
-                    else skipped.Add($"{row.Name}: {result.FirstErrorLine}");
+                    else failed.Add($"{row.Name}: {result.FirstErrorLine}");
                 }
                 catch (Exception exception)
                 {
-                    skipped.Add($"{row.Name}: {exception.Message}");
+                    failed.Add($"{row.Name}: {exception.Message}");
                 }
             }
 
-            if (orphans > 0)
+            if (orphans.Count > 0)
             {
                 try
                 {
-                    await GitService.PruneAsync(repositoryPath).ConfigureAwait(true);
+                    var prune = await GitService.PruneAsync(repositoryPath).ConfigureAwait(true);
+                    if (!prune.Success)
+                    {
+                        failed.Add($"prune: {prune.FirstErrorLine}");
+                        orphans.Clear();
+                    }
                 }
                 catch (Exception exception)
                 {
-                    skipped.Add($"prune: {exception.Message}");
+                    failed.Add($"prune: {exception.Message}");
+                    orphans.Clear();
                 }
             }
         }
@@ -297,17 +378,15 @@ public sealed class MainViewModel : ObservableObject
             IsBusy = false;
         }
 
-        LastCleanupSkipped = skipped;
-
         await LoadAsync().ConfigureAwait(true);
 
-        var parts = new List<string>();
-        if (removed.Count > 0) parts.Add($"{removed.Count} removido(s)");
-        if (orphans > 0) parts.Add($"{orphans} órfão(s) podado(s)");
-        if (skipped.Count > 0) parts.Add($"{skipped.Count} mantido(s) — ver detalhes");
-        if (parts.Count == 0) parts.Add("nada a fazer");
+        return new RemovalOutcome(removed, orphans, failed);
+    }
 
-        StatusMessage = "Limpeza: " + string.Join(" · ", parts);
+    private sealed record RemovalOutcome(IReadOnlyList<string> RemovedNames, IReadOnlyList<string> OrphanNames, IReadOnlyList<string> Failed)
+    {
+        public int Removed => RemovedNames.Count;
+        public int Orphans => OrphanNames.Count;
     }
 
     /// <summary>Worktrees que o git recusou remover (normalmente por alteração não commitada).</summary>
@@ -376,8 +455,8 @@ public sealed class MainViewModel : ObservableObject
             ApplyView();
             RaisePropertyChanged(nameof(MainWorktreePath));
             RaisePropertyChanged(nameof(CanCreateWorktree));
-            SelectedWorktree = VisibleWorktrees.FirstOrDefault(row => PathsEqual(row.FullPath, selectPath))
-                ?? VisibleWorktrees.FirstOrDefault();
+            // O ApplyView já manteve a seleção de antes; um caminho pedido a substitui.
+            if (selectPath is not null) SelectPaths(new[] { selectPath });
             RaiseCleanupState();
 
             if (!background)
@@ -511,7 +590,7 @@ public sealed class MainViewModel : ObservableObject
 
                 // Se a lista foi refeita, o estado de todas as linhas já foi relido junto.
                 if (pending.HasFlag(RepositoryChange.Worktrees)
-                    && await LoadCoreAsync(SelectedWorktree?.FullPath, background: true).ConfigureAwait(true))
+                    && await LoadCoreAsync(selectPath: null, background: true).ConfigureAwait(true))
                     continue;
 
                 if (pending.HasFlag(RepositoryChange.Status)) await RefreshStatusesAsync().ConfigureAwait(true);
@@ -808,6 +887,184 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Acima disto, abrir uma janela por worktree (terminal, navegador) pede confirmação:
+    /// três terminais de uma vez é um caso real, sessenta por engano não é.
+    /// </summary>
+    public const int WindowConfirmationThreshold = 3;
+
+    /// <summary>Mesmo limite de processos git simultâneos da leitura de estado.</summary>
+    private const int BatchConcurrency = 8;
+
+    public Task<BatchOutcome> LaunchManyAsync(IReadOnlyList<WorktreeRow> rows)
+        => LaunchManyAsync("Abrir no iTerm2", rows, row => row.CanLaunch, EffectiveCommand);
+
+    public Task<BatchOutcome> OpenShellManyAsync(IReadOnlyList<WorktreeRow> rows)
+        => LaunchManyAsync("Abrir o terminal", rows, row => row.CanLaunch, command: null);
+
+    public Task<BatchOutcome> ResumeClaudeManyAsync(IReadOnlyList<WorktreeRow> rows)
+        => LaunchManyAsync("Retomar a sessão do claude", rows, row => row.HasClaudeSession, ClaudeSessions.ContinueCommand);
+
+    // Uma janela de cada vez: o AppleScript do terminal não gosta de pedidos cruzados.
+    private Task<BatchOutcome> LaunchManyAsync(string action, IReadOnlyList<WorktreeRow> rows, Func<WorktreeRow, bool> supports, string? command)
+        => RunBatchAsync(action, "Abrindo", rows, supports, concurrency: 1, async row =>
+        {
+            await TerminalLauncher.LaunchAsync(row.FullPath, command, TerminalTitle(row)).ConfigureAwait(true);
+            return null;
+        });
+
+    public Task<BatchOutcome> RevealManyAsync(IReadOnlyList<WorktreeRow> rows)
+        => RunBatchAsync("Revelar no Finder", "Abrindo", rows, _ => true, concurrency: 1, async row =>
+        {
+            await TerminalLauncher.RevealInFinderAsync(row.FullPath).ConfigureAwait(true);
+            return null;
+        });
+
+    public Task<BatchOutcome> OpenPullRequestsAsync(IReadOnlyList<WorktreeRow> rows)
+        => RunBatchAsync("Abrir PR no navegador", "Abrindo", rows, row => row.HasPullRequest, concurrency: 1, async row =>
+        {
+            if (row.PullRequest is not { Url: { Length: > 0 } url }) throw new InvalidOperationException("o PR não tem URL");
+            await TerminalLauncher.OpenUrlAsync(url).ConfigureAwait(true);
+            return null;
+        });
+
+    /// <summary>
+    /// "Puxar do remoto" em lote. Equivale a um git pull --ff-only em cada worktree, mas com
+    /// o fetch feito uma vez por remoto antes: pulls paralelos no mesmo repositório brigam
+    /// pelo lock das refs remotas. Depois, o fast-forward de cada um roda em paralelo.
+    /// </summary>
+    public async Task<BatchOutcome> UpdateBranchesAsync(IReadOnlyList<WorktreeRow> rows)
+    {
+        var targets = rows.Where(row => row.CanUpdateBranch).ToList();
+        var fetchErrors = new Dictionary<string, string>(StringComparer.Ordinal);
+        var remoteOf = new Dictionary<WorktreeRow, string>();
+
+        if (targets.Count > 0)
+        {
+            IsBusy = true;
+            StatusMessage = "Buscando os remotos…";
+            try
+            {
+                foreach (var row in targets)
+                    remoteOf[row] = await GitService.ResolveRemoteAsync(row.FullPath, row.Worktree.Branch!).ConfigureAwait(true);
+
+                foreach (var remote in remoteOf.Values.Distinct(StringComparer.Ordinal))
+                {
+                    StatusMessage = $"git fetch {remote}…";
+                    try
+                    {
+                        var fetch = await GitService.FetchRemoteAsync(targets[0].FullPath, remote).ConfigureAwait(true);
+                        if (!fetch.Success) fetchErrors[remote] = $"git fetch {remote} falhou: {fetch.FirstErrorLine}";
+                    }
+                    catch (Exception exception)
+                    {
+                        fetchErrors[remote] = $"git fetch {remote} falhou: {exception.Message}";
+                    }
+                }
+            }
+            catch (Exception exception)
+            {
+                IsBusy = false;
+                StatusMessage = exception.Message;
+                return new BatchOutcome("Puxar do remoto", Array.Empty<string>(), targets.Select(row => $"{row.Name}: {exception.Message}").ToList(),
+                    rows.Where(row => !row.CanUpdateBranch).Select(row => row.Name).ToList());
+            }
+        }
+
+        return await RunBatchAsync("Puxar do remoto", "Atualizando", rows, row => row.CanUpdateBranch, BatchConcurrency, async row =>
+        {
+            try
+            {
+                if (fetchErrors.TryGetValue(remoteOf[row], out var fetchError)) throw new InvalidOperationException(fetchError);
+
+                var result = await GitService.MergeUpstreamFastForwardAsync(row.FullPath).ConfigureAwait(true);
+                if (!result.Success) throw new InvalidOperationException(result.FirstErrorLine);
+
+                return LastLine(result.StandardOutput);
+            }
+            finally
+            {
+                row.Status = await WorktreeStatusReader.ReadAsync(row.FullPath).ConfigureAwait(true);
+            }
+        }).ConfigureAwait(true);
+    }
+
+    /// <summary>"Apagar os worktrees" em lote: sem --force e sem destravar — o git recusa e o relatório diz.</summary>
+    public async Task<BatchOutcome> RemoveWorktreesAsync(IReadOnlyList<WorktreeRow> rows)
+    {
+        var targets = rows.Where(row => row.CanRemove).ToList();
+        var notApplicable = rows.Where(row => !row.CanRemove).Select(row => row.Name).ToList();
+
+        var outcome = await RemoveManyAsync(targets, $"Removendo {targets.Count} worktree(s)…", unlockFirst: false).ConfigureAwait(true);
+
+        var succeeded = outcome.RemovedNames
+            .Concat(outcome.OrphanNames.Select(name => $"{name}: órfão podado"))
+            .ToList();
+
+        var batch = new BatchOutcome("Apagar os worktrees", succeeded, outcome.Failed, notApplicable);
+        StatusMessage = batch.Summary + (succeeded.Count > 0 ? " · as branches continuam existindo" : string.Empty);
+        return batch;
+    }
+
+    /// <summary>
+    /// Roda <paramref name="action"/> nas linhas que a suportam, no máximo
+    /// <paramref name="concurrency"/> de cada vez, com o progresso no rodapé. A ação devolve
+    /// um detalhe para o relatório (ou null) e sinaliza falha lançando exceção.
+    /// </summary>
+    private async Task<BatchOutcome> RunBatchAsync(
+        string action,
+        string progressVerb,
+        IReadOnlyList<WorktreeRow> rows,
+        Func<WorktreeRow, bool> supports,
+        int concurrency,
+        Func<WorktreeRow, Task<string?>> run)
+    {
+        var targets = rows.Where(supports).ToList();
+        var notApplicable = rows.Where(row => !supports(row)).Select(row => row.Name).ToList();
+        var results = new (bool Success, string Line)[targets.Count];
+        var done = 0;
+
+        IsBusy = true;
+        StatusMessage = $"{progressVerb} 0 de {targets.Count}…";
+
+        try
+        {
+            using var gate = new SemaphoreSlim(concurrency);
+
+            await Task.WhenAll(targets.Select(async (row, index) =>
+            {
+                await gate.WaitAsync().ConfigureAwait(true);
+                try
+                {
+                    var detail = await run(row).ConfigureAwait(true);
+                    results[index] = (true, string.IsNullOrEmpty(detail) ? row.Name : $"{row.Name}: {detail}");
+                }
+                catch (Exception exception)
+                {
+                    results[index] = (false, $"{row.Name}: {exception.Message}");
+                }
+                finally
+                {
+                    gate.Release();
+                    StatusMessage = $"{progressVerb} {++done} de {targets.Count}…";
+                }
+            })).ConfigureAwait(true);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        var outcome = new BatchOutcome(
+            action,
+            results.Where(result => result.Success).Select(result => result.Line).ToList(),
+            results.Where(result => !result.Success).Select(result => result.Line).ToList(),
+            notApplicable);
+
+        StatusMessage = outcome.Summary;
+        return outcome;
+    }
+
     public void SetRepositoryPath(string path)
     {
         RepositoryPath = path;
@@ -905,6 +1162,46 @@ public sealed class MainViewModel : ObservableObject
 }
 
 public enum SortColumn { Name, Branch, PullRequest, Path }
+
+/// <summary>
+/// Resultado de uma ação em lote, em três grupos: as linhas em que funcionou, as em que
+/// falhou (com o motivo) e as que não suportam a ação e ficaram de fora.
+/// </summary>
+public sealed record BatchOutcome(
+    string Action,
+    IReadOnlyList<string> Succeeded,
+    IReadOnlyList<string> Failed,
+    IReadOnlyList<string> NotApplicable)
+{
+    public bool HasProblems => Failed.Count > 0 || NotApplicable.Count > 0;
+
+    /// <summary>Uma linha para o rodapé.</summary>
+    public string Summary
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (Succeeded.Count > 0) parts.Add($"{Succeeded.Count} ok");
+            if (Failed.Count > 0) parts.Add($"{Failed.Count} {(Failed.Count == 1 ? "falhou" : "falharam")} — ver detalhes");
+            if (NotApplicable.Count > 0) parts.Add($"{NotApplicable.Count} não se {(NotApplicable.Count == 1 ? "aplica" : "aplicam")}");
+            if (parts.Count == 0) parts.Add("nada a fazer");
+            return $"{Action}: " + string.Join(" · ", parts);
+        }
+    }
+
+    /// <summary>Texto do diálogo de relatório, no formato do de worktrees mantidos da limpeza.</summary>
+    public string Report
+    {
+        get
+        {
+            var sections = new List<string>();
+            if (Succeeded.Count > 0) sections.Add($"Funcionou ({Succeeded.Count}):\n\n" + string.Join("\n", Succeeded));
+            if (Failed.Count > 0) sections.Add($"Falhou ({Failed.Count}):\n\n" + string.Join("\n\n", Failed));
+            if (NotApplicable.Count > 0) sections.Add($"Não se aplica ({NotApplicable.Count}):\n\n" + string.Join("\n", NotApplicable));
+            return string.Join("\n\n\n", sections);
+        }
+    }
+}
 
 /// <summary>Resultado da preparação: a distância medida depois do fetch, ou o motivo da recusa.</summary>
 public sealed record BaseUpdatePlan(BaseDistance? Distance, string? Error)
