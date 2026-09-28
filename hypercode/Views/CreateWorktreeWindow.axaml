@@ -22,9 +22,9 @@
   <StackPanel Margin="20" Spacing="14">
 
     <StackPanel Orientation="Horizontal" Spacing="20" IsEnabled="{Binding IsNotBusy}">
-      <RadioButton GroupName="mode" Content="Branch nova" IsChecked="{Binding IsNewBranchMode, Mode=TwoWay}" />
-      <RadioButton GroupName="mode" Content="A partir de um PR" IsChecked="{Binding IsPullRequestMode, Mode=TwoWay}" />
       <RadioButton GroupName="mode" Content="A partir de uma issue" IsChecked="{Binding IsIssueMode, Mode=TwoWay}" />
+      <RadioButton GroupName="mode" Content="A partir de um PR" IsChecked="{Binding IsPullRequestMode, Mode=TwoWay}" />
+      <RadioButton GroupName="mode" Content="Branch nova" IsChecked="{Binding IsNewBranchMode, Mode=TwoWay}" />
     </StackPanel>
 
     <!-- Branch nova -->
