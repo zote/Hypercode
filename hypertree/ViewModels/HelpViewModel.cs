@@ -32,12 +32,16 @@ public sealed class HelpViewModel
             "Os dois lados andaram: há commit local e commit remoto que o outro não tem. Precisa merge ou rebase."),
         Entry(BadgeKind.NeverPushed, "Sem upstream",
             "A branch nunca foi pushada — não existe remota correspondente."),
+        Entry(BadgeKind.UpstreamGone, "Branch remota apagada",
+            "A branch rastreia uma remota que não existe mais (upstream \"gone\"), normalmente porque o PR foi mergeado e o GitHub apagou a branch. Aparece depois do fetch --prune que o monitoramento faz."),
         Entry(BadgeKind.Removable, "Pode ser removido",
             "Entra na limpeza: PR mergeado ou fechado, ou worktree órfão. Passar o mouse mostra o motivo."),
     };
 
     public IReadOnlyList<LegendEntry> PullRequestLegend { get; } = new[]
     {
+        Entry(BadgeKind.PrChanged, "PR mudou",
+            "O monitoramento viu uma transição desde a última olhada: checks passaram ou falharam, review aprovado ou pedindo mudanças, PR mergeado ou fechado, conflito ou base à frente. O tooltip lista o quê. Some com \"Marcar como visto\" ou abrindo o PR no navegador."),
         Entry(BadgeKind.PrOpen, "PR aberto", "Existe um pull request aberto para esta branch."),
         Entry(BadgeKind.PrDraft, "PR em rascunho", "O pull request está aberto como draft."),
         Entry(BadgeKind.PrMerged, "PR mergeado", "O pull request foi integrado."),

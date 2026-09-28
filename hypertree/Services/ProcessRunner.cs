@@ -34,7 +34,8 @@ public static class ProcessRunner
         IReadOnlyList<string> arguments,
         string? workingDirectory = null,
         TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -52,6 +53,10 @@ public static class ProcessRunner
             startInfo.WorkingDirectory = workingDirectory;
 
         startInfo.Environment["PATH"] = ExecutableLocator.BuildSearchPath();
+
+        if (environment is not null)
+            foreach (var (key, value) in environment)
+                startInfo.Environment[key] = value;
 
         using var process = new Process { StartInfo = startInfo };
 

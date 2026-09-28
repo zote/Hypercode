@@ -293,6 +293,31 @@ public static class GitService
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Fetch periódico do monitoramento: todos os remotos, com --prune para que a branch
+    /// apagada no remoto apareça como upstream "gone". Sem tocar no FETCH_HEAD de quem
+    /// estiver usando o repositório, sem gc automático no meio e sem prompt de credencial —
+    /// um app sem terminal ficaria esperando uma senha que ninguém vai digitar.
+    /// </summary>
+    public static async Task<ProcessResult> FetchAllInBackgroundAsync(
+        string repositoryPath,
+        CancellationToken cancellationToken = default)
+    {
+        var git = ExecutableLocator.Find("git") ?? throw new GitNotFoundException();
+
+        return await ProcessRunner.RunAsync(
+            git,
+            new[]
+            {
+                "-C", repositoryPath, "-c", "gc.auto=0", "-c", "maintenance.auto=false",
+                "fetch", "--all", "--prune", "--quiet", "--no-write-fetch-head",
+            },
+            repositoryPath,
+            TimeSpan.FromSeconds(120),
+            cancellationToken,
+            new Dictionary<string, string> { ["GIT_TERMINAL_PROMPT"] = "0" }).ConfigureAwait(false);
+    }
+
     /// <summary>Roda `git -C &lt;repo&gt; ...` e devolve o resultado sem interpretar.</summary>
     public static async Task<ProcessResult> RunAsync(
         string repositoryPath,

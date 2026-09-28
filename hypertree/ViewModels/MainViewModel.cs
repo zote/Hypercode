@@ -7,6 +7,7 @@ namespace Hypertree.ViewModels;
 public sealed class MainViewModel : ObservableObject
 {
     private readonly Settings _settings;
+    private readonly PullRequestMemory _pullRequestMemory = PullRequestMemory.Load();
     private CancellationTokenSource? _loadCancellation;
     private RepositoryWatcher? _watcher;
     private RepositoryChange _pendingChange;
@@ -22,6 +23,22 @@ public sealed class MainViewModel : ObservableObject
     private string _filterText = string.Empty;
     private SortColumn _sortColumn;
     private bool _sortDescending;
+
+    /// <summary>De quanto em quanto tempo o laço do monitoramento confere se já é hora.</summary>
+    private static readonly TimeSpan MonitorTick = TimeSpan.FromSeconds(30);
+
+    private CancellationTokenSource? _monitorCancellation;
+    private DateTimeOffset _lastRemoteCheck = DateTimeOffset.MinValue;
+    private bool _isCheckingRemote;
+    private bool _isWindowActive = true;
+    private bool _isWindowMinimized;
+    private string? _monitorProblem;
+
+    /// <summary>
+    /// O fetch do monitoramento em andamento. Pull e atualização a partir da base esperam por
+    /// ele: dois fetches no mesmo repositório disputam o lock das refs remotas.
+    /// </summary>
+    private Task _backgroundFetch = Task.CompletedTask;
 
     public MainViewModel()
     {
@@ -445,6 +462,7 @@ public sealed class MainViewModel : ObservableObject
                 if (previous.TryGetValue(worktree, out var old))
                 {
                     row.PullRequest = old.PullRequest;
+                    row.PullRequestChanges = old.PullRequestChanges;
                     row.Status = old.Status;
                     row.BaseDistance = old.BaseDistance;
                 }
@@ -468,6 +486,7 @@ public sealed class MainViewModel : ObservableObject
                 _loadedRepositoryPath = path;
 
                 await WatchAsync(path, cancellationToken).ConfigureAwait(true);
+                StartMonitoring();
 
                 StatusMessage = worktrees.Count switch
                 {
@@ -480,26 +499,16 @@ public sealed class MainViewModel : ObservableObject
             // O estado local de cada worktree é lido em paralelo com a consulta ao GitHub.
             var statusesTask = LoadStatusesAsync(Worktrees.ToList(), cancellationToken);
 
-            var lookup = await GitHubService.LoadPullRequestsAsync(path, cancellationToken).ConfigureAwait(true);
+            var lookup = await GitHubService.LoadPullRequestsAsync(path, WorktreeBranches(), cancellationToken).ConfigureAwait(true);
 
             if (cancellationToken.IsCancellationRequested) return true;
 
-            var matched = 0;
-            foreach (var row in Worktrees)
-            {
-                row.PullRequest = row.Worktree.Branch is { } branch
-                                  && lookup.ByBranch.TryGetValue(branch, out var pullRequest)
-                    ? pullRequest
-                    : null;
+            // Em background, uma consulta que falhou não apaga os PRs herdados das linhas.
+            var (matched, changes) = background && lookup.Failed
+                ? (Worktrees.Count(row => row.HasPullRequest), null)
+                : ApplyPullRequests(lookup);
 
-                if (row.PullRequest is not null) matched++;
-                row.RefreshTags();
-            }
-
-            RaiseCleanupState();
-
-            // O PR chegou agora: um filtro por número/título ou a ordenação por PR mudam.
-            ApplyView();
+            if (background && changes is not null) StatusMessage = changes;
 
             // Só agora se sabe a base de cada PR, e com ela a distância até ela.
             await Task.WhenAll(statusesTask, LoadBaseDistancesAsync(Worktrees.ToList(), cancellationToken))
@@ -508,9 +517,10 @@ public sealed class MainViewModel : ObservableObject
             if (!background)
             {
                 var summary = Worktrees.Count == 1 ? "1 worktree" : $"{Worktrees.Count} worktrees";
-                StatusMessage = lookup.Warning is { } warning
+                StatusMessage = (lookup.Warning is { } warning
                     ? $"{summary} · {warning}"
-                    : $"{summary} · {matched} com PR";
+                    : $"{summary} · {matched} com PR")
+                    + (changes is null ? string.Empty : $" · {changes}");
             }
 
             return true;
@@ -528,12 +538,242 @@ public sealed class MainViewModel : ObservableObject
             Worktrees.Clear();
             ApplyView();
             StopWatching();
+            StopMonitoring();
             StatusMessage = exception.Message;
             return false;
         }
         finally
         {
             if (!background) IsBusy = false;
+        }
+    }
+
+    private IReadOnlyCollection<string> WorktreeBranches()
+        => Worktrees.Select(row => row.Worktree.Branch).OfType<string>().ToList();
+
+    /// <summary>
+    /// Casa os PRs com as linhas pela branch, compara cada um com o último estado visto e
+    /// avisa das transições. É o caminho comum do carregamento e do monitoramento — por isso
+    /// uma mudança que aconteceu com o app fechado também é avisada, uma vez, ao abrir.
+    /// Devolve quantas linhas têm PR e, se algum mudou, a frase para o rodapé.
+    /// </summary>
+    private (int Matched, string? Changes) ApplyPullRequests(PullRequestLookup lookup)
+    {
+        var matched = 0;
+        var changed = new List<(WorktreeRow Row, PullRequestInfo PullRequest, IReadOnlyList<string> Transitions)>();
+
+        foreach (var row in Worktrees)
+        {
+            row.PullRequest = row.Worktree.Branch is { } branch
+                              && lookup.ByBranch.TryGetValue(branch, out var found)
+                ? found
+                : null;
+
+            if (row.PullRequest is { } pullRequest)
+            {
+                matched++;
+                var transitions = _pullRequestMemory.Observe(pullRequest);
+                if (transitions.Count > 0) changed.Add((row, pullRequest, transitions));
+                row.PullRequestChanges = _pullRequestMemory.Unseen(pullRequest);
+            }
+            else
+            {
+                row.PullRequestChanges = Array.Empty<string>();
+            }
+
+            row.RefreshTags();
+        }
+
+        _pullRequestMemory.Save();
+        RaiseCleanupState();
+
+        // O PR chegou agora: um filtro por número/título ou a ordenação por PR mudam.
+        ApplyView();
+
+        return (matched, changed.Count > 0 ? AnnounceChanges(changed) : null);
+    }
+
+    /// <summary>Notificação do macOS — acima de três PRs, uma só — e a frase para o rodapé.</summary>
+    private string AnnounceChanges(IReadOnlyList<(WorktreeRow Row, PullRequestInfo PullRequest, IReadOnlyList<string> Transitions)> changed)
+    {
+        static string Line((WorktreeRow Row, PullRequestInfo PullRequest, IReadOnlyList<string> Transitions) change)
+            => $"#{change.PullRequest.Number} {string.Join(" · ", change.Transitions)}";
+
+        var summary = changed.Count == 1
+            ? $"PR {Line(changed[0])}"
+            : $"{changed.Count} PRs mudaram: " + string.Join("; ", changed.Select(Line));
+
+        if (!_settings.NotifyPullRequestChanges) return summary;
+
+        if (changed.Count <= 3)
+        {
+            foreach (var change in changed)
+                _ = Notifier.NotifyAsync(
+                    $"#{change.PullRequest.Number} · {change.Row.Branch}",
+                    string.Join(" · ", change.Transitions));
+        }
+        else
+        {
+            _ = Notifier.NotifyAsync($"{changed.Count} PRs mudaram", string.Join("\n", changed.Select(Line)));
+        }
+
+        return summary;
+    }
+
+    /// <summary>
+    /// Tira o destaque de PR alterado das linhas. Abrir o PR no navegador também conta como
+    /// ter visto.
+    /// </summary>
+    public void MarkPullRequestChangesSeen(IReadOnlyList<WorktreeRow> rows)
+    {
+        foreach (var row in rows)
+        {
+            if (row.PullRequest is not { } pullRequest || !row.HasPullRequestChanges) continue;
+            _pullRequestMemory.MarkSeen(pullRequest);
+            row.PullRequestChanges = Array.Empty<string>();
+        }
+
+        _pullRequestMemory.Save();
+    }
+
+    /// <summary>
+    /// Intervalo do monitoramento agora: o configurado com a janela ativa, o triplo com ela
+    /// em segundo plano, e nenhum (pausado) minimizada ou com o monitoramento desligado.
+    /// </summary>
+    private TimeSpan? MonitorInterval
+    {
+        get
+        {
+            if (_settings.MonitorIntervalMinutes <= 0 || _isWindowMinimized) return null;
+            var interval = TimeSpan.FromMinutes(_settings.MonitorIntervalMinutes);
+            return _isWindowActive ? interval : interval * 3;
+        }
+    }
+
+    private bool IsRemoteCheckDue
+        => MonitorInterval is { } interval && DateTimeOffset.UtcNow - _lastRemoteCheck >= interval;
+
+    /// <summary>A janela avisa quando ganha ou perde o foco e quando é minimizada ou restaurada.</summary>
+    public void SetWindowActivity(bool isActive, bool isMinimized)
+    {
+        _isWindowActive = isActive;
+        _isWindowMinimized = isMinimized;
+
+        // Voltou para a frente depois de muito tempo parada: confere já, sem esperar o tique.
+        if (isActive && !isMinimized && IsRemoteCheckDue) _ = CheckRemoteAsync();
+    }
+
+    private void StartMonitoring()
+    {
+        if (_monitorCancellation is not null || _settings.MonitorIntervalMinutes <= 0) return;
+
+        _monitorCancellation = new CancellationTokenSource();
+        _ = MonitorLoopAsync(_monitorCancellation.Token);
+    }
+
+    private void StopMonitoring()
+    {
+        _monitorCancellation?.Cancel();
+        _monitorCancellation = null;
+    }
+
+    /// <summary>
+    /// Roda na UI enquanto houver repositório carregado. A cada tique só confere se já passou
+    /// o intervalo — que muda com a janela em segundo plano ou minimizada.
+    /// </summary>
+    private async Task MonitorLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(MonitorTick, cancellationToken).ConfigureAwait(true);
+                if (IsRemoteCheckDue) await CheckRemoteAsync().ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Monitoramento parado.
+        }
+    }
+
+    /// <summary>
+    /// Um ciclo do monitoramento: `git fetch --all --prune` e uma consulta dos PRs. O fetch
+    /// escreve em refs/remotes, e o <see cref="RepositoryWatcher"/> relê o status das linhas
+    /// sozinho. Não roda com uma operação do app em andamento; sem gh, fica só a parte git.
+    /// </summary>
+    private async Task CheckRemoteAsync()
+    {
+        if (_isCheckingRemote || IsBusy || _loadedRepositoryPath is not { } path) return;
+
+        _isCheckingRemote = true;
+        _lastRemoteCheck = DateTimeOffset.UtcNow;
+        var cancellationToken = _monitorCancellation?.Token ?? default;
+        var problems = new List<string>();
+
+        try
+        {
+            var fetch = GitService.FetchAllInBackgroundAsync(path, cancellationToken);
+            _backgroundFetch = fetch;
+
+            try
+            {
+                var result = await fetch.ConfigureAwait(true);
+                if (!result.Success) problems.Add($"git fetch falhou: {result.FirstErrorLine}");
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                problems.Add($"git fetch falhou: {exception.Message}");
+            }
+
+            // O usuário começou algo durante o fetch: os PRs ficam para o próximo ciclo.
+            if (IsBusy) return;
+
+            var lookup = await GitHubService.LoadPullRequestsAsync(path, WorktreeBranches(), cancellationToken).ConfigureAwait(true);
+            if (cancellationToken.IsCancellationRequested || _loadedRepositoryPath != path) return;
+
+            if (lookup.Failed)
+            {
+                problems.Add(lookup.Warning ?? "não consegui ler os PRs");
+                return;
+            }
+
+            if (ApplyPullRequests(lookup).Changes is { } changes) StatusMessage = changes;
+            await LoadBaseDistancesAsync(Worktrees.ToList(), cancellationToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // Repositório trocado ou monitoramento desligado.
+        }
+        catch (Exception exception)
+        {
+            problems.Add(exception.Message);
+        }
+        finally
+        {
+            _isCheckingRemote = false;
+            ReportMonitorProblem(problems.Count == 0 ? null : string.Join(" · ", problems));
+        }
+    }
+
+    /// <summary>Problema do monitoramento vai para o rodapé uma vez — não a cada ciclo que falhar igual.</summary>
+    private void ReportMonitorProblem(string? problem)
+    {
+        if (problem == _monitorProblem) return;
+        _monitorProblem = problem;
+        if (problem is not null) StatusMessage = $"Monitoramento: {problem}";
+    }
+
+    /// <summary>Espera o fetch do monitoramento, se houver um rodando; o resultado dele não importa aqui.</summary>
+    private async Task WaitForBackgroundFetchAsync()
+    {
+        try
+        {
+            await _backgroundFetch.ConfigureAwait(true);
+        }
+        catch
+        {
+            // Falha do fetch em background já foi relatada por ele.
         }
     }
 
@@ -735,6 +975,7 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
+            await WaitForBackgroundFetchAsync().ConfigureAwait(true);
             var result = await GitService.PullFastForwardAsync(row.FullPath).ConfigureAwait(true);
 
             StatusMessage = result.Success
@@ -777,6 +1018,7 @@ public sealed class MainViewModel : ObservableObject
 
             var remote = await GitService.ResolveRemoteAsync(row.FullPath, branch).ConfigureAwait(true);
 
+            await WaitForBackgroundFetchAsync().ConfigureAwait(true);
             var fetch = await GitService.FetchBranchAsync(row.FullPath, remote, baseBranch).ConfigureAwait(true);
             if (!fetch.Success)
                 return BaseUpdatePlan.Refused($"git fetch {remote} {baseBranch} falhou: {fetch.FirstErrorLine}");
@@ -880,6 +1122,7 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             await TerminalLauncher.OpenUrlAsync(pullRequest.Url).ConfigureAwait(true);
+            MarkPullRequestChangesSeen(new[] { row });
         }
         catch (Exception exception)
         {
@@ -925,6 +1168,7 @@ public sealed class MainViewModel : ObservableObject
         {
             if (row.PullRequest is not { Url: { Length: > 0 } url }) throw new InvalidOperationException("o PR não tem URL");
             await TerminalLauncher.OpenUrlAsync(url).ConfigureAwait(true);
+            MarkPullRequestChangesSeen(new[] { row });
             return null;
         });
 
@@ -945,6 +1189,8 @@ public sealed class MainViewModel : ObservableObject
             StatusMessage = "Buscando os remotos…";
             try
             {
+                await WaitForBackgroundFetchAsync().ConfigureAwait(true);
+
                 foreach (var row in targets)
                     remoteOf[row] = await GitService.ResolveRemoteAsync(row.FullPath, row.Worktree.Branch!).ConfigureAwait(true);
 

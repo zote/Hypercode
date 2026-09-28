@@ -9,6 +9,13 @@ public sealed record WorktreeStatus
     public bool HasUncommittedChanges { get; init; }
     public bool HasUnmergedPaths { get; init; }
     public bool HasUpstream { get; init; }
+
+    /// <summary>
+    /// A branch rastreia uma remota que não existe mais — típico depois do merge do PR, quando
+    /// o GitHub apaga a branch e um fetch --prune remove a ref. O git ainda lista o upstream,
+    /// mas sem contagem ahead/behind.
+    /// </summary>
+    public bool IsUpstreamGone { get; init; }
     public int Ahead { get; init; }
     public int Behind { get; init; }
 
@@ -76,13 +83,15 @@ public static class WorktreeStatusReader
 
     /// <summary>
     /// Formato v2: linhas de cabeçalho começam com '#'; qualquer outra linha
-    /// (1, 2, u, ?, !) é uma mudança na árvore de trabalho.
+    /// (1, 2, u, ?, !) é uma mudança na árvore de trabalho. Upstream sem "# branch.ab" é
+    /// upstream que sumiu do remoto.
     /// </summary>
     internal static WorktreeStatus Parse(string porcelainV2, string? pendingOperation)
     {
         var hasChanges = false;
         var hasUnmerged = false;
         var hasUpstream = false;
+        var hasCounts = false;
         var ahead = 0;
         var behind = 0;
 
@@ -105,6 +114,7 @@ public static class WorktreeStatusReader
             else if (line.StartsWith("# branch.ab ", StringComparison.Ordinal))
             {
                 hasUpstream = true;
+                hasCounts = true;
                 foreach (var token in line["# branch.ab ".Length..].Split(' ', StringSplitOptions.RemoveEmptyEntries))
                 {
                     if (token.Length < 2) continue;
@@ -121,6 +131,7 @@ public static class WorktreeStatusReader
             HasUncommittedChanges = hasChanges,
             HasUnmergedPaths = hasUnmerged,
             HasUpstream = hasUpstream,
+            IsUpstreamGone = hasUpstream && !hasCounts,
             Ahead = ahead,
             Behind = behind,
             PendingOperation = pendingOperation,
