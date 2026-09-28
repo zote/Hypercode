@@ -34,11 +34,34 @@ duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `c
 - O caminho do repositório e o comando ficam salvos em
   `~/Library/Application Support/Hypertree/settings.json`.
 
+## Baixar e instalar
+
+Cada versão publicada fica em [Releases](https://github.com/zote/Hypercode/releases), com um
+zip por arquitetura e o `SHA256SUMS`:
+
+| Mac | Arquivo |
+|---|---|
+| Apple Silicon (M1 em diante) | `Hypertree-<versão>-arm64.zip` |
+| Intel | `Hypertree-<versão>-x64.zip` |
+
+1. Baixe o zip, abra e arraste o `Hypertree.app` para `/Applications`.
+2. Opcional: confira o download com `shasum -a 256 -c SHA256SUMS --ignore-missing`, na pasta
+   onde estão o zip e o `SHA256SUMS`.
+3. **Primeira abertura.** O app ainda não é assinado com Developer ID nem notarizado — só
+   ad-hoc —, então o Gatekeeper bloqueia o que veio da internet ("não pode ser aberto porque a
+   Apple não pode verificá-lo"). Duas saídas:
+   - clique com o botão direito no app → **Abrir** → **Abrir**; ou
+   - tire o atributo de quarentena: `xattr -dr com.apple.quarantine /Applications/Hypertree.app`
+
+A versão instalada aparece no rodapé da ajuda (botão **?**), no **Obter Informações** do Finder
+e no `Info.plist` (`CFBundleShortVersionString`).
+
 ## Requisitos
 
 - macOS 11+
 - [iTerm2](https://iterm2.com) — se não estiver instalado, o app cai para o `Terminal.app`
-- [.NET SDK 8 ou superior](https://dotnet.microsoft.com/download) — só para compilar
+- [.NET SDK 10](https://dotnet.microsoft.com/download) — só para compilar. O `global.json` na
+  raiz fixa o SDK (qualquer 10.0.x a partir de 10.0.100); o app continua mirando `net8.0`.
 - `git` (Xcode Command Line Tools já serve)
 - [`gh`](https://cli.github.com) autenticado (`gh auth login`) — **opcional**, é o que preenche
   a coluna PR. Sem ele o app funciona normalmente, só deixa a coluna vazia.
@@ -54,12 +77,49 @@ dotnet run
 
 ```bash
 cd hypertree
-./build-app.sh              # detecta arm64/x64 automaticamente
+./build-app.sh                      # detecta arm64/x64; versão 0.0.0-dev
+./build-app.sh osx-x64 1.2.0        # arquitetura e versão explícitas
+VERSION=1.2.0-beta.1 ./build-app.sh # a versão também vem do ambiente
 open dist/Hypertree.app
 cp -R dist/Hypertree.app /Applications/   # opcional
 ```
 
-O bundle é autocontido: quem for usar não precisa ter o .NET instalado.
+O bundle é autocontido: quem for usar não precisa ter o .NET instalado. A versão é SemVer
+(com ou sem `v`); o assembly leva a completa e o `Info.plist`, que só aceita números, leva a
+parte `X.Y.Z` sem o sufixo de pré-release.
+
+## Testes e CI
+
+```bash
+dotnet build Hypertree.sln -c Release -warnaserror
+dotnet format Hypertree.sln --verify-no-changes
+dotnet test --solution Hypertree.sln -c Release
+```
+
+Os comandos rodam na raiz do repositório, onde fica o `Hypertree.sln` (app + `tests/`). Os
+testes são xUnit v3 sobre o Microsoft.Testing.Platform (o `global.json` liga o runner).
+
+O build trata aviso como erro, com os analyzers em `latest-recommended` e o estilo valendo no
+build; a severidade de cada regra fica no `.editorconfig`, não em `#pragma`. As versões dos
+pacotes ficam no `Directory.Packages.props` e o restore é travado pelos `packages.lock.json` —
+ao mudar um pacote, rode `dotnet restore Hypertree.sln` e commite os lock files junto.
+
+Todo PR para a `main` passa pelo workflow **CI** (`.github/workflows/ci.yml`): restore em
+locked mode, build, format, testes com cobertura (resumo no job), pacotes vulneráveis e o `.app`
+das duas arquiteturas como artifact do workflow — dá para baixar e testar o PR sem compilar. A
+`main` é protegida: merge só por PR, com esses checks passando e a branch em dia com a base.
+
+## Publicar uma versão
+
+O workflow **Release** (`.github/workflows/release.yml`) gera os zips das duas arquiteturas, o
+`SHA256SUMS` e o GitHub Release com as notas geradas a partir dos PRs. Duas formas de disparar:
+
+```bash
+git tag v1.2.0 && git push origin v1.2.0
+```
+
+ou **Actions → Release → Run workflow**, informando a versão (`1.2.0`) — o workflow cria a tag
+no commit escolhido. Versão com sufixo (`1.2.0-beta.1`) sai como pre-release.
 
 ## Permissão de automação
 
