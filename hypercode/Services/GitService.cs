@@ -83,7 +83,7 @@ public sealed record WorktreeInfo
     }
 
     /// <summary>O git às vezes devolve o motivo entre aspas e com escapes.</summary>
-    private static string Unquote(string value)
+    internal static string Unquote(string value)
     {
         if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
             value = value[1..^1].Replace("\\\"", "\"").Replace("\\\\", "\\");
