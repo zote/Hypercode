@@ -147,6 +147,8 @@
           <Separator />
           <MenuItem Name="RevealMenuItem" Click="OnRevealMenuClick" />
           <MenuItem Name="OpenPullRequestMenuItem" Click="OnOpenPullRequestMenuClick" />
+          <MenuItem Name="MarkSeenMenuItem" Click="OnMarkSeenMenuClick"
+                    ToolTip.Tip="Tira o sino da linha: as mudanças do PR avisadas pelo monitoramento ficam como vistas. Abrir o PR no navegador faz o mesmo." />
           <Separator />
           <MenuItem Name="UpdateBranchMenuItem" Click="OnUpdateBranchMenuClick"
                     ToolTip.Tip="git pull --ff-only: traz os commits do upstream da própria branch. Se a branch divergiu, o git recusa e nada muda. Não traz a base do PR." />

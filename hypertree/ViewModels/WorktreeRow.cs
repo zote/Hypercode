@@ -7,6 +7,7 @@ public sealed class WorktreeRow : ObservableObject
     private PullRequestInfo? _pullRequest;
     private WorktreeStatus _status = WorktreeStatus.Unknown;
     private BaseDistance? _baseDistance;
+    private IReadOnlyList<string> _pullRequestChanges = Array.Empty<string>();
 
     public WorktreeRow(WorktreeInfo worktree)
     {
@@ -41,6 +42,26 @@ public sealed class WorktreeRow : ObservableObject
     }
 
     public bool HasPullRequest => _pullRequest is not null;
+
+    /// <summary>
+    /// Transições do PR avisadas pelo monitoramento e ainda não marcadas como vistas
+    /// (checks, review, merge, conflito). Enquanto houver, a linha ganha o sino.
+    /// </summary>
+    public IReadOnlyList<string> PullRequestChanges
+    {
+        get => _pullRequestChanges;
+        set
+        {
+            value ??= Array.Empty<string>();
+            if (_pullRequestChanges.SequenceEqual(value)) return;
+            _pullRequestChanges = value;
+            RaisePropertyChanged();
+            RaisePropertyChanged(nameof(HasPullRequestChanges));
+            RefreshBadges();
+        }
+    }
+
+    public bool HasPullRequestChanges => _pullRequestChanges.Count > 0;
 
     /// <summary>Base do PR aberto desta branch — de onde vem o "atualizar a partir da base".</summary>
     public string? BaseBranch => _pullRequest is { IsOpen: true, BaseRefName: { Length: > 0 } baseRef } ? baseRef : null;
@@ -140,6 +161,11 @@ public sealed class WorktreeRow : ObservableObject
             {
                 if (!_status.HasUpstream)
                     badges.Add(new StatusBadge(BadgeKind.NeverPushed, "A branch não tem upstream — nunca foi pushada."));
+                else if (_status.IsUpstreamGone)
+                    badges.Add(new StatusBadge(
+                        BadgeKind.UpstreamGone,
+                        "A branch remota foi apagada (upstream \"gone\"), normalmente depois do merge do PR. "
+                        + "Se o trabalho já entrou na base, o worktree pode ser limpo."));
                 else if (_status.IsDiverged)
                     badges.Add(new StatusBadge(
                         BadgeKind.Diverged,
@@ -169,6 +195,11 @@ public sealed class WorktreeRow : ObservableObject
 
             // Sem PR a coluna fica vazia — nada de marcador de ausência.
             if (_pullRequest is not { } pullRequest) return badges;
+
+            if (_pullRequestChanges.Count > 0)
+                badges.Add(new StatusBadge(
+                    BadgeKind.PrChanged,
+                    $"Mudou desde a última olhada:\n• {string.Join("\n• ", _pullRequestChanges)}\n\nBotão direito → Marcar como visto."));
 
             badges.Add(pullRequest.State.ToUpperInvariant() switch
             {

@@ -15,6 +15,14 @@ public partial class MainWindow : Window
         InitializeComponent();
         Opened += OnOpened;
 
+        // O monitoramento desacelera com a janela em segundo plano e pausa minimizada.
+        Activated += (_, _) => ReportActivity();
+        Deactivated += (_, _) => ReportActivity();
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == WindowStateProperty) ReportActivity();
+        };
+
         // Túnel: o ⌘F precisa funcionar mesmo com o foco dentro da lista ou de outro campo.
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
     }
@@ -24,6 +32,9 @@ public partial class MainWindow : Window
     /// <summary>Linha associada ao controle que disparou o evento (item do template).</summary>
     private static WorktreeRow? RowOf(object? sender)
         => (sender as Control)?.DataContext as WorktreeRow;
+
+    private void ReportActivity()
+        => ViewModel?.SetWindowActivity(IsActive, WindowState == WindowState.Minimized);
 
     private async void OnOpened(object? sender, EventArgs e)
     {
@@ -209,6 +220,8 @@ public partial class MainWindow : Window
         Configure(ResumeClaudeMenuItem, "Retomar a sessão do claude", rows, row => row.HasClaudeSession);
         Configure(RevealMenuItem, "Revelar no Finder", rows, _ => true);
         Configure(OpenPullRequestMenuItem, "Abrir PR no navegador", rows, row => row.HasPullRequest);
+        Configure(MarkSeenMenuItem, "Marcar como visto", rows, row => row.HasPullRequestChanges);
+        MarkSeenMenuItem.IsVisible = MarkSeenMenuItem.IsEnabled;
         Configure(UpdateBranchMenuItem, "Puxar do remoto (pull)", rows, row => row.CanUpdateBranch);
         Configure(RemoveMenuItem, rows.Count > 1 ? "Apagar os worktrees…" : "Apagar o worktree…", rows, row => row.CanRemove);
 
@@ -397,6 +410,9 @@ public partial class MainWindow : Window
 
         await ShowBatchReportAsync(await viewModel.RemoveWorktreesAsync(rows));
     }
+
+    private void OnMarkSeenMenuClick(object? sender, RoutedEventArgs e)
+        => ViewModel?.MarkPullRequestChangesSeen(MenuTargets());
 
     private async void OnRevealMenuClick(object? sender, RoutedEventArgs e)
     {

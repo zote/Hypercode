@@ -28,6 +28,9 @@ duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `c
 - A lista **se atualiza sozinha**: worktree criado, apagado ou travado fora do app, troca de
   branch, commit, fetch, push e rebase aparecem em menos de um segundo. **Atualizar** (`⌘R`)
   relê tudo, inclusive os PRs. Detalhes abaixo.
+- O app **monitora o remoto**: faz `git fetch --prune` e relê os PRs a cada 5 minutos, e avisa
+  (notificação do macOS e sino na linha) quando checks, review, merge ou conflito mudam.
+  Detalhes em [Monitoramento](#monitoramento).
 - O caminho do repositório e o comando ficam salvos em
   `~/Library/Application Support/Hypertree/settings.json`.
 
@@ -86,11 +89,13 @@ informação, o ícone e a cor são os mesmos que ele usa.
 | `arrow-down` azul | Falta pull | `branch.ab -N` |
 | `git-compare` âmbar | Divergiu | `+N` e `-M` ao mesmo tempo |
 | `upload` cinza | Nunca foi pushada | sem `branch.upstream` |
+| `cloud-offline` cinza | Branch remota apagada | `branch.upstream` sem `branch.ab` (upstream `gone`) |
 | `trash` cinza | Pode ser removido | candidato à limpeza |
 | `git-pull-request` verde / `git-pull-request-draft` cinza / `git-merge` roxo / `git-pull-request-closed` vermelho | PR aberto / draft / mergeado / fechado | `state`, `isDraft` |
 | `alert` âmbar | Precisa atualizar a partir da base | `mergeable=CONFLICTING` ou `mergeStateStatus=BEHIND` |
 | `check` verde / `x` vermelho / `dot-fill` âmbar | Checks passando / falhando / rodando | `statusCheckRollup` |
 | `check-circle` verde / `file-diff` vermelho / `code-review` cinza | Review aprovado / mudanças pedidas / aguardando | `reviewDecision` |
+| `bell-fill` azul | O PR mudou desde a última olhada | transição vista pelo monitoramento |
 
 Checks, review e "precisa rebase" só aparecem enquanto o PR está aberto. Se o `gh` instalado não
 aceitar os campos novos, o app refaz a consulta com o conjunto básico e avisa no rodapé — a coluna
@@ -118,7 +123,8 @@ Vêm de `git worktree list --porcelain` e aparecem abaixo do nome:
 | Abrir o terminal | `cd` no worktree, sem rodar o **Comando** | a pasta existe |
 | Retomar a sessão do claude | `claude --continue`: volta à última conversa daquele worktree | há sessão em `~/.claude/projects/<caminho>` |
 | Revelar no Finder | `open <pasta>` | sempre |
-| Abrir PR no navegador | `open <url do PR>` | a branch tem PR |
+| Abrir PR no navegador | `open <url do PR>` — e marca as mudanças do PR como vistas | a branch tem PR |
+| Marcar como visto | tira o sino da linha | o PR mudou desde a última olhada (só aparece nesse caso) |
 | Puxar do remoto (pull) | `git pull --ff-only` no worktree e relê o estado da linha | a branch tem upstream |
 | Atualizar a partir da base… | `git fetch` da base do PR e `git merge` ou `git rebase` dela, à escolha | o PR aberto está atrás da base ou em conflito |
 | Apagar o worktree… | `git worktree remove`, com confirmação | não é o principal nem bare |
@@ -244,13 +250,66 @@ Fica de fora, de propósito:
 - **Edição de arquivo sem commit** (o ícone de "alterações não commitadas"). Detectar isso exigiria
   observar a árvore de trabalho inteira de cada worktree, e o `index` não serve de sinal: o próprio
   `git status` que o app roda pode regravá-lo, o que viraria um laço.
-- **Mudança de PR no GitHub** (merge, checks, review): não passa pelo disco. Um `fetch` depois do
-  merge relê os ícones locais, mas a coluna PR só muda com **Atualizar** (`⌘R`).
+- **Mudança de PR no GitHub** (merge, checks, review): não passa pelo disco. Quem cobre é o
+  [monitoramento](#monitoramento), por polling.
+
+## Monitoramento
+
+Com um repositório carregado, o app confere o remoto periodicamente — um ciclo por intervalo:
+
+1. `git fetch --all --prune --no-write-fetch-head` no principal, sem gc automático e com
+   `GIT_TERMINAL_PROMPT=0` (um app sem terminal não tem onde pedir senha). As refs remotas mudam
+   e o watcher relê o `git status` das linhas: "falta pull" e "divergiu" passam a refletir o
+   remoto, e a branch apagada depois do merge aparece com o `cloud-offline`.
+2. Uma consulta GraphQL só (`gh api graphql`, 1 ponto do rate limit de 5000/h) com um alias por
+   branch de worktree: `pullRequests(headRefName: …)` traz estado, draft, `mergeable`,
+   `mergeStateStatus`, `reviewDecision` e os checks do último commit. Não depende de o PR estar
+   entre os mais recentes do repositório. Se a consulta falhar, cai para o `gh pr list` dos 100
+   mais recentes.
+
+| Janela | Intervalo |
+|---|---|
+| ativa | `MonitorIntervalMinutes` (padrão 5) |
+| em segundo plano | o triplo |
+| minimizada | pausado; ao voltar, se o intervalo já passou, confere na hora |
+
+O ciclo não começa com uma operação do app em andamento, e pull e "atualizar a partir da base"
+esperam o fetch do monitoramento terminar — dois fetches no mesmo repositório disputam o lock das
+refs. Um `git pull` seu, no terminal, bem na hora do fetch ainda pode esbarrar nele.
+
+Sem `gh`, ou sem autenticação, a parte git continua; o problema aparece uma vez no rodapé
+("Monitoramento: …"), não a cada ciclo, e a coluna PR fica como estava.
+
+**Avisos.** O app guarda o último estado visto de cada PR em
+`~/Library/Application Support/Hypertree/pull-requests.json` e só avisa na **transição**:
+
+- checks passaram a falhar ou a passar;
+- review aprovado ou pedindo mudanças;
+- PR mergeado, fechado ou reaberto;
+- conflito com a base apareceu, ou a base andou.
+
+Cada transição vira uma notificação do macOS (acima de três PRs de uma vez, uma só), uma frase no
+rodapé e o sino na linha, com a lista no tooltip. O sino fica até **Marcar como visto** ou abrir o
+PR no navegador — e sobrevive a fechar o app. Como o estado fica gravado, o aviso não se repete ao
+reabrir; o que mudou com o app fechado é avisado uma vez, no primeiro carregamento. PR visto pela
+primeira vez não gera aviso. Enquanto o GitHub responde `UNKNOWN` na mergeabilidade (ele calcula
+sob demanda), vale o último valor conhecido, para o conflito não "sumir e voltar".
+
+A notificação sai por `display notification` do AppleScript, então o macOS a atribui ao Editor de
+Script — é o que dá sem assinar o app.
+
+Em `settings.json`:
+
+| Chave | Padrão | |
+|---|---|---|
+| `MonitorIntervalMinutes` | `5` | `0` desliga o monitoramento |
+| `NotifyPullRequestChanges` | `true` | `false` mantém o sino e o rodapé, sem notificação |
 
 ## Como os dados são obtidos
 
 - **Worktrees**: `git -C <repo> worktree list --porcelain`
-- **PRs**: `gh pr list --state all --limit 200 --json number,headRefName,state,title,url,isDraft`,
+- **PRs**: `gh api graphql` com um `pullRequests(headRefName: …)` por branch de worktree (ver
+  [Monitoramento](#monitoramento)); se falhar, `gh pr list --state all --limit 100 --json …`,
   casando `headRefName` com a branch do worktree. Havendo mais de um PR para a mesma branch,
   o app prefere o aberto; depois o merged; depois o fechado.
 - **Terminal**: `osascript` com `tell application id "com.googlecode.iterm2"` → `create window with
@@ -276,6 +335,8 @@ hypertree/
     ├── WorktreeCreator.cs      criação de worktree (branch nova / PR) e cópia do .worktreeinclude
     ├── GitHubService.cs        leitura dos PRs via gh
     ├── RepositoryWatcher.cs    observa o git dir e avisa o que precisa ser relido
+    ├── PullRequestMemory.cs    último estado visto de cada PR e as transições
+    ├── Notifier.cs             notificação do macOS via osascript
     ├── TerminalLauncher.cs     AppleScript p/ iTerm2 (fallback Terminal.app) + open
     ├── ClaudeSessions.cs       detecta sessão do Claude Code para o "Retomar"
     ├── ProcessRunner.cs        execução de processos com timeout

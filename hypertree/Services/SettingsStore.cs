@@ -13,20 +13,32 @@ public sealed class Settings
 
     /// <summary>Marca, no diálogo de criação, o checkbox de abrir o terminal no worktree novo.</summary>
     public bool OpenTerminalAfterCreate { get; set; } = true;
+
+    /// <summary>
+    /// De quantos em quantos minutos o app faz fetch e relê os PRs no GitHub com a janela
+    /// ativa. Em segundo plano o intervalo triplica; minimizado, pausa. 0 desliga.
+    /// </summary>
+    public int MonitorIntervalMinutes { get; set; } = 5;
+
+    /// <summary>Notificação do macOS quando um PR muda (checks, review, merge, conflito).</summary>
+    public bool NotifyPullRequestChanges { get; set; } = true;
 }
 
 public static class SettingsStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    private static string FilePath
+    /// <summary>~/Library/Application Support/Hypertree — preferências e o que mais o app guarda.</summary>
+    public static string DataDirectory
     {
         get
         {
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            return Path.Combine(home, "Library", "Application Support", "Hypertree", "settings.json");
+            return Path.Combine(home, "Library", "Application Support", "Hypertree");
         }
     }
+
+    private static string FilePath => Path.Combine(DataDirectory, "settings.json");
 
     public static Settings Load()
     {

@@ -111,12 +111,19 @@ public sealed class PullRequestHead
     [JsonPropertyName("isCrossRepository")] public bool IsCrossRepository { get; set; }
 }
 
+/// <param name="Failed">
+/// A consulta não trouxe resposta (sem gh, sem autenticação, rede). Diferente de "não há PRs":
+/// quem já tem PRs na tela não deve apagá-los por causa disso.
+/// </param>
 public sealed record PullRequestLookup(
     IReadOnlyDictionary<string, PullRequestInfo> ByBranch,
-    string? Warning)
+    string? Warning,
+    bool Failed = false)
 {
     public static PullRequestLookup Empty(string? warning = null) =>
         new(new Dictionary<string, PullRequestInfo>(StringComparer.OrdinalIgnoreCase), warning);
+
+    public static PullRequestLookup Failure(string warning) => Empty(warning) with { Failed = true };
 }
 
 public static class GitHubService
@@ -128,13 +135,37 @@ public static class GitHubService
 
     private const string BasicFields = "number,headRefName,baseRefName,state,title,url,isDraft";
 
+    /// <summary>Branches por consulta GraphQL — folga grande no limite de nós do GitHub.</summary>
+    private const int BranchesPerQuery = 40;
+
+    private const string PullRequestFragment = """
+        fragment F on PullRequest {
+          number headRefName baseRefName state title url isDraft mergeable mergeStateStatus reviewDecision
+          commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
+            __typename
+            ... on CheckRun { name status conclusion }
+            ... on StatusContext { context state }
+          } } } } } }
+        }
+        """;
+
+    /// <summary>
+    /// PRs das <paramref name="branches"/> (as dos worktrees). Primeiro numa consulta GraphQL
+    /// só, com um alias por branch — não depende de o PR estar entre os 100 mais recentes do
+    /// repositório. Se ela falhar, cai para o `gh pr list` dos 100 mais recentes.
+    /// </summary>
     public static async Task<PullRequestLookup> LoadPullRequestsAsync(
         string repositoryPath,
+        IReadOnlyCollection<string> branches,
         CancellationToken cancellationToken = default)
     {
         var gh = ExecutableLocator.Find("gh");
         if (gh is null)
-            return PullRequestLookup.Empty("GitHub CLI (gh) não encontrado — a coluna PR fica vazia. Instale com: brew install gh");
+            return PullRequestLookup.Failure("GitHub CLI (gh) não encontrado — a coluna PR fica vazia. Instale com: brew install gh");
+
+        if (branches.Count > 0
+            && await TryLoadByBranchAsync(gh, repositoryPath, branches, cancellationToken).ConfigureAwait(false) is { } found)
+            return new PullRequestLookup(found, null);
 
         // Campos como mergeStateStatus e statusCheckRollup podem não existir em versões
         // antigas do gh; se a consulta rica falhar, caímos para o conjunto básico.
@@ -148,10 +179,10 @@ public static class GitHubService
         }
 
         if (result is null)
-            return PullRequestLookup.Empty("gh pr list não respondeu a tempo.");
+            return PullRequestLookup.Failure("gh pr list não respondeu a tempo.");
 
         if (!result.Success)
-            return PullRequestLookup.Empty($"gh pr list falhou: {result.FirstErrorLine}");
+            return PullRequestLookup.Failure($"gh pr list falhou: {result.FirstErrorLine}");
 
         List<PullRequestInfo>? pullRequests;
         try
@@ -160,27 +191,139 @@ public static class GitHubService
         }
         catch (JsonException exception)
         {
-            return PullRequestLookup.Empty($"Não consegui ler a resposta do gh: {exception.Message}");
+            return PullRequestLookup.Failure($"Não consegui ler a resposta do gh: {exception.Message}");
         }
 
         if (pullRequests is null || pullRequests.Count == 0)
             return PullRequestLookup.Empty(degraded);
 
         var byBranch = new Dictionary<string, PullRequestInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pullRequest in pullRequests) Keep(byBranch, pullRequest);
 
-        foreach (var pullRequest in pullRequests)
+        return new PullRequestLookup(byBranch, degraded);
+    }
+
+    /// <summary>Havendo mais de um PR para a branch, fica o aberto; depois o merged; depois o mais novo.</summary>
+    private static void Keep(Dictionary<string, PullRequestInfo> byBranch, PullRequestInfo pullRequest)
+    {
+        if (string.IsNullOrEmpty(pullRequest.HeadRefName)) return;
+
+        if (!byBranch.TryGetValue(pullRequest.HeadRefName, out var existing)
+            || pullRequest.Relevance > existing.Relevance
+            || (pullRequest.Relevance == existing.Relevance && pullRequest.Number > existing.Number))
         {
-            if (string.IsNullOrEmpty(pullRequest.HeadRefName)) continue;
+            byBranch[pullRequest.HeadRefName] = pullRequest;
+        }
+    }
 
-            if (!byBranch.TryGetValue(pullRequest.HeadRefName, out var existing)
-                || pullRequest.Relevance > existing.Relevance
-                || (pullRequest.Relevance == existing.Relevance && pullRequest.Number > existing.Number))
+    /// <summary>
+    /// `gh api graphql` com um alias por branch; os nomes vão como variáveis, sem escapar nada
+    /// na consulta. {owner} e {repo} o próprio gh resolve pelo remoto do diretório. Custa 1
+    /// ponto do rate limit por consulta. Null em qualquer falha — quem chama cai para o pr list.
+    /// </summary>
+    private static async Task<Dictionary<string, PullRequestInfo>?> TryLoadByBranchAsync(
+        string gh,
+        string repositoryPath,
+        IReadOnlyCollection<string> branches,
+        CancellationToken cancellationToken)
+    {
+        var byBranch = new Dictionary<string, PullRequestInfo>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var chunk in branches.Distinct(StringComparer.Ordinal).Chunk(BranchesPerQuery))
+        {
+            var arguments = new List<string>
             {
-                byBranch[pullRequest.HeadRefName] = pullRequest;
+                "api", "graphql",
+                // mergeStateStatus ainda pede o preview na API; o gh pr list manda o mesmo cabeçalho.
+                "-H", "Accept: application/vnd.github.merge-info-preview+json",
+                "-F", "owner={owner}", "-F", "name={repo}",
+            };
+
+            var variables = new List<string> { "$owner: String!", "$name: String!" };
+            var fields = new List<string>();
+
+            for (var index = 0; index < chunk.Length; index++)
+            {
+                arguments.Add("-f");
+                arguments.Add($"b{index}={chunk[index]}");
+                variables.Add($"$b{index}: String!");
+                fields.Add($"b{index}: pullRequests(headRefName: $b{index}, first: 5, orderBy: {{field: CREATED_AT, direction: DESC}}) {{ nodes {{ ...F }} }}");
+            }
+
+            arguments.Add("-f");
+            arguments.Add($"query=query({string.Join(", ", variables)}) {{ repository(owner: $owner, name: $name) {{ {string.Join(" ", fields)} }} }}\n{PullRequestFragment}");
+
+            ProcessResult result;
+            try
+            {
+                result = await ProcessRunner.RunAsync(gh, arguments, repositoryPath, TimeSpan.FromSeconds(60), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                return null;
+            }
+
+            if (!result.Success) return null;
+
+            try
+            {
+                using var document = JsonDocument.Parse(result.StandardOutput);
+                if (!document.RootElement.TryGetProperty("data", out var data)
+                    || !data.TryGetProperty("repository", out var repository)
+                    || repository.ValueKind != JsonValueKind.Object)
+                    return null;
+
+                foreach (var alias in repository.EnumerateObject())
+                {
+                    if (!alias.Value.TryGetProperty("nodes", out var nodes) || nodes.ValueKind != JsonValueKind.Array) continue;
+                    foreach (var node in nodes.EnumerateArray())
+                    {
+                        if (ParseGraphNode(node) is { } pullRequest) Keep(byBranch, pullRequest);
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                return null;
             }
         }
 
-        return new PullRequestLookup(byBranch, degraded);
+        return byBranch;
+    }
+
+    /// <summary>
+    /// Nó de PR do GraphQL → o mesmo <see cref="PullRequestInfo"/> do pr list. Os checks vêm
+    /// de commits.last.statusCheckRollup.contexts: CheckRun (Actions) tem name/status/conclusion,
+    /// StatusContext (status API antiga) tem context/state — os nomes que o pr list já usa.
+    /// </summary>
+    internal static PullRequestInfo? ParseGraphNode(JsonElement node)
+    {
+        if (node.ValueKind != JsonValueKind.Object) return null;
+
+        var pullRequest = node.Deserialize<PullRequestInfo>(JsonOptions);
+        if (pullRequest is null) return null;
+
+        if (node.TryGetProperty("commits", out var commits)
+            && commits.TryGetProperty("nodes", out var commitNodes)
+            && commitNodes.ValueKind == JsonValueKind.Array
+            && commitNodes.GetArrayLength() > 0
+            && commitNodes[0].TryGetProperty("commit", out var commit)
+            && commit.TryGetProperty("statusCheckRollup", out var rollup)
+            && rollup.ValueKind == JsonValueKind.Object
+            && rollup.TryGetProperty("contexts", out var contexts)
+            && contexts.TryGetProperty("nodes", out var contextNodes)
+            && contextNodes.ValueKind == JsonValueKind.Array)
+        {
+            pullRequest.StatusCheckRollup = contextNodes
+                .EnumerateArray()
+                .Where(context => context.ValueKind == JsonValueKind.Object)
+                .Select(context => context.Deserialize<CheckEntry>(JsonOptions))
+                .OfType<CheckEntry>()
+                .ToList();
+        }
+
+        return pullRequest;
     }
 
     /// <summary>Busca um PR pelo número. Lança com a mensagem do gh quando não acha.</summary>
