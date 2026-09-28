@@ -418,6 +418,31 @@ public static class GitService
     }
 
     /// <summary>
+    /// Arquivos e pastas ignorados pelo .gitignore dentro do worktree — o que o
+    /// `git worktree remove` apaga junto sem reclamar. Com --ignored=matching e -uall, cada
+    /// pasta ignorada vem pelo próprio nome (src/bin/), não engolida por um pai não rastreado.
+    /// Null se o git falhou: quem chama não pode tratar "não sei" como "não há".
+    /// </summary>
+    public static async Task<IReadOnlyList<string>?> ListIgnoredAsync(
+        string worktreePath,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await RunAsync(
+            worktreePath,
+            new[] { "status", "--porcelain", "--ignored=matching", "--untracked-files=all", "-z" },
+            TimeSpan.FromSeconds(30),
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Success) return null;
+
+        return result.StandardOutput
+            .Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Where(entry => entry.StartsWith("!! ", StringComparison.Ordinal))
+            .Select(entry => entry[3..])
+            .ToList();
+    }
+
+    /// <summary>
     /// Fetch periódico do monitoramento: todos os remotos, com --prune para que a branch
     /// apagada no remoto apareça como upstream "gone". Sem tocar no FETCH_HEAD de quem
     /// estiver usando o repositório, sem gc automático no meio e sem prompt de credencial —

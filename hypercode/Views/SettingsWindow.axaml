@@ -49,6 +49,24 @@
                  Text="Se o usuário do gh não estiver entre os assignees, o app o acrescenta (gh issue edit --add-assignee @me); quem já estava continua. É a única opção que escreve no GitHub. Se o GitHub recusar, o worktree é criado do mesmo jeito e o motivo aparece no rodapé." />
     </StackPanel>
 
+    <StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <!-- IsChecked só de ida: ligar passa pelo aviso no Click, que é quem grava. -->
+        <CheckBox Name="AutoCleanupBox" IsChecked="{Binding AutoCleanup, Mode=OneWay}"
+                  Click="OnAutoCleanupClick" Content="Limpeza automática dos concluídos" />
+        <Button Content="ⓘ" Padding="6,0" VerticalAlignment="Center" Click="OnAutoCleanupInfoClick"
+                ToolTip.Tip="Reler o aviso: o que o git apaga junto e o que fica de fora" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" IsEnabled="{Binding AutoCleanup}">
+        <TextBlock Text="Remover" VerticalAlignment="Center" />
+        <NumericUpDown Value="{Binding AutoCleanupGraceMinutes, Mode=TwoWay}" Minimum="1" Maximum="1440"
+                       Increment="1" FormatString="0" Width="120" />
+        <TextBlock Text="min depois de concluído" VerticalAlignment="Center" />
+      </StackPanel>
+      <TextBlock Classes="help"
+                 Text="Sem confirmação: o monitor remove os concluídos passada a carência, e o botão do rodapé vira Limpeza automática, com o histórico no tooltip. Pula os travados, os que têm um terminal aberto dentro e os que têm arquivo ignorado fora de bin/ e obj/ (.env, appsettings.Development.json) — o git os apagaria junto. Minimizado, pausa." />
+    </StackPanel>
+
     <Button Content="Fechar" Click="OnClose" HorizontalAlignment="Right" />
   </StackPanel>
 </Window>

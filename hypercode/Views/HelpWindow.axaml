@@ -90,6 +90,10 @@
         <TextBlock Classes="p" Text="Branch remota apagada sem estar na base fica de fora: pode ter sido apagada sem merge. Squash e rebase merge reescrevem os commits, então o HEAD não aparece na base — nesses casos a limpeza depende de o PR ser encontrado." />
         <TextBlock Classes="p" Text="Antes de remover qualquer coisa, o app lista os candidatos e pede confirmação." />
 
+        <TextBlock Classes="h2" Text="Limpeza automática" />
+        <TextBlock Classes="p" Text="Opção das configurações, desligada por padrão. Ligada, o botão vira Limpeza automática e fica desabilitado: o monitor remove sozinho, pelo mesmo critério e sem --force, os concluídos que passaram da carência (10 min por padrão). O rodapé informa cada remoção e o tooltip do botão guarda o histórico da sessão." />
+        <TextBlock Classes="p" Text="O git worktree remove apaga junto os arquivos ignorados pelo .gitignore — .env, appsettings.Development.json, banco local. Sem um humano lendo a lista, a limpeza automática pula o worktree que tem arquivo ignorado fora de bin/ e obj/, o que tem um terminal ou processo aberto dentro (lsof) e o travado, inclusive por ferramenta — esses ficam listados no tooltip, para o menu Apagar o worktree…. Com a janela minimizada, pausa." />
+
         <TextBlock Classes="h2" Text="Abrir no terminal" />
         <TextBlock Classes="p" Text="Duplo-clique ou Enter abre uma janela nova do iTerm2 na pasta do worktree e roda o Comando das configurações, ⌘, (por padrão claude). Sem iTerm2 instalado, usa o Terminal.app. Na primeira vez o macOS pede permissão de automação." />
 
