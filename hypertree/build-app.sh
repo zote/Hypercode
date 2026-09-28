@@ -41,6 +41,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key>     <string>$APP_NAME</string>
   <key>CFBundleIdentifier</key>      <string>$BUNDLE_ID</string>
   <key>CFBundleExecutable</key>      <string>$APP_NAME</string>
+  <key>CFBundleIconFile</key>        <string>icon</string>
   <key>CFBundlePackageType</key>     <string>APPL</string>
   <key>CFBundleShortVersionString</key> <string>$VERSION</string>
   <key>CFBundleVersion</key>         <string>$VERSION</string>
@@ -54,6 +55,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 chmod +x "$APP/Contents/MacOS/$APP_NAME"
+
+# Gerado a partir de Assets/icon.svg por Assets/make-icon.sh.
+cp Assets/icon.icns "$APP/Contents/Resources/icon.icns"
 
 # Assinatura ad-hoc: sem isso o macOS (Apple Silicon) mata o app ao abrir.
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || \
