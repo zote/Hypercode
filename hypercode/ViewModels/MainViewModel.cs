@@ -1495,8 +1495,16 @@ public sealed class MainViewModel : ObservableObject
         if (worktree.IsToolLock)
         {
             lines.Add("    tipo:    de ferramenta");
-            lines.Add($"    dono:    {worktree.LockOwner}");
-            lines.Add($"    registro: {worktree.LockReason}");
+            if (LockRecord.Describe(worktree.LockReason, DateTimeOffset.Now, TimeZoneInfo.Local) is { } record)
+            {
+                foreach (var (label, value) in record)
+                    lines.Add($"    {label + ":",-8} {value}");
+            }
+            else
+            {
+                lines.Add($"    dono:    {worktree.LockOwner}");
+                lines.Add($"    registro: {worktree.LockReason}");
+            }
             lines.Add("");
             lines.Add($"É bookkeeping do {worktree.LockOwner}, não um pedido seu: destravar pode fazer a ferramenta perder o controle deste worktree.");
         }
