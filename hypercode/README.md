@@ -22,12 +22,13 @@ duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `c
 - **Novo worktree…** (`⌘N`) cria um worktree com branch nova, a partir de um PR ou a partir de uma issue. Detalhes abaixo.
 - **Configurações…** (`⌘,`, no menu do app, ou o botão **⚙** ao lado do **?**) reúne as
   preferências: o **Comando** que o duplo-clique roda — troque `claude` por outra coisa
-  (`claude --resume`, `zsh`, etc.) —, o perfil do monitoramento e a atribuição de issue. Cada
+  (`claude --resume`, `zsh`, etc.) —, o perfil do monitoramento, a atribuição de issue e a
+  limpeza automática. Cada
   campo vale na hora e fica salvo; não há Salvar.
 - O botão **?** abre a legenda das etiquetas, da coluna PR e das regras da limpeza.
   Parar o mouse sobre a etiqueta de uma linha explica só as dela.
 - **Limpar concluídos** remove os worktrees com PR `merged` ou `closed` e poda os órfãos,
-  sempre com confirmação. Detalhes abaixo.
+  sempre com confirmação — ou, com a **limpeza automática** ligada, sozinho. Detalhes abaixo.
 - A lista **se atualiza sozinha**: worktree criado, apagado ou travado fora do app, troca de
   branch, commit, fetch, push e rebase aparecem em menos de um segundo. **Atualizar** (`⌘R`)
   relê tudo, inclusive os PRs. Detalhes abaixo.
@@ -216,6 +217,31 @@ A branch local não é tocada — só o worktree. Os órfãos são resolvidos co
 
 O app lista os candidatos com o motivo de cada um e pede confirmação antes de remover.
 
+### Limpeza automática
+
+Opção das configurações (`⌘,`), desligada por padrão. Ligada, o botão passa a se chamar
+**Limpeza automática** e fica desabilitado: a cada tique do monitoramento (10 s) o app remove
+sozinho os concluídos — mesmo critério, mesmo `git worktree remove` sem `--force` — que estão
+concluídos há pelo menos a **carência** (10 min por padrão, configurável). O rodapé informa
+cada remoção e o tooltip do botão mostra quem está na carência, quem ficou para a mão e o
+histórico do que saiu na sessão.
+
+O `git worktree remove` sem `--force` protege arquivo rastreado modificado e não rastreado, mas
+**apaga junto o que o `.gitignore` ignora** — `.env`, `appsettings.Development.json`, banco local,
+certificado de dev. Por isso ligar a opção mostra um aviso com esse risco e só grava depois do
+**Ativar mesmo assim** (o ⓘ ao lado relê o aviso). E, sem um humano lendo a lista, a automática
+pula:
+
+- worktree com arquivo ignorado fora de `bin/` e `obj/` (`git status --ignored=matching`);
+- worktree com processo aberto dentro da pasta — o iTerm2 do duplo-clique, o `claude` — pelo
+  `cwd` dos processos (`lsof -d cwd`); tenta de novo a cada minuto;
+- worktree travado, **inclusive por ferramenta**: o lock do supacode pode querer dizer que ele
+  ainda está usando. Só a limpeza manual destrava;
+- tudo, se o `lsof` ou o `git status` falharem — na dúvida, não remove.
+
+Os pulados ficam para o menu **Apagar o worktree…**. A remoção é definitiva (não passa pela
+Lixeira), a carência recomeça quando o app abre e, com a janela minimizada, nada é removido.
+
 ## Novo worktree
 
 O diálogo tem três modos:
@@ -401,6 +427,7 @@ hypercode/
     ├── GitHubService.cs        leitura dos PRs via gh
     ├── RepositoryWatcher.cs    observa o git dir e avisa o que precisa ser relido
     ├── PullRequestMemory.cs    último estado visto de cada PR e as transições
+    ├── AutoCleanup.cs          carência, pendências e histórico da limpeza automática; lsof
     ├── Notifier.cs             notificação do macOS via osascript
     ├── TerminalLauncher.cs     AppleScript p/ iTerm2 (fallback Terminal.app) + open
     ├── ClaudeSessions.cs       detecta sessão do Claude Code para o "Retomar"

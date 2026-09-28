@@ -36,6 +36,9 @@ public sealed class MainViewModel : ObservableObject
     private string? _monitorProblem;
     private string? _monitorNotice;
 
+    private readonly AutoCleanupTracker _autoCleanup = new();
+    private bool _isAutoCleaning;
+
     /// <summary>
     /// O fetch do monitoramento em andamento. Pull e atualização a partir da base esperam por
     /// ele: dois fetches no mesmo repositório disputam o lock das refs remotas.
@@ -84,6 +87,65 @@ public sealed class MainViewModel : ObservableObject
             RaisePropertyChanged();
         }
     }
+
+    /// <summary>
+    /// Limpeza automática (tela de configurações). Ligar é só gravar: o aviso do que se aceita
+    /// fica com a tela, que só chama isto depois do "Ativar mesmo assim".
+    /// </summary>
+    public bool AutoCleanup
+    {
+        get => _settings.AutoCleanup;
+        set
+        {
+            if (_settings.AutoCleanup == value) return;
+            _settings.AutoCleanup = value;
+            PersistSettings();
+            _autoCleanup.Reset();
+            RaisePropertyChanged();
+            RaiseCleanupState();
+
+            if (value) _ = AutoCleanupAsync();
+        }
+    }
+
+    /// <summary>Carência em minutos, como decimal? do NumericUpDown. Vazio volta ao padrão.</summary>
+    public decimal? AutoCleanupGraceMinutes
+    {
+        get => (decimal)AutoCleanupGrace.TotalMinutes;
+        set
+        {
+            var minutes = value is { } number ? (int)Math.Clamp(number, 1, 1440) : AutoCleanupTracker.DefaultGraceMinutes;
+            if (_settings.AutoCleanupGraceMinutes == minutes) return;
+            _settings.AutoCleanupGraceMinutes = minutes;
+            PersistSettings();
+            RaisePropertyChanged();
+            RaiseCleanupState();
+        }
+    }
+
+    private TimeSpan AutoCleanupGrace => TimeSpan.FromMinutes(
+        _settings.AutoCleanupGraceMinutes is >= 1 and <= 1440 ? _settings.AutoCleanupGraceMinutes : AutoCleanupTracker.DefaultGraceMinutes);
+
+    public const string AutoCleanupWarningTitle = "Ativar a limpeza automática?";
+
+    /// <summary>
+    /// O aviso de quando se liga a opção, relido pelo ⓘ da tela. Precisa nomear o que é apagado
+    /// de concreto: "arquivos ignorados" sozinho não diz nada a quem nunca pensou nisso.
+    /// </summary>
+    public string AutoCleanupWarning =>
+        "Worktrees concluídos — PR mergeado ou fechado, branch remota apagada já contida na base, "
+        + $"órfãos — passam a ser removidos sozinhos, sem confirmação, {AutoCleanupGrace.TotalMinutes:0} min depois de concluídos.\n\n"
+        + "O git recusa remover worktree com alteração não commitada, e isso continua valendo. Mas arquivo "
+        + "ignorado pelo .gitignore não conta como alteração: o git apaga junto, sem aviso — .env, "
+        + "appsettings.Development.json, banco local, certificado de desenvolvimento.\n\n"
+        + "Por isso a limpeza automática só remove worktree cujos arquivos ignorados estão todos em bin/ "
+        + "ou obj/. Ficam para você, pelo menu Apagar o worktree…:\n"
+        + "  • os que têm outro arquivo ignorado;\n"
+        + "  • os que têm um terminal ou outro processo aberto dentro da pasta;\n"
+        + "  • os travados, inclusive por ferramenta (supacode) — ela pode estar usando o worktree.\n"
+        + "O botão Limpeza automática lista quais ficaram e por quê.\n\n"
+        + "A remoção é definitiva: não passa pela Lixeira, e o que houver em bin/ e obj/ vai junto. "
+        + "Com a janela minimizada, nada é removido.";
 
     /// <summary>
     /// Texto do filtro. Cada palavra precisa aparecer no nome, na branch, no número
@@ -297,13 +359,73 @@ public sealed class MainViewModel : ObservableObject
     public bool HasCompleted => CompletedCount > 0;
 
     public string CleanupButtonLabel =>
-        CompletedCount > 0 ? $"Limpar concluídos ({CompletedCount})" : "Limpar concluídos";
+        AutoCleanup ? "Limpeza automática"
+        : CompletedCount > 0 ? $"Limpar concluídos ({CompletedCount})" : "Limpar concluídos";
+
+    /// <summary>Com a limpeza automática ligada, o botão só informa: quem limpa é o monitor.</summary>
+    public bool CanCleanupManually => HasCompleted && !AutoCleanup;
+
+    /// <summary>
+    /// Com a automática, o que ela está esperando, o que deixou para a mão e o que já removeu —
+    /// sem o diálogo, é aqui que o usuário vê o que aconteceu.
+    /// </summary>
+    public string CleanupToolTip
+    {
+        get
+        {
+            if (!AutoCleanup)
+                return "Remove os worktrees com PR merged ou closed e poda os órfãos. Pede confirmação antes.";
+
+            var now = DateTimeOffset.UtcNow;
+            var lines = new List<string>
+            {
+                $"Limpeza automática ligada (configurações, ⌘,): os concluídos saem sozinhos {AutoCleanupGrace.TotalMinutes:0} min depois de concluídos.",
+            };
+
+            var pending = _autoCleanup.Pending;
+            var waiting = Worktrees
+                .Where(row => row.IsCompleted && !row.Worktree.IsLocked && !pending.Any(item => item.Path == row.FullPath))
+                .Select(row => (row.Name, Remaining: _autoCleanup.GraceRemaining(row.FullPath, AutoCleanupGrace, now)))
+                .Where(item => item.Remaining > TimeSpan.Zero)
+                .ToList();
+
+            if (waiting.Count > 0)
+            {
+                lines.Add(string.Empty);
+                lines.Add("Na carência:");
+                lines.AddRange(waiting.Select(item => $"  {item.Name} — sai em {Math.Ceiling(item.Remaining.TotalMinutes):0} min"));
+            }
+
+            if (pending.Count > 0)
+            {
+                lines.Add(string.Empty);
+                lines.Add("Ficaram para a mão (menu Apagar o worktree…):");
+                lines.AddRange(pending.Select(item => $"  {item.Name} — {item.Reason}"));
+            }
+
+            lines.Add(string.Empty);
+            if (_autoCleanup.History.Count == 0)
+            {
+                lines.Add("Nada removido nesta sessão.");
+            }
+            else
+            {
+                lines.Add("Removidos:");
+                lines.AddRange(_autoCleanup.History.Select(entry =>
+                    $"  {entry.At.ToLocalTime():dd/MM HH:mm}  {entry.Name} — {entry.Reason}"));
+            }
+
+            return string.Join("\n", lines);
+        }
+    }
 
     private void RaiseCleanupState()
     {
         RaisePropertyChanged(nameof(CompletedCount));
         RaisePropertyChanged(nameof(HasCompleted));
         RaisePropertyChanged(nameof(CleanupButtonLabel));
+        RaisePropertyChanged(nameof(CanCleanupManually));
+        RaisePropertyChanged(nameof(CleanupToolTip));
     }
 
     public IReadOnlyList<WorktreeRow> CleanupCandidates()
@@ -537,7 +659,11 @@ public sealed class MainViewModel : ObservableObject
                 _settings.RepositoryPath = root ?? path;
                 RepositoryPath = root ?? path;
                 PersistSettings();
-                if (_loadedRepositoryPath != path) _scheduler.Reset();
+                if (_loadedRepositoryPath != path)
+                {
+                    _scheduler.Reset();
+                    _autoCleanup.Reset();
+                }
                 _loadedRepositoryPath = path;
 
                 await WatchAsync(path, cancellationToken).ConfigureAwait(true);
@@ -769,7 +895,10 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(true))
+            {
                 await CheckRemoteAsync().ConfigureAwait(true);
+                await AutoCleanupAsync().ConfigureAwait(true);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -867,6 +996,153 @@ public sealed class MainViewModel : ObservableObject
             ReportMonitorProblem(problems.Count == 0 ? null : string.Join(" · ", problems));
             UpdateMonitorNotice();
         }
+    }
+
+    /// <summary>
+    /// Um passo da limpeza automática, no tique do monitoramento. Remove os concluídos que
+    /// passaram da carência, como o Limpar concluídos faria — sem --force, órfãos com um prune —,
+    /// mas com as salvaguardas de quem não tem um humano lendo a lista: pula o travado (nem o
+    /// lock de ferramenta é destravado), o que tem processo com a pasta aberta e o que tem
+    /// arquivo ignorado fora de bin/ e obj/, que o git apagaria junto. Na dúvida (lsof ou git
+    /// falhou), não remove. Com a janela minimizada ou uma operação do app em andamento, espera.
+    /// </summary>
+    private async Task AutoCleanupAsync()
+    {
+        if (!AutoCleanup || _isAutoCleaning || _isCheckingRemote || IsBusy || _scheduler.IsWindowMinimized) return;
+        if (_loadedRepositoryPath is not { } path) return;
+
+        // A remoção usa o repositório do campo; meio digitado outro caminho, não é hora.
+        if (!PathsEqual(ExpandHome(RepositoryPath.Trim()), path)) return;
+
+        var now = DateTimeOffset.UtcNow;
+        var completed = Worktrees.Where(row => row.IsCompleted).ToList();
+        _autoCleanup.Observe(completed.Select(row => row.FullPath).ToList(), now);
+
+        var announcements = new List<string>();
+
+        void Skip(WorktreeRow row, string reason, TimeSpan? retryAfter)
+        {
+            if (_autoCleanup.Skip(row.FullPath, row.Name, reason, retryAfter, now))
+                announcements.Add($"{row.Name} mantido — {reason}");
+        }
+
+        foreach (var row in completed.Where(row => row.Worktree.IsLocked))
+            Skip(row, $"{row.Worktree.LockDescription ?? "travado"}: a ferramenta pode estar usando", retryAfter: null);
+
+        var due = completed
+            .Where(row => !row.Worktree.IsLocked && _autoCleanup.IsDue(row.FullPath, AutoCleanupGrace, now))
+            .ToList();
+
+        if (due.Count == 0)
+        {
+            Announce(announcements, removed: Array.Empty<string>());
+            return;
+        }
+
+        _isAutoCleaning = true;
+        var targets = new List<WorktreeRow>();
+
+        try
+        {
+            IReadOnlyList<string>? processDirectories = null;
+            if (due.Any(row => !row.Worktree.IsPrunable))
+                processDirectories = await AutoCleanupTracker.ListProcessDirectoriesAsync().ConfigureAwait(true);
+
+            foreach (var row in due)
+            {
+                // Órfão não tem pasta: nada em uso, nada ignorado a perder.
+                if (row.Worktree.IsPrunable)
+                {
+                    targets.Add(row);
+                    continue;
+                }
+
+                if (processDirectories is null)
+                {
+                    Skip(row, "não consegui conferir, pelo lsof, se a pasta está em uso", AutoCleanupTracker.InUseRetry);
+                    continue;
+                }
+
+                if (AutoCleanupTracker.IsInUse(row.FullPath, processDirectories))
+                {
+                    Skip(row, "em uso: há terminal ou processo com a pasta aberta", AutoCleanupTracker.InUseRetry);
+                    continue;
+                }
+
+                IReadOnlyList<string>? ignored;
+                try
+                {
+                    ignored = await GitService.ListIgnoredAsync(row.FullPath).ConfigureAwait(true);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    ignored = null;
+                }
+
+                if (ignored is null)
+                {
+                    Skip(row, "não consegui listar os arquivos ignorados", AutoCleanupTracker.BlockedRetry);
+                    continue;
+                }
+
+                var kept = ignored.Where(entry => !AutoCleanupTracker.IsDisposableIgnored(entry)).ToList();
+                if (kept.Count > 0)
+                {
+                    var sample = string.Join(", ", kept.Take(3)) + (kept.Count > 3 ? $" e mais {kept.Count - 3}" : string.Empty);
+                    Skip(row, $"arquivo ignorado que o git apagaria junto: {sample}", AutoCleanupTracker.BlockedRetry);
+                    continue;
+                }
+
+                targets.Add(row);
+            }
+
+            // O usuário começou algo enquanto o lsof e o git status rodavam: fica para o próximo tique.
+            if (targets.Count == 0 || IsBusy || !AutoCleanup)
+            {
+                Announce(announcements, removed: Array.Empty<string>());
+                return;
+            }
+
+            var reasons = targets.ToDictionary(row => row.Name, row => (row.FullPath, row.CompletionReason));
+            var outcome = await RemoveManyAsync(targets, "Limpeza automática…", unlockFirst: false).ConfigureAwait(true);
+            var at = DateTimeOffset.UtcNow;
+
+            var removed = outcome.RemovedNames.Concat(outcome.OrphanNames).ToList();
+            foreach (var name in removed)
+                if (reasons.TryGetValue(name, out var item)) _autoCleanup.RecordRemoval(item.FullPath, name, item.CompletionReason, at);
+
+            // O git recusou (alteração não commitada, normalmente): fica pendente com o motivo dele.
+            foreach (var failure in outcome.Failed)
+            {
+                var separator = failure.IndexOf(": ", StringComparison.Ordinal);
+                var name = separator > 0 ? failure[..separator] : failure;
+                if (!reasons.TryGetValue(name, out var item)) continue;
+                if (_autoCleanup.Skip(item.FullPath, name, $"o git recusou — {failure[(separator + 2)..]}", AutoCleanupTracker.BlockedRetry, at))
+                    announcements.Add($"{name} mantido — o git recusou");
+            }
+
+            Announce(announcements, removed.Select(name => reasons.TryGetValue(name, out var item) ? $"{name} ({item.CompletionReason})" : name).ToList());
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"Limpeza automática: {exception.Message}";
+        }
+        finally
+        {
+            _isAutoCleaning = false;
+            RaiseCleanupState();
+        }
+    }
+
+    /// <summary>Cada remoção vai para o rodapé; o que ficou, só quando o motivo é novo.</summary>
+    private void Announce(IReadOnlyList<string> kept, IReadOnlyList<string> removed)
+    {
+        var parts = new List<string>();
+        if (removed.Count > 0) parts.Add("removido(s) " + string.Join(", ", removed));
+        parts.AddRange(kept);
+
+        if (parts.Count > 0) StatusMessage = "Limpeza automática: " + string.Join(" · ", parts);
+        RaisePropertyChanged(nameof(CleanupToolTip));
     }
 
     /// <summary>

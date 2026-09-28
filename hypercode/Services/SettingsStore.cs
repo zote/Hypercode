@@ -36,6 +36,15 @@ public sealed class Settings
     /// não estiver entre os assignees. Desligada por padrão: é a única preferência que escreve no GitHub.
     /// </summary>
     public bool AssignIssueOnCreate { get; set; }
+
+    /// <summary>
+    /// Remove sozinho os worktrees concluídos, sem o diálogo do Limpar concluídos. Desligada por
+    /// padrão: ligar passa por um aviso do que o git apaga junto.
+    /// </summary>
+    public bool AutoCleanup { get; set; }
+
+    /// <summary>Quantos minutos um worktree precisa estar concluído antes de a limpeza automática removê-lo.</summary>
+    public int AutoCleanupGraceMinutes { get; set; } = AutoCleanupTracker.DefaultGraceMinutes;
 }
 
 public static class SettingsStore

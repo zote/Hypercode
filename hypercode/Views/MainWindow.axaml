@@ -96,7 +96,7 @@
       <!-- O ⌘, fica no item do menu do app: um HotKey aqui dispararia junto com ele. -->
       <Button Grid.Column="5" Content="⚙" Width="34" Margin="8,0,0,0" FontSize="16" Padding="0"
               HorizontalContentAlignment="Center"
-              Click="OnSettingsClick" ToolTip.Tip="Configurações: comando, monitoramento, atribuição de issue (⌘,)" />
+              Click="OnSettingsClick" ToolTip.Tip="Configurações: comando, monitoramento, atribuição de issue, limpeza automática (⌘,)" />
     </Grid>
 
     <!-- Filtro e criação -->
@@ -208,8 +208,8 @@
                    Text="{Binding MonitorNotice}" IsVisible="{Binding HasMonitorNotice}"
                    ToolTip.Tip="A cota de consultas GraphQL do GitHub (5000/h, da conta inteira — outras ferramentas gastam dela também) passou de 60 %. Todas as cadências ficam mais longas até o reset ou até o consumo baixar." />
         <Button Grid.Column="3" Content="{Binding CleanupButtonLabel}" Margin="0,0,8,0"
-                Click="OnCleanupClick" IsEnabled="{Binding HasCompleted}"
-                ToolTip.Tip="Remove os worktrees com PR merged ou closed e poda os órfãos. Pede confirmação antes." />
+                Click="OnCleanupClick" IsEnabled="{Binding CanCleanupManually}"
+                ToolTip.Tip="{Binding CleanupToolTip}" ToolTip.ShowOnDisabled="True" />
         <Button Grid.Column="4" Content="Abrir no iTerm2" Click="OnOpenTerminalClick"
                 IsEnabled="{Binding SelectedWorktree, Converter={x:Static ObjectConverters.IsNotNull}}" />
       </Grid>
