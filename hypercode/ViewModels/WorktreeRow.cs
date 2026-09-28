@@ -300,6 +300,14 @@ public sealed class WorktreeRow : ObservableObject
     /// <summary>O principal e o bare não são removíveis com git worktree remove.</summary>
     public bool CanRemove => !Worktree.IsMain && !Worktree.IsBare;
 
+    /// <summary>
+    /// Só o vinculado aceita lock: o git recusa travar o principal. O órfão fica de fora
+    /// porque a trava só impediria o prune de limpar seus metadados.
+    /// </summary>
+    public bool CanLock => CanRemove && !Worktree.IsLocked && !Worktree.IsPrunable;
+
+    public bool CanUnlock => CanRemove && Worktree.IsLocked;
+
     /// <summary>Só dá para puxar numa branch que tem upstream — senão não há de onde puxar.</summary>
     public bool CanUpdateBranch => CanLaunch && Worktree.Branch is not null && _status is { IsKnown: true, HasUpstream: true };
 
@@ -361,7 +369,7 @@ public sealed class WorktreeRow : ObservableObject
             "travado — alguém rodou git worktree lock aqui"
             + (string.IsNullOrEmpty(Worktree.LockDescription) ? "" : $" (motivo: {Worktree.LockDescription})")
             + ". O git não o remove no prune e a limpeza do Hypercode também o ignora. "
-            + "Destrave com git worktree unlock.",
+            + "Destrave pelo menu, em Destravar o worktree….",
 
         "órfão" =>
             "órfão — o git marcou como prunable: o ponteiro aponta para uma pasta que não existe mais, "

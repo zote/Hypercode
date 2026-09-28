@@ -10,12 +10,22 @@ public partial class ConfirmWindow : Window
         InitializeComponent();
     }
 
-    public ConfirmWindow(string title, string headline, string body, string confirmLabel) : this()
+    /// <param name="cancelIsDefault">
+    /// Enter cancela em vez de confirmar — para ações em que o engano custa mais que o clique extra.
+    /// </param>
+    public ConfirmWindow(string title, string headline, string body, string confirmLabel, bool cancelIsDefault = false) : this()
     {
         Title = title;
         SetText("HeadlineText", headline);
         SetText("BodyText", body);
         SetText("ConfirmButton", confirmLabel);
+
+        if (cancelIsDefault)
+        {
+            ConfirmButton.IsDefault = false;
+            CancelButton.IsDefault = true;
+            Opened += (_, _) => CancelButton.Focus();
+        }
     }
 
     private void SetText(string controlName, string value)

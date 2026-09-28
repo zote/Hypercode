@@ -262,6 +262,27 @@ public static class GitService
             TimeSpan.FromMinutes(3),
             cancellationToken);
 
+    /// <summary>Trava um worktree com `git worktree lock`, gravando o motivo se houver um.</summary>
+    public static async Task<ProcessResult> LockWorktreeAsync(
+        string repositoryPath,
+        string worktreePath,
+        string? reason,
+        CancellationToken cancellationToken = default)
+    {
+        var git = ExecutableLocator.Find("git") ?? throw new GitNotFoundException();
+
+        var arguments = new List<string> { "-C", repositoryPath, "worktree", "lock" };
+        if (!string.IsNullOrWhiteSpace(reason)) arguments.AddRange(new[] { "--reason", reason.Trim() });
+        arguments.Add(worktreePath);
+
+        return await ProcessRunner.RunAsync(
+            git,
+            arguments,
+            repositoryPath,
+            TimeSpan.FromSeconds(30),
+            cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Destrava um worktree — o `remove` recusa enquanto houver lock.</summary>
     public static async Task<ProcessResult> UnlockWorktreeAsync(
         string repositoryPath,
@@ -558,7 +579,7 @@ public static class GitService
                     break;
                 case "locked":
                     locked = true;
-                    lockReason = value.Length == 0 ? null : value;
+                    lockReason = value.Length == 0 ? null : UnquoteC(value);
                     break;
                 case "prunable":
                     prunable = true;
@@ -574,4 +595,47 @@ public static class GitService
         reference.StartsWith("refs/heads/", StringComparison.Ordinal)
             ? reference["refs/heads/".Length..]
             : reference;
+
+    /// <summary>
+    /// Desfaz as aspas que o git põe em campos do --porcelain com caractere especial: escapes
+    /// de C (\" \\ \n \t…) e bytes fora do ASCII em octal (\303\243 = "ã"), a remontar em UTF-8.
+    /// Sem aspas, o valor já veio cru.
+    /// </summary>
+    internal static string UnquoteC(string value)
+    {
+        if (value.Length < 2 || value[0] != '"' || value[^1] != '"') return value;
+
+        var bytes = new List<byte>(value.Length);
+        for (var i = 1; i < value.Length - 1; i++)
+        {
+            var c = value[i];
+            if (c != '\\' || i + 1 >= value.Length - 1)
+            {
+                bytes.AddRange(System.Text.Encoding.UTF8.GetBytes(c.ToString()));
+                continue;
+            }
+
+            var next = value[++i];
+            if (next is >= '0' and <= '7' && i + 2 < value.Length - 1)
+            {
+                bytes.Add(Convert.ToByte(value.Substring(i, 3), 8));
+                i += 2;
+                continue;
+            }
+
+            bytes.Add(next switch
+            {
+                'a' => (byte)'\a',
+                'b' => (byte)'\b',
+                'f' => (byte)'\f',
+                'n' => (byte)'\n',
+                'r' => (byte)'\r',
+                't' => (byte)'\t',
+                'v' => (byte)'\v',
+                _ => (byte)next,
+            });
+        }
+
+        return System.Text.Encoding.UTF8.GetString(bytes.ToArray());
+    }
 }

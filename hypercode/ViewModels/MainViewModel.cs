@@ -274,7 +274,7 @@ public sealed class MainViewModel : ObservableObject
         if (row.Worktree.IsPrunable)
             lines.Add("\nA pasta já não existe: só os metadados do git são limpos, com git worktree prune — que poda todos os órfãos de uma vez.");
         else if (row.Worktree.IsLocked)
-            lines.Add("\nEstá travado (git worktree lock): o git vai recusar. Destrave antes com git worktree unlock.");
+            lines.Add("\nEstá travado (git worktree lock): o git vai recusar. Destrave antes, pelo menu Destravar o worktree….");
         else if (row.Status.HasUncommittedChanges)
             lines.Add("\nHá alterações não commitadas: o git vai recusar, e aí o app pergunta se é para forçar.");
 
@@ -964,6 +964,125 @@ public sealed class MainViewModel : ObservableObject
         await LoadAsync().ConfigureAwait(true);
         StatusMessage = $"Worktree {row.Name} removido · a branch {row.Branch} continua existindo";
         return null;
+    }
+
+    /// <summary>Texto do diálogo de confirmação de "Destravar o worktree": o worktree e a trava.</summary>
+    public static string BuildUnlockSummary(WorktreeRow row)
+    {
+        var worktree = row.Worktree;
+        var lines = new List<string>
+        {
+            "Worktree",
+            $"    nome:    {row.Name}",
+            $"    branch:  {row.Branch}",
+            $"    caminho: {row.FullPath}",
+            "",
+            "Trava",
+        };
+
+        if (worktree.IsToolLock)
+        {
+            lines.Add("    tipo:    de ferramenta");
+            lines.Add($"    dono:    {worktree.LockOwner}");
+            lines.Add($"    registro: {worktree.LockReason}");
+            lines.Add("");
+            lines.Add($"É bookkeeping do {worktree.LockOwner}, não um pedido seu: destravar pode fazer a ferramenta perder o controle deste worktree.");
+        }
+        else
+        {
+            lines.Add("    tipo:    manual (git worktree lock)");
+            lines.Add(string.IsNullOrWhiteSpace(worktree.LockReason)
+                ? "    motivo:  nenhum registrado"
+                : $"    motivo:  {worktree.LockReason}");
+            lines.Add("");
+            lines.Add("Destravado, o worktree volta a poder ser removido e podado, inclusive pela limpeza de concluídos.");
+        }
+
+        return string.Join("\n", lines);
+    }
+
+    /// <summary>git worktree lock numa linha. Devolve o erro do git, ou null se travou.</summary>
+    public Task<string?> LockWorktreeAsync(WorktreeRow row, string? reason)
+        => ChangeLockAsync(
+            row,
+            $"Travando {row.Name}…",
+            path => GitService.LockWorktreeAsync(path, row.FullPath, reason),
+            $"Worktree {row.Name} travado",
+            $"{row.Name} não foi travado");
+
+    /// <summary>git worktree unlock numa linha. Devolve o erro do git, ou null se destravou.</summary>
+    public Task<string?> UnlockWorktreeAsync(WorktreeRow row)
+        => ChangeLockAsync(
+            row,
+            $"Destravando {row.Name}…",
+            path => GitService.UnlockWorktreeAsync(path, row.FullPath),
+            $"Worktree {row.Name} destravado",
+            $"{row.Name} não foi destravado");
+
+    private async Task<string?> ChangeLockAsync(
+        WorktreeRow row,
+        string activity,
+        Func<string, Task<ProcessResult>> run,
+        string success,
+        string failure)
+    {
+        var repositoryPath = ExpandHome(RepositoryPath.Trim());
+
+        IsBusy = true;
+        StatusMessage = activity;
+
+        string? error;
+        try
+        {
+            var result = await run(repositoryPath).ConfigureAwait(true);
+            error = result.Success ? null : result.FirstErrorLine;
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        if (error is not null)
+        {
+            StatusMessage = $"{failure}: {error}";
+            return error;
+        }
+
+        // Relê a lista: a tag "travado", o tooltip e a elegibilidade para a limpeza mudam.
+        await LoadAsync().ConfigureAwait(true);
+        StatusMessage = success;
+        return null;
+    }
+
+    /// <summary>"Travar os worktrees" em lote: o mesmo motivo para todos os que ainda não estão travados.</summary>
+    public async Task<BatchOutcome> LockWorktreesAsync(IReadOnlyList<WorktreeRow> rows, string? reason)
+    {
+        var repositoryPath = ExpandHome(RepositoryPath.Trim());
+
+        var outcome = await RunBatchAsync(
+            "Travar os worktrees",
+            "Travando",
+            rows,
+            row => row.CanLock,
+            concurrency: 4,
+            async row =>
+            {
+                var result = await GitService.LockWorktreeAsync(repositoryPath, row.FullPath, reason).ConfigureAwait(true);
+                if (!result.Success) throw new InvalidOperationException(result.FirstErrorLine);
+                return null;
+            }).ConfigureAwait(true);
+
+        if (outcome.Succeeded.Count > 0)
+        {
+            await LoadAsync().ConfigureAwait(true);
+            StatusMessage = outcome.Summary;
+        }
+
+        return outcome;
     }
 
     /// <summary>git pull --ff-only no worktree e relê o estado da linha.</summary>
