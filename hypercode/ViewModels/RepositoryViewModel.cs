@@ -776,8 +776,8 @@ public sealed class RepositoryViewModel : ObservableObject
                 UpdateMonitorNotice();
             }
 
-            // Em background, uma consulta que falhou não apaga os PRs herdados das linhas.
-            var (matched, changes) = background && lookup.Failed
+            // Uma consulta que falhou não apaga os PRs herdados das linhas — nem no carregamento manual.
+            var (matched, changes) = lookup.Failed
                 ? (Worktrees.Count(row => row.HasPullRequest), null)
                 : ApplyPullRequests(lookup);
 
@@ -872,7 +872,11 @@ public sealed class RepositoryViewModel : ObservableObject
         {
             if (scope is not null && (row.Worktree.Branch is not { } scoped || !scope.Contains(scoped))) continue;
 
-            row.PullRequest = FindPullRequest(row.Worktree, lookup, localBranches);
+            // PR mergeado ou fechado não deixa de existir: se a consulta não o trouxe (o gh pr list
+            // devolve só os 100 mais recentes), vale o que já se sabia — senão a linha deixa de ser
+            // concluída e a limpeza esquece há quanto tempo ela espera.
+            row.PullRequest = FindPullRequest(row.Worktree, lookup, localBranches)
+                ?? (row.PullRequest is { IsOpen: false } known ? known : null);
 
             if (row.PullRequest is { } pullRequest)
             {
@@ -1109,7 +1113,11 @@ public sealed class RepositoryViewModel : ObservableObject
 
         var now = DateTimeOffset.UtcNow;
         var completed = Worktrees.Where(row => row.IsCompleted).ToList();
-        _autoCleanup.Observe(completed.Select(row => row.FullPath).ToList(), now);
+        var rows = Worktrees.ToDictionary(row => row.FullPath, StringComparer.Ordinal);
+        _autoCleanup.Observe(
+            completed.Select(row => row.FullPath).ToList(),
+            path => !rows.TryGetValue(path, out var row) || row.IsKnownNotCompleted,
+            now);
         SaveAutoCleanup();
 
         var announcements = new List<string>();

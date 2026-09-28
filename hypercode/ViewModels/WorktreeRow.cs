@@ -132,6 +132,17 @@ public sealed class WorktreeRow : ObservableObject
             || (_pullRequest is not null && !_pullRequest.IsOpen)
             || IsGoneAndInBase);
 
+    /// <summary>
+    /// Sabe-se que este worktree não é candidato: PR aberto, ou principal, bare ou travado à
+    /// mão. É mais forte que <c>!IsCompleted</c>, que também vale para o PR que ainda não
+    /// chegou — e nesse caso a limpeza automática não pode esquecer que ele já estava concluído.
+    /// </summary>
+    public bool IsKnownNotCompleted =>
+        Worktree.IsMain
+        || Worktree.IsBare
+        || (Worktree.IsLocked && !Worktree.IsToolLock)
+        || _pullRequest is { IsOpen: true };
+
     /// <summary>Upstream "gone" e HEAD contido na base — dispensa achar o PR. Não vale com PR aberto.</summary>
     private bool IsGoneAndInBase =>
         _status.ContainedInBase is not null && _pullRequest is not { IsOpen: true };
