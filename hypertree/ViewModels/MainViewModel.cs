@@ -4,7 +4,7 @@ using Hypertree.Services;
 
 namespace Hypertree.ViewModels;
 
-public sealed class MainViewModel : ObservableObject
+public sealed class MainViewModel : ObservableObject, IDisposable
 {
     private readonly Settings _settings;
     private readonly PullRequestMemory _pullRequestMemory = PullRequestMemory.Load();
@@ -548,7 +548,7 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    private IReadOnlyCollection<string> WorktreeBranches()
+    private List<string> WorktreeBranches()
         => Worktrees.Select(row => row.Worktree.Branch).OfType<string>().ToList();
 
     /// <summary>
@@ -594,7 +594,7 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>Notificação do macOS — acima de três PRs, uma só — e a frase para o rodapé.</summary>
-    private string AnnounceChanges(IReadOnlyList<(WorktreeRow Row, PullRequestInfo PullRequest, IReadOnlyList<string> Transitions)> changed)
+    private string AnnounceChanges(List<(WorktreeRow Row, PullRequestInfo PullRequest, IReadOnlyList<string> Transitions)> changed)
     {
         static string Line((WorktreeRow Row, PullRequestInfo PullRequest, IReadOnlyList<string> Transitions) change)
             => $"#{change.PullRequest.Number} {string.Join(" · ", change.Transitions)}";
@@ -802,6 +802,20 @@ public sealed class MainViewModel : ObservableObject
     {
         _watcher?.Dispose();
         _watcher = null;
+    }
+
+    /// <summary>App encerrando: para o carregamento em curso, o monitoramento e o watcher.</summary>
+    public void Dispose()
+    {
+        _loadCancellation?.Cancel();
+        _loadCancellation?.Dispose();
+        _loadCancellation = null;
+
+        var monitor = _monitorCancellation;
+        StopMonitoring();
+        monitor?.Dispose();
+
+        StopWatching();
     }
 
     /// <summary>

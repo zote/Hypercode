@@ -39,7 +39,7 @@ public static class WorktreeCreator
     public static async Task<string?> PreferredRemoteAsync(string repositoryPath, CancellationToken cancellationToken = default)
     {
         var remotes = await GitService.ListRemotesAsync(repositoryPath, cancellationToken).ConfigureAwait(false);
-        return remotes.Contains("origin") ? "origin" : remotes.FirstOrDefault();
+        return remotes.Contains("origin") ? "origin" : remotes.Count > 0 ? remotes[0] : null;
     }
 
     /// <summary>Padrões do .worktreeinclude (sem comentários e linhas vazias), só para exibir.</summary>

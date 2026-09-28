@@ -36,7 +36,7 @@ public static class TerminalLauncher
             new[] { "-e", script },
             null,
             TimeSpan.FromSeconds(30),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
             throw new InvalidOperationException($"Não consegui abrir o {TerminalName}: {result.FirstErrorLine}");
@@ -44,10 +44,10 @@ public static class TerminalLauncher
 
     /// <summary>Abre a pasta no Finder.</summary>
     public static Task RevealInFinderAsync(string directory, CancellationToken cancellationToken = default)
-        => ProcessRunner.RunAsync("/usr/bin/open", new[] { directory }, null, TimeSpan.FromSeconds(10), cancellationToken);
+        => ProcessRunner.RunAsync("/usr/bin/open", new[] { directory }, null, TimeSpan.FromSeconds(10), cancellationToken: cancellationToken);
 
     public static Task OpenUrlAsync(string url, CancellationToken cancellationToken = default)
-        => ProcessRunner.RunAsync("/usr/bin/open", new[] { url }, null, TimeSpan.FromSeconds(10), cancellationToken);
+        => ProcessRunner.RunAsync("/usr/bin/open", new[] { url }, null, TimeSpan.FromSeconds(10), cancellationToken: cancellationToken);
 
     /// <summary>`cd` na pasta e, havendo comando, `&amp;&amp; comando`.</summary>
     internal static string BuildShellCommand(string directory, string? command)

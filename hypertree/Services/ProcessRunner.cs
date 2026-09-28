@@ -34,8 +34,8 @@ public static class ProcessRunner
         IReadOnlyList<string> arguments,
         string? workingDirectory = null,
         TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default,
-        IReadOnlyDictionary<string, string>? environment = null)
+        IReadOnlyDictionary<string, string>? environment = null,
+        CancellationToken cancellationToken = default)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -63,8 +63,9 @@ public static class ProcessRunner
         if (!process.Start())
             throw new InvalidOperationException($"Não foi possível iniciar '{fileName}'.");
 
-        var standardOutputTask = process.StandardOutput.ReadToEndAsync();
-        var standardErrorTask = process.StandardError.ReadToEndAsync();
+        // Sem o token de propósito: a leitura acaba quando o processo sai ou é morto abaixo.
+        var standardOutputTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+        var standardErrorTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
 
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(timeout ?? TimeSpan.FromSeconds(30));

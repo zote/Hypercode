@@ -121,7 +121,10 @@ public partial class MainWindow : Window
 
         // O checkbox vale como preferência mesmo se o usuário cancelar depois de mexer nele.
         if (dialog.DataContext is CreateWorktreeViewModel dialogViewModel)
+        {
             viewModel.OpenTerminalAfterCreate = dialogViewModel.OpenTerminal;
+            dialogViewModel.Dispose();
+        }
 
         if (result is not null)
             await viewModel.CompleteCreationAsync(result, viewModel.OpenTerminalAfterCreate);

@@ -6,7 +6,7 @@ namespace Hypertree.ViewModels;
 /// Diálogo "Novo worktree": branch nova a partir de uma base, ou a branch de um PR.
 /// A pasta é sugerida em &lt;repo&gt;.worktrees/&lt;branch&gt; até o usuário editá-la.
 /// </summary>
-public sealed class CreateWorktreeViewModel : ObservableObject
+public sealed class CreateWorktreeViewModel : ObservableObject, IDisposable
 {
     private readonly string _mainWorktreePath;
 
@@ -36,6 +36,14 @@ public sealed class CreateWorktreeViewModel : ObservableObject
             : $"{WorktreeCreator.IncludeFileName}: copia os arquivos ignorados que casarem com "
               + string.Join(", ", patterns.Take(6))
               + (patterns.Count > 6 ? $" e mais {patterns.Count - 6}" : string.Empty) + ".";
+    }
+
+    /// <summary>Diálogo fechado: interrompe a consulta do PR que ainda estiver esperando o gh.</summary>
+    public void Dispose()
+    {
+        _lookupCancellation?.Cancel();
+        _lookupCancellation?.Dispose();
+        _lookupCancellation = null;
     }
 
     public string Command { get; }

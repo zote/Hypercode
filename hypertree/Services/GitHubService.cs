@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -256,7 +257,7 @@ public static class GitHubService
             ProcessResult result;
             try
             {
-                result = await ProcessRunner.RunAsync(gh, arguments, repositoryPath, TimeSpan.FromSeconds(60), cancellationToken)
+                result = await ProcessRunner.RunAsync(gh, arguments, repositoryPath, TimeSpan.FromSeconds(60), cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
             }
             catch (TimeoutException)
@@ -337,10 +338,10 @@ public static class GitHubService
 
         var result = await ProcessRunner.RunAsync(
             gh,
-            new[] { "pr", "view", number.ToString(), "--json", "number,title,state,headRefName,isCrossRepository" },
+            new[] { "pr", "view", number.ToString(CultureInfo.InvariantCulture), "--json", "number,title,state,headRefName,isCrossRepository" },
             repositoryPath,
             TimeSpan.FromSeconds(30),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
             throw new InvalidOperationException($"PR #{number}: {result.FirstErrorLine}");
@@ -362,7 +363,7 @@ public static class GitHubService
                 new[] { "pr", "list", "--state", "all", "--limit", "100", "--json", fields },
                 repositoryPath,
                 TimeSpan.FromSeconds(60),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
