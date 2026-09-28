@@ -137,6 +137,8 @@ Vêm de `git worktree list --porcelain` e aparecem abaixo do nome:
 | Marcar como visto | tira o sino da linha | o PR mudou desde a última olhada (só aparece nesse caso) |
 | Puxar do remoto (pull) | `git pull --ff-only` no worktree e relê o estado da linha | a branch tem upstream |
 | Atualizar a partir da base… | `git fetch` da base do PR e `git merge` ou `git rebase` dela, à escolha | o PR aberto está atrás da base ou em conflito |
+| Travar o worktree… | `git worktree lock`, com um motivo opcional | vinculado, destravado e com a pasta no lugar (só aparece nesse caso) |
+| Destravar o worktree… | `git worktree unlock`, depois de uma confirmação que mostra o worktree e a trava | travado (só aparece nesse caso) e uma linha só selecionada |
 | Apagar o worktree… | `git worktree remove`, com confirmação | não é o principal nem bare |
 
 ### Em lote
@@ -187,6 +189,11 @@ pode estar defasado até o próximo fetch.
 ou arquivo não versionado, o app mostra o motivo e pergunta, num segundo diálogo, se é para forçar
 — o que descarta esse trabalho de vez. Worktree travado não ganha essa opção: destrave antes. Órfão
 é resolvido com `git worktree prune`. A branch local nunca é tocada.
+
+**Travar** pede o motivo uma vez e o aplica a todas as linhas selecionadas que ainda não estão
+travadas. **Destravar** fica desabilitado com mais de uma linha: cada destrava passa por uma
+confirmação com o nome, a branch e o caminho do worktree e com o tipo da trava (manual ou de
+ferramenta), o dono e o motivo. Nela o padrão é **Cancelar** — o Enter não destrava por engano.
 
 ## Limpar concluídos
 

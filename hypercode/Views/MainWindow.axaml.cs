@@ -225,6 +225,16 @@ public partial class MainWindow : Window
         Configure(UpdateBranchMenuItem, "Puxar do remoto (pull)", rows, row => row.CanUpdateBranch);
         Configure(RemoveMenuItem, rows.Count > 1 ? "Apagar os worktrees…" : "Apagar o worktree…", rows, row => row.CanRemove);
 
+        // Cada item só aparece se alguma linha estiver no estado que ele muda: travar some
+        // quando tudo já está travado, destravar some quando nada está.
+        Configure(LockMenuItem, rows.Count > 1 ? "Travar os worktrees…" : "Travar o worktree…", rows, row => row.CanLock);
+        LockMenuItem.IsVisible = LockMenuItem.IsEnabled;
+
+        // Destravar passa por uma confirmação com os dados daquela trava: não vira lote.
+        UnlockMenuItem.Header = "Destravar o worktree…";
+        UnlockMenuItem.IsVisible = rows.Any(row => row.CanUnlock);
+        UnlockMenuItem.IsEnabled = rows is [{ CanUnlock: true }];
+
         // Merge ou rebase é uma escolha por worktree, feita num diálogo: não vira lote.
         UpdateFromBaseMenuItem.Header = "Atualizar a partir da base…";
         UpdateFromBaseMenuItem.IsEnabled = rows.Count == 1 && rows[0].CanUpdateFromBase;
@@ -410,6 +420,58 @@ public partial class MainWindow : Window
 
         await ShowBatchReportAsync(await viewModel.RemoveWorktreesAsync(rows));
     }
+
+    // Um motivo só, digitado uma vez, vale para todas as linhas da seleção que aceitam a trava.
+    private async void OnLockMenuClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } viewModel) return;
+
+        var targets = MenuTargets().Where(row => row.CanLock).ToList();
+        if (targets.Count == 0) return;
+
+        var headline = targets is [var single]
+            ? $"Travar o worktree {single.Name}?"
+            : $"Travar {targets.Count} worktrees?";
+
+        var reason = await new LockWorktreeWindow(
+            headline,
+            targets.Count == 1 ? "Travar" : $"Travar {targets.Count}").ShowDialog<string?>(this);
+
+        if (reason is null) return;
+
+        if (targets is [var row])
+        {
+            if (await viewModel.LockWorktreeAsync(row, reason) is { } error)
+                await ShowLockErrorAsync("Travar o worktree", $"O git recusou travar {row.Name}.", error, row);
+            return;
+        }
+
+        var outcome = await viewModel.LockWorktreesAsync(MenuTargets(), reason);
+        if (outcome.Failed.Count > 0) await ShowBatchReportAsync(outcome);
+    }
+
+    // Sempre com confirmação, e com Cancelar como padrão: a trava pode ser de outra ferramenta.
+    private async void OnUnlockMenuClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } viewModel || MenuTargets() is not [var row] || !row.CanUnlock) return;
+
+        var confirmed = await new ConfirmWindow(
+            "Destravar o worktree",
+            row.Worktree.IsToolLock
+                ? $"Destravar {row.Name}? A trava é do {row.Worktree.LockOwner}."
+                : $"Destravar {row.Name}?",
+            MainViewModel.BuildUnlockSummary(row),
+            "Destravar",
+            cancelIsDefault: true).ShowDialog<bool>(this);
+
+        if (!confirmed) return;
+
+        if (await viewModel.UnlockWorktreeAsync(row) is { } error)
+            await ShowLockErrorAsync("Destravar o worktree", $"O git recusou destravar {row.Name}.", error, row);
+    }
+
+    private async Task ShowLockErrorAsync(string title, string headline, string error, WorktreeRow row)
+        => await new ConfirmWindow(title, headline, $"{error}\n\n{row.FullPath}", "Entendi").ShowDialog<bool>(this);
 
     private void OnMarkSeenMenuClick(object? sender, RoutedEventArgs e)
         => ViewModel?.MarkPullRequestChangesSeen(MenuTargets());

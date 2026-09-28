@@ -262,6 +262,27 @@ public static class GitService
             TimeSpan.FromMinutes(3),
             cancellationToken);
 
+    /// <summary>Trava um worktree com `git worktree lock`, gravando o motivo se houver um.</summary>
+    public static async Task<ProcessResult> LockWorktreeAsync(
+        string repositoryPath,
+        string worktreePath,
+        string? reason,
+        CancellationToken cancellationToken = default)
+    {
+        var git = ExecutableLocator.Find("git") ?? throw new GitNotFoundException();
+
+        var arguments = new List<string> { "-C", repositoryPath, "worktree", "lock" };
+        if (!string.IsNullOrWhiteSpace(reason)) arguments.AddRange(new[] { "--reason", reason.Trim() });
+        arguments.Add(worktreePath);
+
+        return await ProcessRunner.RunAsync(
+            git,
+            arguments,
+            repositoryPath,
+            TimeSpan.FromSeconds(30),
+            cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Destrava um worktree — o `remove` recusa enquanto houver lock.</summary>
     public static async Task<ProcessResult> UnlockWorktreeAsync(
         string repositoryPath,

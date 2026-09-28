@@ -70,7 +70,7 @@
         <TextBlock Classes="p" Text="É o worktree original do repositório, onde fica o diretório .git de verdade. Os demais são vinculados, criados com git worktree add. Este não pode ser removido com git worktree remove." />
 
         <TextBlock Classes="tag" Text="travado" />
-        <TextBlock Classes="p" Text="Alguém rodou git worktree lock aqui. Há dois casos: lock manual (motivo em texto livre, ou sem motivo) protege o worktree e a limpeza não mexe — destrave com git worktree unlock. Já ferramentas como o supacode gravam um JSON com owner no motivo e usam o lock só como marcador de propriedade; esse não protege, e a limpeza destrava sozinha antes de remover. O tooltip mostra qual é qual." />
+        <TextBlock Classes="p" Text="Alguém rodou git worktree lock aqui. Há dois casos: lock manual (motivo em texto livre, ou sem motivo) protege o worktree e a limpeza não mexe — destrave pelo menu, em Destravar o worktree… Já ferramentas como o supacode gravam um JSON com owner no motivo e usam o lock só como marcador de propriedade; esse não protege, e a limpeza destrava sozinha antes de remover. O tooltip mostra qual é qual." />
 
         <TextBlock Classes="tag" Text="órfão" />
         <TextBlock Classes="p" Text="O git marcou como prunable: o ponteiro aponta para uma pasta que não existe mais, normalmente porque o diretório foi apagado na mão. Um git worktree prune limpa os metadados." />
