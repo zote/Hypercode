@@ -50,16 +50,19 @@ public sealed class AutoCleanupTracker
         => _pending.OrderBy(item => item.Value.Name).Select(item => (item.Key, item.Value.Name, item.Value.Reason)).ToList();
 
     /// <summary>
-    /// Os concluídos de agora. Quem aparece pela primeira vez começa a carência; quem deixou de
-    /// estar concluído (ou sumiu) é esquecido, inclusive o adiamento e o motivo pendente.
+    /// Os concluídos de agora. Quem aparece pela primeira vez começa a carência. Quem deixou de
+    /// ser candidato — <paramref name="isRefuted"/>: a pasta saiu da lista, o PR foi reaberto —
+    /// é esquecido, inclusive o adiamento e o motivo pendente. Não estar concluído neste tique
+    /// não basta: o PR e o status chegam depois da lista e a consulta pode falhar, e esquecer
+    /// nessa janela apagava o carimbo gravado, recomeçando a carência a cada abertura.
     /// </summary>
-    public void Observe(IReadOnlyCollection<string> completedPaths, DateTimeOffset now)
+    public void Observe(IReadOnlyCollection<string> completedPaths, Func<string, bool> isRefuted, DateTimeOffset now)
     {
-        var keep = completedPaths.ToHashSet(StringComparer.Ordinal);
         foreach (var path in completedPaths)
             if (_completedSince.TryAdd(path, now)) IsDirty = true;
 
-        foreach (var stale in _completedSince.Keys.Where(path => !keep.Contains(path)).ToList())
+        var keep = completedPaths.ToHashSet(StringComparer.Ordinal);
+        foreach (var stale in _completedSince.Keys.Where(path => !keep.Contains(path) && isRefuted(path)).ToList())
         {
             _completedSince.Remove(stale);
             _retryAt.Remove(stale);

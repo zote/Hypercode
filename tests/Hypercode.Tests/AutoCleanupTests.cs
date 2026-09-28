@@ -12,6 +12,9 @@ public sealed class AutoCleanupTests : IDisposable
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
 
+    private static readonly Func<string, bool> Never = _ => false;
+    private static readonly Func<string, bool> Always = _ => true;
+
     private string FilePath => Path.Combine(_directory, "autocleanup.json");
 
     private string Folder(string name) => Directory.CreateDirectory(Path.Combine(_directory, name)).FullName;
@@ -24,12 +27,12 @@ public sealed class AutoCleanupTests : IDisposable
         var store = new AutoCleanupStore(FilePath);
 
         var before = new AutoCleanupTracker();
-        before.Observe(new[] { worktree }, Now);
+        before.Observe(new[] { worktree }, Never, Now);
         store.Save(repository, before.Snapshot());
 
         var after = new AutoCleanupTracker();
         after.Restore(new AutoCleanupStore(FilePath).Load(repository), Now + TimeSpan.FromMinutes(11));
-        after.Observe(new[] { worktree }, Now + TimeSpan.FromMinutes(11));
+        after.Observe(new[] { worktree }, Never, Now + TimeSpan.FromMinutes(11));
 
         Assert.True(after.IsDue(worktree, Grace, Now + TimeSpan.FromMinutes(11)));
     }
@@ -56,7 +59,7 @@ public sealed class AutoCleanupTests : IDisposable
         var store = new AutoCleanupStore(FilePath);
 
         var tracker = new AutoCleanupTracker();
-        tracker.Observe(new[] { worktree }, Now);
+        tracker.Observe(new[] { worktree }, Never, Now);
         tracker.RecordRemoval("/outro", "outro", "PR merged", Now);
         store.Save(first, tracker.Snapshot());
 
@@ -98,7 +101,7 @@ public sealed class AutoCleanupTests : IDisposable
     public void GravaEmUtc()
     {
         var tracker = new AutoCleanupTracker();
-        tracker.Observe(new[] { "/wt" }, Now.ToOffset(TimeSpan.FromHours(-3)));
+        tracker.Observe(new[] { "/wt" }, Never, Now.ToOffset(TimeSpan.FromHours(-3)));
 
         Assert.Equal(TimeSpan.Zero, tracker.Snapshot().CompletedSince["/wt"].Offset);
     }
@@ -107,13 +110,13 @@ public sealed class AutoCleanupTests : IDisposable
     public void SoFicaSujoQuandoACarenciaMuda()
     {
         var tracker = new AutoCleanupTracker();
-        tracker.Observe(new[] { "/wt" }, Now);
+        tracker.Observe(new[] { "/wt" }, Never, Now);
         tracker.Snapshot();
 
-        tracker.Observe(new[] { "/wt" }, Now + TimeSpan.FromMinutes(1));
+        tracker.Observe(new[] { "/wt" }, Never, Now + TimeSpan.FromMinutes(1));
         Assert.False(tracker.IsDirty);
 
-        tracker.Observe(Array.Empty<string>(), Now + TimeSpan.FromMinutes(2));
+        tracker.Observe(Array.Empty<string>(), Always, Now + TimeSpan.FromMinutes(2));
         Assert.True(tracker.IsDirty);
     }
 
@@ -123,7 +126,7 @@ public sealed class AutoCleanupTests : IDisposable
     public void DescreveOCarimboEOPrazoDaCarencia()
     {
         var tracker = new AutoCleanupTracker();
-        tracker.Observe(new[] { "/wt" }, Now);
+        tracker.Observe(new[] { "/wt" }, Never, Now);
 
         var note = tracker.Describe("/wt", Grace, Now + TimeSpan.FromMinutes(3), startsAt: Now);
 
@@ -137,23 +140,54 @@ public sealed class AutoCleanupTests : IDisposable
     public void CarimboSegueOMesmoEntreTiquesEMudaQuandoACarenciaRecomeca()
     {
         var tracker = new AutoCleanupTracker();
-        tracker.Observe(new[] { "/wt" }, Now);
-        tracker.Observe(new[] { "/wt" }, Now + TimeSpan.FromMinutes(1));
+        tracker.Observe(new[] { "/wt" }, Never, Now);
+        tracker.Observe(new[] { "/wt" }, Never, Now + TimeSpan.FromMinutes(1));
         Assert.Contains($"em {Local(Now)}.", tracker.Describe("/wt", Grace, Now + TimeSpan.FromMinutes(1), Now));
 
-        // Um tique sem o worktree concluído (PR que não veio, por exemplo) esquece o carimbo.
-        tracker.Observe(Array.Empty<string>(), Now + TimeSpan.FromMinutes(2));
+        // Um PR que voltou a estar aberto, ou uma pasta que saiu da lista, esquece o carimbo.
+        tracker.Observe(Array.Empty<string>(), Always, Now + TimeSpan.FromMinutes(2));
         Assert.Null(tracker.Describe("/wt", Grace, Now + TimeSpan.FromMinutes(2), Now));
 
-        tracker.Observe(new[] { "/wt" }, Now + TimeSpan.FromMinutes(3));
+        tracker.Observe(new[] { "/wt" }, Never, Now + TimeSpan.FromMinutes(3));
         Assert.Contains($"em {Local(Now + TimeSpan.FromMinutes(3))}.", tracker.Describe("/wt", Grace, Now + TimeSpan.FromMinutes(3), Now));
+    }
+
+    [Fact]
+    public void TiqueSemOPrAindaNaoEsqueceOCarimbo()
+    {
+        var tracker = new AutoCleanupTracker();
+        tracker.Observe(new[] { "/wt" }, Never, Now);
+        tracker.Snapshot();
+
+        // Reabriu o app: a lista chegou, o PR ainda não — o worktree não aparece como concluído.
+        tracker.Observe(Array.Empty<string>(), Never, Now + TimeSpan.FromMinutes(1));
+
+        Assert.False(tracker.IsDirty);
+        Assert.Contains($"em {Local(Now)}.", tracker.Describe("/wt", Grace, Now + TimeSpan.FromMinutes(1), Now));
+
+        // O PR chegou e é o mesmo: a carência segue de onde estava.
+        tracker.Observe(new[] { "/wt" }, Never, Now + TimeSpan.FromMinutes(2));
+        Assert.True(tracker.IsDue("/wt", Grace, Now + Grace));
+    }
+
+    [Fact]
+    public void PastaQueSaiuDaListaOuPrReabertoEsquecemOCarimbo()
+    {
+        var tracker = new AutoCleanupTracker();
+        tracker.Observe(new[] { "/gone", "/reopened", "/waiting" }, Never, Now);
+
+        tracker.Observe(Array.Empty<string>(), path => path != "/waiting", Now + TimeSpan.FromMinutes(1));
+
+        Assert.Null(tracker.Describe("/gone", Grace, Now, Now));
+        Assert.Null(tracker.Describe("/reopened", Grace, Now, Now));
+        Assert.NotNull(tracker.Describe("/waiting", Grace, Now, Now));
     }
 
     [Fact]
     public void PrazoRespeitaAJanelaDeAberturaEOAdiamento()
     {
         var tracker = new AutoCleanupTracker();
-        tracker.Observe(new[] { "/wt" }, Now - TimeSpan.FromHours(1));
+        tracker.Observe(new[] { "/wt" }, Never, Now - TimeSpan.FromHours(1));
 
         var startsAt = Now + TimeSpan.FromMinutes(2);
         Assert.EndsWith($"sai a partir de {Local(startsAt)}.", tracker.Describe("/wt", Grace, Now, startsAt));
@@ -166,7 +200,7 @@ public sealed class AutoCleanupTests : IDisposable
     public void PendenteMostraOMotivoEANovaTentativa()
     {
         var tracker = new AutoCleanupTracker();
-        tracker.Observe(new[] { "/wt" }, Now - TimeSpan.FromHours(1));
+        tracker.Observe(new[] { "/wt" }, Never, Now - TimeSpan.FromHours(1));
         tracker.Skip("/wt", "wt", "em uso: há terminal ou processo com a pasta aberta", AutoCleanupTracker.InUseRetry, Now);
 
         var note = tracker.Describe("/wt", Grace, Now, startsAt: Now);
