@@ -467,6 +467,21 @@ public sealed class MainViewModel : ObservableObject
         RaisePropertyChanged(nameof(CleanupButtonLabel));
         RaisePropertyChanged(nameof(CanCleanupManually));
         RaisePropertyChanged(nameof(CleanupToolTip));
+        RefreshCleanupNotes();
+    }
+
+    /// <summary>
+    /// O carimbo e o prazo de cada concluído, lidos do tracker, no tooltip da linha. Horário
+    /// absoluto de propósito: não envelhece entre dois tiques como um "faltam N min" envelheceria.
+    /// </summary>
+    private void RefreshCleanupNotes()
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var row in Worktrees)
+            row.CleanupNote = !AutoCleanup || !row.IsCompleted
+                ? null
+                : _autoCleanup.Describe(row.FullPath, AutoCleanupGrace, now, _autoCleanupStartsAt)
+                  ?? "A limpeza automática ainda não conferiu este worktree: a carência começa quando ela o vir.";
     }
 
     public IReadOnlyList<WorktreeRow> CleanupCandidates()
@@ -1197,6 +1212,7 @@ public sealed class MainViewModel : ObservableObject
 
         if (parts.Count > 0) StatusMessage = "Limpeza automática: " + string.Join(" · ", parts);
         RaisePropertyChanged(nameof(CleanupToolTip));
+        RefreshCleanupNotes();
     }
 
     /// <summary>

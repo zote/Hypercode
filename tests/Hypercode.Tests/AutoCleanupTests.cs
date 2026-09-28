@@ -116,4 +116,66 @@ public sealed class AutoCleanupTests : IDisposable
         tracker.Observe(Array.Empty<string>(), Now + TimeSpan.FromMinutes(2));
         Assert.True(tracker.IsDirty);
     }
+
+    private static string Local(DateTimeOffset moment) => $"{moment.ToLocalTime():dd/MM HH:mm}";
+
+    [Fact]
+    public void DescreveOCarimboEOPrazoDaCarencia()
+    {
+        var tracker = new AutoCleanupTracker();
+        tracker.Observe(new[] { "/wt" }, Now);
+
+        var note = tracker.Describe("/wt", Grace, Now + TimeSpan.FromMinutes(3), startsAt: Now);
+
+        Assert.Equal(
+            $"Visto concluído pela limpeza automática em {Local(Now)}.\n"
+            + $"Carência de 10 min: sai a partir de {Local(Now + Grace)}.",
+            note);
+    }
+
+    [Fact]
+    public void CarimboSegueOMesmoEntreTiquesEMudaQuandoACarenciaRecomeca()
+    {
+        var tracker = new AutoCleanupTracker();
+        tracker.Observe(new[] { "/wt" }, Now);
+        tracker.Observe(new[] { "/wt" }, Now + TimeSpan.FromMinutes(1));
+        Assert.Contains($"em {Local(Now)}.", tracker.Describe("/wt", Grace, Now + TimeSpan.FromMinutes(1), Now));
+
+        // Um tique sem o worktree concluído (PR que não veio, por exemplo) esquece o carimbo.
+        tracker.Observe(Array.Empty<string>(), Now + TimeSpan.FromMinutes(2));
+        Assert.Null(tracker.Describe("/wt", Grace, Now + TimeSpan.FromMinutes(2), Now));
+
+        tracker.Observe(new[] { "/wt" }, Now + TimeSpan.FromMinutes(3));
+        Assert.Contains($"em {Local(Now + TimeSpan.FromMinutes(3))}.", tracker.Describe("/wt", Grace, Now + TimeSpan.FromMinutes(3), Now));
+    }
+
+    [Fact]
+    public void PrazoRespeitaAJanelaDeAberturaEOAdiamento()
+    {
+        var tracker = new AutoCleanupTracker();
+        tracker.Observe(new[] { "/wt" }, Now - TimeSpan.FromHours(1));
+
+        var startsAt = Now + TimeSpan.FromMinutes(2);
+        Assert.EndsWith($"sai a partir de {Local(startsAt)}.", tracker.Describe("/wt", Grace, Now, startsAt));
+
+        Assert.EndsWith("sai no próximo tique do monitoramento, se a janela não estiver minimizada.",
+            tracker.Describe("/wt", Grace, Now, startsAt: Now));
+    }
+
+    [Fact]
+    public void PendenteMostraOMotivoEANovaTentativa()
+    {
+        var tracker = new AutoCleanupTracker();
+        tracker.Observe(new[] { "/wt" }, Now - TimeSpan.FromHours(1));
+        tracker.Skip("/wt", "wt", "em uso: há terminal ou processo com a pasta aberta", AutoCleanupTracker.InUseRetry, Now);
+
+        var note = tracker.Describe("/wt", Grace, Now, startsAt: Now);
+
+        Assert.Contains("Mantido: em uso: há terminal ou processo com a pasta aberta.", note);
+        Assert.EndsWith($"Nova tentativa a partir de {Local(Now + AutoCleanupTracker.InUseRetry)}.", note);
+    }
+
+    [Fact]
+    public void SemCarimboNaoDescreve()
+        => Assert.Null(new AutoCleanupTracker().Describe("/wt", Grace, Now, Now));
 }
