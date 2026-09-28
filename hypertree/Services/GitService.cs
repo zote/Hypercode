@@ -56,23 +56,38 @@ public static class GitService
     }
 
     /// <summary>
-    /// Remove um worktree vinculado. Sem --force de propósito: o git recusa quando há
+    /// Remove um worktree vinculado. Por padrão sem --force: o git recusa quando há
     /// alterações não commitadas, e é isso que queremos (nada se perde por acidente).
+    /// O --force só vem de uma confirmação explícita, e um só não passa por cima do lock.
     /// </summary>
     public static async Task<ProcessResult> RemoveWorktreeAsync(
         string repositoryPath,
         string worktreePath,
+        bool force = false,
         CancellationToken cancellationToken = default)
     {
         var git = ExecutableLocator.Find("git") ?? throw new GitNotFoundException();
 
+        var arguments = new List<string> { "-C", repositoryPath, "worktree", "remove" };
+        if (force) arguments.Add("--force");
+        arguments.Add(worktreePath);
+
         return await ProcessRunner.RunAsync(
             git,
-            new[] { "-C", repositoryPath, "worktree", "remove", worktreePath },
+            arguments,
             repositoryPath,
             TimeSpan.FromSeconds(30),
             cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Traz os commits do upstream para a branch do worktree. Só fast-forward: se a branch
+    /// divergiu, o git recusa e nada muda — merge ou rebase ficam a cargo de quem usa.
+    /// </summary>
+    public static Task<ProcessResult> PullFastForwardAsync(
+        string worktreePath,
+        CancellationToken cancellationToken = default)
+        => RunAsync(worktreePath, new[] { "pull", "--ff-only" }, TimeSpan.FromSeconds(90), cancellationToken);
 
     /// <summary>Limpa os metadados de worktrees órfãos (aqueles cuja pasta sumiu).</summary>
     public static async Task<ProcessResult> PruneAsync(

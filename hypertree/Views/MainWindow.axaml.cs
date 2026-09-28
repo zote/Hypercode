@@ -195,6 +195,51 @@ public partial class MainWindow : Window
             await viewModel.LaunchAsync(RowOf(sender) ?? viewModel.SelectedWorktree);
     }
 
+    private async void OnOpenShellMenuClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } viewModel)
+            await viewModel.OpenShellAsync(RowOf(sender) ?? viewModel.SelectedWorktree);
+    }
+
+    private async void OnResumeClaudeMenuClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } viewModel)
+            await viewModel.ResumeClaudeAsync(RowOf(sender) ?? viewModel.SelectedWorktree);
+    }
+
+    private async void OnUpdateBranchMenuClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } viewModel)
+            await viewModel.UpdateBranchAsync(RowOf(sender) ?? viewModel.SelectedWorktree);
+    }
+
+    // Duas etapas: remove sem --force; se o git recusar (alteração não commitada, arquivo
+    // não versionado), explica o motivo e só então oferece forçar — o que descarta o trabalho.
+    private async void OnRemoveWorktreeMenuClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } viewModel || (RowOf(sender) ?? viewModel.SelectedWorktree) is not { } row) return;
+        if (!row.CanRemove) return;
+
+        var confirmed = await new ConfirmWindow(
+            "Apagar o worktree",
+            $"Apagar o worktree {row.Name}? A branch local não é tocada, só o worktree.",
+            MainViewModel.BuildRemovalSummary(row),
+            "Apagar").ShowDialog<bool>(this);
+
+        if (!confirmed) return;
+
+        var error = await viewModel.RemoveWorktreeAsync(row);
+        if (error is null || row.Worktree.IsPrunable || row.Worktree.IsLocked) return;
+
+        var forced = await new ConfirmWindow(
+            "Forçar a remoção",
+            $"O git recusou apagar {row.Name}. Forçar descarta de vez as alterações não commitadas e os arquivos não versionados da pasta.",
+            $"{error}\n\n{row.FullPath}",
+            "Forçar e apagar").ShowDialog<bool>(this);
+
+        if (forced) await viewModel.RemoveWorktreeAsync(row, force: true);
+    }
+
     private async void OnRevealMenuClick(object? sender, RoutedEventArgs e)
     {
         if (ViewModel is { } viewModel)

@@ -10,6 +10,7 @@ public sealed class WorktreeRow : ObservableObject
     public WorktreeRow(WorktreeInfo worktree)
     {
         Worktree = worktree;
+        HasClaudeSession = ClaudeSessions.Exist(worktree.FullPath);
     }
 
     public WorktreeInfo Worktree { get; }
@@ -89,7 +90,9 @@ public sealed class WorktreeRow : ObservableObject
         get => _status;
         set
         {
-            if (SetProperty(ref _status, value)) RefreshBadges();
+            if (!SetProperty(ref _status, value)) return;
+            RaisePropertyChanged(nameof(CanUpdateBranch));
+            RefreshBadges();
         }
     }
 
@@ -223,6 +226,18 @@ public sealed class WorktreeRow : ObservableObject
     }
 
     public bool CanLaunch => Directory.Exists(Worktree.FullPath) && !Worktree.IsBare;
+
+    /// <summary>O principal e o bare não são removíveis com git worktree remove.</summary>
+    public bool CanRemove => !Worktree.IsMain && !Worktree.IsBare;
+
+    /// <summary>Só dá para atualizar uma branch que tem upstream — senão não há de onde puxar.</summary>
+    public bool CanUpdateBranch => CanLaunch && Worktree.Branch is not null && _status is { IsKnown: true, HasUpstream: true };
+
+    /// <summary>
+    /// Há sessão do Claude Code gravada para esta pasta — condição para o `claude --continue`
+    /// ter o que retomar. Lido quando a linha é criada, a cada carregamento da lista.
+    /// </summary>
+    public bool HasClaudeSession { get; }
 
     public void RefreshTags()
     {
