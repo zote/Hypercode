@@ -30,6 +30,12 @@ public sealed class Settings
 
     /// <summary>Notificação do macOS quando um PR muda (checks, review, merge, conflito).</summary>
     public bool NotifyPullRequestChanges { get; set; } = true;
+
+    /// <summary>
+    /// Ao criar um worktree a partir de uma issue, atribui a issue ao usuário do gh se ele ainda
+    /// não estiver entre os assignees. Desligada por padrão: é a única preferência que escreve no GitHub.
+    /// </summary>
+    public bool AssignIssueOnCreate { get; set; }
 }
 
 public static class SettingsStore

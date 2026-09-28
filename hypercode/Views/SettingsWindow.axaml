@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Hypercode.Views.SettingsWindow"
+        Title="Configurações"
+        Width="520" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <!-- DataContext é o MainViewModel: cada campo grava no settings.json assim que muda, e a
+       janela principal reage na hora. Por isso não há Salvar nem Cancelar, só Fechar. -->
+  <Window.Styles>
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+    </Style>
+    <Style Selector="TextBlock.help">
+      <Setter Property="Opacity" Value="0.6" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,6,0,0" />
+    </Style>
+  </Window.Styles>
+
+  <StackPanel Margin="24,24,24,20" Spacing="22">
+
+    <StackPanel>
+      <TextBlock Classes="label" Text="Comando" />
+      <TextBox Name="CommandBox" Text="{Binding Command, Mode=TwoWay}" Watermark="claude" />
+      <TextBlock Classes="help"
+                 Text="Duplo-clique (ou Enter) abre uma janela nova do iTerm2 no worktree e roda o comando. Vazio volta a ser claude." />
+    </StackPanel>
+
+    <StackPanel>
+      <TextBlock Classes="label" Text="Monitoramento do GitHub" />
+      <ComboBox MinWidth="200" SelectedIndex="{Binding MonitorProfileIndex, Mode=TwoWay}">
+        <ComboBoxItem Content="Desligado" />
+        <ComboBoxItem Content="Econômico" />
+        <ComboBoxItem Content="Equilibrado" />
+        <ComboBoxItem Content="Agressivo" />
+      </ComboBox>
+      <TextBlock Classes="help"
+                 Text="Quão atento o app fica ao GitHub. Cada worktree tem a sua cadência, pelo estado do PR — de 30 s com a CI rodando a 30 min na branch nunca pushada —, e o perfil multiplica todas: econômico 2×, equilibrado 1×, agressivo ½. Em segundo plano, o triplo; minimizado, pausa." />
+    </StackPanel>
+
+    <StackPanel>
+      <CheckBox IsChecked="{Binding AssignIssueOnCreate, Mode=TwoWay}"
+                Content="Atribuir a issue a mim ao criar o worktree a partir dela" />
+      <TextBlock Classes="help"
+                 Text="Se o usuário do gh não estiver entre os assignees, o app o acrescenta (gh issue edit --add-assignee @me); quem já estava continua. É a única opção que escreve no GitHub. Se o GitHub recusar, o worktree é criado do mesmo jeito e o motivo aparece no rodapé." />
+    </StackPanel>
+
+    <Button Content="Fechar" Click="OnClose" HorizontalAlignment="Right" />
+  </StackPanel>
+</Window>

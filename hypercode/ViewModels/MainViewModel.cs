@@ -72,6 +72,19 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>Ao criar a partir de uma issue, atribui-la ao usuário do gh (tela de configurações).</summary>
+    public bool AssignIssueOnCreate
+    {
+        get => _settings.AssignIssueOnCreate;
+        set
+        {
+            if (_settings.AssignIssueOnCreate == value) return;
+            _settings.AssignIssueOnCreate = value;
+            PersistSettings();
+            RaisePropertyChanged();
+        }
+    }
+
     /// <summary>
     /// Texto do filtro. Cada palavra precisa aparecer no nome, na branch, no número
     /// ou no título do PR — "login 412" acha o worktree da branch login com PR #412.
@@ -173,7 +186,7 @@ public sealed class MainViewModel : ObservableObject
         => Enum.TryParse<MonitorProfile>(value, ignoreCase: true, out var profile) ? profile : MonitorProfile.Balanced;
 
     /// <summary>
-    /// Perfil do monitoramento, como índice do seletor do rodapé: desligado, econômico,
+    /// Perfil do monitoramento, como índice do seletor da tela de configurações: desligado, econômico,
     /// equilibrado, agressivo — a ordem de <see cref="Services.MonitorProfile"/>.
     /// </summary>
     public int MonitorProfileIndex
