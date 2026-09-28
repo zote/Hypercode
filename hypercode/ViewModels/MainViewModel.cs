@@ -548,8 +548,31 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>Nomes a consultar no GitHub: o da branch no remoto e o local, para quem não tem upstream.</summary>
     private IReadOnlyCollection<string> WorktreeBranches()
-        => Worktrees.Select(row => row.Worktree.Branch).OfType<string>().ToList();
+        => Worktrees
+            .SelectMany(row => new[] { row.Worktree.UpstreamBranch, row.Worktree.Branch })
+            .OfType<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>
+    /// PR da linha: primeiro pelo nome da branch no remoto, depois pelo local. O upstream é
+    /// ignorado quando é a branch local de outro worktree — branch criada de origin/main sem
+    /// --no-track rastreia main, e o PR de main é da linha do main.
+    /// </summary>
+    private static PullRequestInfo? FindPullRequest(WorktreeInfo worktree, PullRequestLookup lookup, ISet<string> localBranches)
+    {
+        if (worktree.UpstreamBranch is { } upstream
+            && upstream != worktree.Branch
+            && !localBranches.Contains(upstream)
+            && lookup.ByBranch.TryGetValue(upstream, out var byUpstream))
+            return byUpstream;
+
+        return worktree.Branch is { } branch && lookup.ByBranch.TryGetValue(branch, out var byBranch)
+            ? byBranch
+            : null;
+    }
 
     /// <summary>
     /// Casa os PRs com as linhas pela branch, compara cada um com o último estado visto e
@@ -562,12 +585,11 @@ public sealed class MainViewModel : ObservableObject
         var matched = 0;
         var changed = new List<(WorktreeRow Row, PullRequestInfo PullRequest, IReadOnlyList<string> Transitions)>();
 
+        var localBranches = Worktrees.Select(row => row.Worktree.Branch).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         foreach (var row in Worktrees)
         {
-            row.PullRequest = row.Worktree.Branch is { } branch
-                              && lookup.ByBranch.TryGetValue(branch, out var found)
-                ? found
-                : null;
+            row.PullRequest = FindPullRequest(row.Worktree, lookup, localBranches);
 
             if (row.PullRequest is { } pullRequest)
             {
