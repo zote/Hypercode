@@ -25,10 +25,10 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow
-            {
-                DataContext = new MainViewModel()
-            };
+            // --galeria abre só a amostra do design system (Styles/README.md), sem repositório.
+            desktop.MainWindow = desktop.Args?.Contains("--galeria") == true
+                ? new ControlGalleryWindow()
+                : new MainWindow { DataContext = new MainViewModel() };
         }
 
         base.OnFrameworkInitializationCompleted();
