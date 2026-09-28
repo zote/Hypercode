@@ -1,13 +1,26 @@
+using System.Text.Json;
+
 namespace Hypercode.Services;
 
 /// <summary>Um worktree que a limpeza automática removeu.</summary>
 public sealed record AutoCleanupEntry(DateTimeOffset At, string Name, string Reason);
 
+/// <summary>O que sobrevive ao fechamento do app, de um repositório: os carimbos da carência e o histórico.</summary>
+public sealed class AutoCleanupState
+{
+    public Dictionary<string, DateTimeOffset> CompletedSince { get; set; } = new(StringComparer.Ordinal);
+    public List<AutoCleanupEntry> History { get; set; } = new();
+
+    public bool IsEmpty => CompletedSince.Count == 0 && History.Count == 0;
+}
+
 /// <summary>
 /// Memória da limpeza automática: desde quando cada worktree está concluído (a carência), até
 /// quando ele fica adiado depois de ser pulado, por que ficou (os pendentes) e o que já saiu
-/// (o histórico). Tudo por caminho e só em memória — reabrir o app recomeça a carência, que é
-/// o lado seguro. Não faz I/O: quem confere e remove é o <c>MainViewModel</c>.
+/// (o histórico). Tudo por caminho. A carência e o histórico vão para disco pelo
+/// <see cref="AutoCleanupStore"/> — senão quem abre e fecha o app nunca chega ao fim da
+/// carência —; adiamento e pendência são do momento e recomeçam a cada abertura. Não faz I/O:
+/// quem confere, remove e grava é o <c>MainViewModel</c>.
 /// </summary>
 public sealed class AutoCleanupTracker
 {
@@ -26,6 +39,9 @@ public sealed class AutoCleanupTracker
     private readonly Dictionary<string, (string Name, string Reason)> _pending = new(StringComparer.Ordinal);
     private readonly List<AutoCleanupEntry> _history = new();
 
+    /// <summary>Mudou a carência ou o histórico desde a última <see cref="Snapshot"/> gravada.</summary>
+    public bool IsDirty { get; private set; }
+
     /// <summary>Removidos, do mais recente ao mais antigo.</summary>
     public IReadOnlyList<AutoCleanupEntry> History => _history;
 
@@ -40,13 +56,15 @@ public sealed class AutoCleanupTracker
     public void Observe(IReadOnlyCollection<string> completedPaths, DateTimeOffset now)
     {
         var keep = completedPaths.ToHashSet(StringComparer.Ordinal);
-        foreach (var path in completedPaths) _completedSince.TryAdd(path, now);
+        foreach (var path in completedPaths)
+            if (_completedSince.TryAdd(path, now)) IsDirty = true;
 
         foreach (var stale in _completedSince.Keys.Where(path => !keep.Contains(path)).ToList())
         {
             _completedSince.Remove(stale);
             _retryAt.Remove(stale);
             _pending.Remove(stale);
+            IsDirty = true;
         }
     }
 
@@ -81,14 +99,49 @@ public sealed class AutoCleanupTracker
 
         _history.Insert(0, new AutoCleanupEntry(now, name, reason));
         if (_history.Count > HistoryLimit) _history.RemoveRange(HistoryLimit, _history.Count - HistoryLimit);
+        IsDirty = true;
     }
 
-    /// <summary>Repositório trocado ou opção desligada: carências e pendências recomeçam. O histórico fica.</summary>
+    /// <summary>Opção ligada ou desligada: carências e pendências recomeçam. O histórico fica.</summary>
     public void Reset()
+    {
+        if (_completedSince.Count > 0) IsDirty = true;
+        _completedSince.Clear();
+        _retryAt.Clear();
+        _pending.Clear();
+    }
+
+    /// <summary>
+    /// Repositório trocado ou app aberto: troca tudo pelo que estava gravado desse repositório.
+    /// Carimbo no futuro — relógio que andou para trás, backup restaurado — não pode tornar o
+    /// worktree elegível na hora: vira <paramref name="now"/> e a carência recomeça.
+    /// </summary>
+    public void Restore(AutoCleanupState state, DateTimeOffset now)
     {
         _completedSince.Clear();
         _retryAt.Clear();
         _pending.Clear();
+        _history.Clear();
+        IsDirty = false;
+
+        foreach (var (path, since) in state.CompletedSince)
+        {
+            if (since > now) IsDirty = true;
+            _completedSince[path] = since > now ? now : since;
+        }
+
+        _history.AddRange(state.History.OrderByDescending(entry => entry.At).Take(HistoryLimit));
+    }
+
+    /// <summary>O que gravar, em UTC. Zera o <see cref="IsDirty"/>: quem pede é quem grava.</summary>
+    public AutoCleanupState Snapshot()
+    {
+        IsDirty = false;
+        return new AutoCleanupState
+        {
+            CompletedSince = _completedSince.ToDictionary(item => item.Key, item => item.Value.ToUniversalTime(), StringComparer.Ordinal),
+            History = _history.Select(entry => entry with { At = entry.At.ToUniversalTime() }).ToList(),
+        };
     }
 
     /// <summary>
@@ -142,5 +195,87 @@ public sealed class AutoCleanupTracker
         return processDirectories.Any(directory =>
             string.Equals(directory.TrimEnd('/'), root, StringComparison.OrdinalIgnoreCase)
             || directory.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase));
+    }
+}
+
+/// <summary>
+/// O <see cref="AutoCleanupState"/> de cada repositório, em autocleanup.json ao lado do
+/// settings.json. Arquivo ausente, ilegível ou corrompido vale como vazio — é o app recém-
+/// instalado, a carência recomeça. Cada gravação poda o que já foi embora dos outros
+/// repositórios, senão o arquivo cresce para sempre.
+/// </summary>
+public sealed class AutoCleanupStore
+{
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
+    private readonly string _filePath;
+
+    public AutoCleanupStore(string filePath) => _filePath = filePath;
+
+    public static AutoCleanupStore Default { get; } = new(Path.Combine(SettingsStore.DataDirectory, "autocleanup.json"));
+
+    public AutoCleanupState Load(string repository)
+        => ReadAll().TryGetValue(repository, out var state) ? state : new AutoCleanupState();
+
+    public void Save(string repository, AutoCleanupState state)
+    {
+        try
+        {
+            var all = ReadAll();
+
+            // Os outros repositórios não são observados agora: fica só o que ainda existe no disco.
+            // O do momento o tracker já podou — inclusive o órfão, que não tem pasta e segue concluído.
+            foreach (var (other, otherState) in all.Where(item => item.Key != repository).ToList())
+            {
+                if (!Directory.Exists(other))
+                {
+                    all.Remove(other);
+                    continue;
+                }
+
+                foreach (var gone in otherState.CompletedSince.Keys.Where(path => !Directory.Exists(path)).ToList())
+                    otherState.CompletedSince.Remove(gone);
+                if (otherState.IsEmpty) all.Remove(other);
+            }
+
+            if (state.IsEmpty) all.Remove(repository);
+            else all[repository] = state;
+
+            Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
+            var temporary = _filePath + ".tmp";
+            File.WriteAllText(temporary, JsonSerializer.Serialize(all, JsonOptions));
+            File.Move(temporary, _filePath, overwrite: true);
+        }
+        catch
+        {
+            // Como as preferências: falhar ao gravar não derruba o app, só recomeça a carência.
+        }
+    }
+
+    private Dictionary<string, AutoCleanupState> ReadAll()
+    {
+        try
+        {
+            if (File.Exists(_filePath)
+                && JsonSerializer.Deserialize<Dictionary<string, AutoCleanupState>>(File.ReadAllText(_filePath), JsonOptions) is { } all)
+            {
+                return all
+                    .Where(item => item.Value is not null)
+                    .ToDictionary(
+                        item => item.Key,
+                        item => new AutoCleanupState
+                        {
+                            CompletedSince = new Dictionary<string, DateTimeOffset>(item.Value.CompletedSince ?? new(), StringComparer.Ordinal),
+                            History = (item.Value.History ?? new()).Where(entry => entry is not null).ToList(),
+                        },
+                        StringComparer.Ordinal);
+            }
+        }
+        catch
+        {
+            // Corrompido: vale como vazio, e a próxima gravação o substitui.
+        }
+
+        return new Dictionary<string, AutoCleanupState>(StringComparer.Ordinal);
     }
 }
