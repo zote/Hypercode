@@ -28,9 +28,10 @@ duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodando `c
 - A lista **se atualiza sozinha**: worktree criado, apagado ou travado fora do app, troca de
   branch, commit, fetch, push e rebase aparecem em menos de um segundo. **Atualizar** (`⌘R`)
   relê tudo, inclusive os PRs. Detalhes abaixo.
-- O app **monitora o remoto**: faz `git fetch --prune` e relê os PRs a cada 5 minutos, e avisa
-  (notificação do macOS e sino na linha) quando checks, review, merge ou conflito mudam.
-  Detalhes em [Monitoramento](#monitoramento).
+- O app **monitora o remoto**: faz `git fetch --prune` e relê os PRs com uma cadência por
+  worktree — de 30 s com a CI rodando a 30 min na branch nunca pushada —, e avisa (notificação
+  do macOS e sino na linha) quando checks, review, merge ou conflito mudam. O perfil fica no
+  rodapé. Detalhes em [Monitoramento](#monitoramento).
 - O caminho do repositório e o comando ficam salvos em
   `~/Library/Application Support/Hypercode/settings.json`. Quem vem da época em que o app se
   chamava Hypertree não perde nada: na primeira abertura, se essa pasta não existe, o app copia
@@ -279,23 +280,52 @@ Fica de fora, de propósito:
 
 ## Monitoramento
 
-Com um repositório carregado, o app confere o remoto periodicamente — um ciclo por intervalo:
+Com um repositório carregado, o app confere o remoto por conta própria. Cada worktree tem a sua
+cadência, que sai do estado do PR dele; um agendador em memória acorda a cada 10 s, vê quem venceu
+e manda **uma** consulta cobrindo todos eles — nunca uma por worktree.
 
-1. `git fetch --all --prune --no-write-fetch-head` no principal, sem gc automático e com
-   `GIT_TERMINAL_PROMPT=0` (um app sem terminal não tem onde pedir senha). As refs remotas mudam
-   e o watcher relê o `git status` das linhas: "falta pull" e "divergiu" passam a refletir o
-   remoto, e a branch apagada depois do merge aparece com o `cloud-offline`.
-2. Uma consulta GraphQL só (`gh api graphql`, 1 ponto do rate limit de 5000/h) com um alias por
-   branch de worktree: `pullRequests(headRefName: …)` traz estado, draft, `mergeable`,
-   `mergeStateStatus`, `reviewDecision` e os checks do último commit. Não depende de o PR estar
-   entre os mais recentes do repositório. Se a consulta falhar, cai para o `gh pr list` dos 100
-   mais recentes.
-
-| Janela | Intervalo |
+| Estado do worktree | Cadência |
 |---|---|
-| ativa | `MonitorIntervalMinutes` (padrão 5) |
+| PR aberto com Action rodando ou na fila | 30 s |
+| PR aberto, CI parada, sem aprovação | 3 min |
+| PR aberto aprovado, ou draft | 10 min |
+| Branch pushada sem PR (o PR pode nascer pela web) | 5 min |
+| PR mergeado ou fechado | 20 min |
+| Branch nunca pushada, e o principal | 30 min |
+
+O que roda:
+
+1. **PRs**: uma consulta GraphQL (`gh api graphql`) com um alias por branch vencida:
+   `pullRequests(headRefName: …)` traz estado, draft, `mergeable`, `mergeStateStatus`,
+   `reviewDecision` e os checks do último commit. O GitHub cobra **1 ponto a cada ~10 branches**
+   (medido com `rateLimit.cost`: 1 ponto até 10, 4 com 40), então quem vence nos próximos 25 % da
+   sua cadência pega carona no lote, até 10 branches, sem custar mais. Se a consulta falhar, cai
+   para o `gh pr list` dos 100 mais recentes.
+2. **Fetch**: `git fetch --all --prune --no-write-fetch-head` no principal, a cada 10 min, sem gc
+   automático e com `GIT_TERMINAL_PROMPT=0`. Não gasta cota da API. As refs remotas mudam e o
+   watcher relê o `git status` das linhas: "falta pull" e "divergiu" passam a refletir o remoto, e
+   a branch apagada depois do merge aparece com o `cloud-offline`.
+
+**Push promove.** O `git push` escreve em `refs/remotes/`, o watcher relê o status, e o app vê o
+push: branch que **ganhou upstream** agora passa 10 min sendo conferida a cada 30 s; push numa
+branch que já tinha upstream e segue sem PR, 3 min. É o momento em que um PR está para nascer, e
+não custa chamada a mais — a branch só entra em lotes mais cedo. PR criado **pela web** numa branch
+pushada dias antes não deixa sinal local: é o que a faixa de 5 min cobre, e voltar o foco para a
+janela confere na hora o que venceu.
+
+**Perfil**, no seletor do rodapé, multiplica todas as cadências: econômico 2×, equilibrado 1×,
+agressivo ½, ou desligado.
+
+| Janela | Cadências |
+|---|---|
+| ativa | as da tabela, vezes o perfil |
 | em segundo plano | o triplo |
-| minimizada | pausado; ao voltar, se o intervalo já passou, confere na hora |
+| minimizada | pausado; ao voltar o foco, o que venceu é conferido na hora |
+
+**Cota.** A resposta do GraphQL traz o `rateLimit` junto, de graça. A cota é de 5000 pontos/h e é
+**da conta**, não do app — outras ferramentas gastam dela. Passados 60 % de uso, o agendador recua:
+2× até 80 %, 4× até 90 %, 10× acima disso, até o horário do reset. Enquanto recua, o rodapé diz
+("Monitor em recuo · …"), para a coluna PR parada não parecer travamento. O fetch não recua.
 
 O ciclo não começa com uma operação do app em andamento, e pull e "atualizar a partir da base"
 esperam o fetch do monitoramento terminar — dois fetches no mesmo repositório disputam o lock das
@@ -326,8 +356,11 @@ Em `settings.json`:
 
 | Chave | Padrão | |
 |---|---|---|
-| `MonitorIntervalMinutes` | `5` | `0` desliga o monitoramento |
+| `MonitorProfile` | `balanced` | `off`, `economical`, `balanced` ou `aggressive` — o mesmo do seletor do rodapé |
 | `NotifyPullRequestChanges` | `true` | `false` mantém o sino e o rodapé, sem notificação |
+
+A chave antiga `MonitorIntervalMinutes`, do intervalo fixo, é migrada na leitura: `0` vira `off`,
+qualquer outro valor vira `balanced`. Ela some do arquivo no próximo salvamento.
 
 ## Como os dados são obtidos
 

@@ -129,10 +129,12 @@ public sealed class IssueInfo
 /// A consulta não trouxe resposta (sem gh, sem autenticação, rede). Diferente de "não há PRs":
 /// quem já tem PRs na tela não deve apagá-los por causa disso.
 /// </param>
+/// <param name="Budget">Cota do GraphQL depois da consulta; null quando ela caiu para o pr list.</param>
 public sealed record PullRequestLookup(
     IReadOnlyDictionary<string, PullRequestInfo> ByBranch,
     string? Warning,
-    bool Failed = false)
+    bool Failed = false,
+    GraphQLBudget? Budget = null)
 {
     public static PullRequestLookup Empty(string? warning = null) =>
         new(new Dictionary<string, PullRequestInfo>(StringComparer.OrdinalIgnoreCase), warning);
@@ -179,7 +181,7 @@ public static class GitHubService
 
         if (branches.Count > 0
             && await TryLoadByBranchAsync(gh, repositoryPath, branches, cancellationToken).ConfigureAwait(false) is { } found)
-            return new PullRequestLookup(found, null);
+            return new PullRequestLookup(found.ByBranch, null, Budget: found.Budget);
 
         // Campos como mergeStateStatus e statusCheckRollup podem não existir em versões
         // antigas do gh; se a consulta rica falhar, caímos para o conjunto básico.
@@ -233,15 +235,18 @@ public static class GitHubService
     /// <summary>
     /// `gh api graphql` com um alias por branch; os nomes vão como variáveis, sem escapar nada
     /// na consulta. {owner} e {repo} o próprio gh resolve pelo remoto do diretório. Custa 1
-    /// ponto do rate limit por consulta. Null em qualquer falha — quem chama cai para o pr list.
+    /// ponto do rate limit a cada ~10 branches (medido com rateLimit.cost: 1 ponto até 10, 4
+    /// com 40). O rateLimit vem junto, de graça: é a leitura da cota que o monitoramento usa
+    /// para recuar. Null em qualquer falha — quem chama cai para o pr list.
     /// </summary>
-    private static async Task<Dictionary<string, PullRequestInfo>?> TryLoadByBranchAsync(
+    private static async Task<(Dictionary<string, PullRequestInfo> ByBranch, GraphQLBudget? Budget)?> TryLoadByBranchAsync(
         string gh,
         string repositoryPath,
         IReadOnlyCollection<string> branches,
         CancellationToken cancellationToken)
     {
         var byBranch = new Dictionary<string, PullRequestInfo>(StringComparer.OrdinalIgnoreCase);
+        GraphQLBudget? budget = null;
 
         foreach (var chunk in branches.Distinct(StringComparer.Ordinal).Chunk(BranchesPerQuery))
         {
@@ -265,7 +270,7 @@ public static class GitHubService
             }
 
             arguments.Add("-f");
-            arguments.Add($"query=query({string.Join(", ", variables)}) {{ repository(owner: $owner, name: $name) {{ {string.Join(" ", fields)} }} }}\n{PullRequestFragment}");
+            arguments.Add($"query=query({string.Join(", ", variables)}) {{ rateLimit {{ limit used cost resetAt }} repository(owner: $owner, name: $name) {{ {string.Join(" ", fields)} }} }}\n{PullRequestFragment}");
 
             ProcessResult result;
             try
@@ -288,6 +293,8 @@ public static class GitHubService
                     || repository.ValueKind != JsonValueKind.Object)
                     return null;
 
+                if (ParseBudget(data) is { } read) budget = read;
+
                 foreach (var alias in repository.EnumerateObject())
                 {
                     if (!alias.Value.TryGetProperty("nodes", out var nodes) || nodes.ValueKind != JsonValueKind.Array) continue;
@@ -303,7 +310,21 @@ public static class GitHubService
             }
         }
 
-        return byBranch;
+        return (byBranch, budget);
+    }
+
+    private static GraphQLBudget? ParseBudget(JsonElement data)
+    {
+        if (!data.TryGetProperty("rateLimit", out var rateLimit)
+            || rateLimit.ValueKind != JsonValueKind.Object
+            || !rateLimit.TryGetProperty("limit", out var limit)
+            || !rateLimit.TryGetProperty("used", out var used)
+            || !rateLimit.TryGetProperty("cost", out var cost)
+            || !rateLimit.TryGetProperty("resetAt", out var resetAt)
+            || !DateTimeOffset.TryParse(resetAt.GetString(), out var reset))
+            return null;
+
+        return new GraphQLBudget(limit.GetInt32(), used.GetInt32(), cost.GetInt32(), reset);
     }
 
     /// <summary>

@@ -201,16 +201,29 @@
 
     <!-- Rodapé -->
     <Border Grid.Row="5" BorderThickness="0,1,0,0" BorderBrush="#22808080" Padding="16,10">
-      <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
         <ProgressBar Grid.Column="0" Width="80" Height="4" IsIndeterminate="True"
                      VerticalAlignment="Center" Margin="0,0,12,0"
                      IsVisible="{Binding IsBusy}" />
         <TextBlock Grid.Column="1" Classes="muted" VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" Text="{Binding StatusMessage}" />
-        <Button Grid.Column="2" Content="{Binding CleanupButtonLabel}" Margin="0,0,8,0"
+        <!-- Fica enquanto o monitoramento recua pela cota: a coluna PR parada não é travamento. -->
+        <TextBlock Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0" FontSize="11"
+                   Foreground="#C9822B"
+                   Text="{Binding MonitorNotice}" IsVisible="{Binding HasMonitorNotice}"
+                   ToolTip.Tip="A cota de consultas GraphQL do GitHub (5000/h, da conta inteira — outras ferramentas gastam dela também) passou de 60 %. Todas as cadências ficam mais longas até o reset ou até o consumo baixar." />
+        <ComboBox Grid.Column="3" Margin="0,0,8,0" VerticalAlignment="Center" MinWidth="150"
+                  SelectedIndex="{Binding MonitorProfileIndex, Mode=TwoWay}"
+                  ToolTip.Tip="Quão atento o app fica ao GitHub. Cada worktree tem a sua cadência, pelo estado do PR — de 30 s com a CI rodando a 30 min na branch nunca pushada —, e o perfil multiplica todas: econômico 2×, equilibrado 1×, agressivo ½. Em segundo plano, o triplo; minimizado, pausa.">
+          <ComboBoxItem Content="Monitor: desligado" />
+          <ComboBoxItem Content="Monitor: econômico" />
+          <ComboBoxItem Content="Monitor: equilibrado" />
+          <ComboBoxItem Content="Monitor: agressivo" />
+        </ComboBox>
+        <Button Grid.Column="4" Content="{Binding CleanupButtonLabel}" Margin="0,0,8,0"
                 Click="OnCleanupClick" IsEnabled="{Binding HasCompleted}"
                 ToolTip.Tip="Remove os worktrees com PR merged ou closed e poda os órfãos. Pede confirmação antes." />
-        <Button Grid.Column="3" Content="Abrir no iTerm2" Click="OnOpenTerminalClick"
+        <Button Grid.Column="5" Content="Abrir no iTerm2" Click="OnOpenTerminalClick"
                 IsEnabled="{Binding SelectedWorktree, Converter={x:Static ObjectConverters.IsNotNull}}" />
       </Grid>
     </Border>

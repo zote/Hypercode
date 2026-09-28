@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Hypercode.Services;
 
@@ -15,10 +16,17 @@ public sealed class Settings
     public bool OpenTerminalAfterCreate { get; set; } = true;
 
     /// <summary>
-    /// De quantos em quantos minutos o app faz fetch e relê os PRs no GitHub com a janela
-    /// ativa. Em segundo plano o intervalo triplica; minimizado, pausa. 0 desliga.
+    /// Quão atento o monitoramento do remoto fica: off, economical, balanced ou aggressive.
+    /// Cada worktree tem a sua cadência, pelo estado do PR; o perfil multiplica todas.
     /// </summary>
-    public int MonitorIntervalMinutes { get; set; } = 5;
+    public string? MonitorProfile { get; set; }
+
+    /// <summary>
+    /// Chave antiga, do intervalo fixo em minutos. Só é lida para migrar (0 vira off) e some
+    /// do arquivo no próximo salvamento.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MonitorIntervalMinutes { get; set; }
 
     /// <summary>Notificação do macOS quando um PR muda (checks, review, merge, conflito).</summary>
     public bool NotifyPullRequestChanges { get; set; } = true;
@@ -74,7 +82,13 @@ public static class SettingsStore
         {
             if (!File.Exists(FilePath)) return new Settings();
             var json = File.ReadAllText(FilePath);
-            return JsonSerializer.Deserialize<Settings>(json) ?? new Settings();
+            var settings = JsonSerializer.Deserialize<Settings>(json) ?? new Settings();
+
+            if (settings.MonitorProfile is null && settings.MonitorIntervalMinutes is <= 0)
+                settings.MonitorProfile = "off";
+            settings.MonitorIntervalMinutes = null;
+
+            return settings;
         }
         catch
         {
