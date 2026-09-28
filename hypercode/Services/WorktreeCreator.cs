@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text;
+
 namespace Hypercode.Services;
 
 public sealed record WorktreeCreationResult(
@@ -8,7 +11,7 @@ public sealed record WorktreeCreationResult(
 
 /// <summary>
 /// Cria worktrees em &lt;pai do repo&gt;/&lt;repo&gt;.worktrees/&lt;branch&gt; — uma branch nova a partir
-/// de uma base ou a branch de um PR — e copia do principal os arquivos não versionados
+/// de uma base (também a de uma issue) ou a branch de um PR — e copia do principal os arquivos não versionados
 /// listados no .worktreeinclude.
 /// </summary>
 public static class WorktreeCreator
@@ -33,6 +36,41 @@ public static class WorktreeCreator
     {
         var folder = string.Join('-', branch.Split('/', StringSplitOptions.RemoveEmptyEntries));
         return folder.Length == 0 ? string.Empty : Path.Combine(WorktreesRoot(mainWorktreePath), folder);
+    }
+
+    /// <summary>
+    /// Branch de trabalho de uma issue: claude/issue-&lt;numero&gt;-&lt;slug&gt;, o padrão do AGENTS.md.
+    /// O slug são as primeiras palavras do título que carregam sentido, sem acento nem pontuação:
+    /// "Criar worktree a partir de uma issue" → claude/issue-34-criar-worktree-partir-issue.
+    /// </summary>
+    public static string SuggestIssueBranch(int number, string title)
+    {
+        var slug = string.Join('-', SlugWords(title).Take(IssueSlugWords));
+        return slug.Length == 0 ? $"claude/issue-{number}" : $"claude/issue-{number}-{slug}";
+    }
+
+    private const int IssueSlugWords = 4;
+
+    private static readonly HashSet<string> SlugStopWords = new(StringComparer.Ordinal)
+    {
+        "a", "o", "as", "os", "de", "da", "do", "das", "dos", "e", "em", "no", "na", "nos", "nas",
+        "um", "uma", "para", "pra", "por", "pelo", "pela", "com", "sem", "que", "se", "ao", "the", "of", "to", "and",
+    };
+
+    private static IEnumerable<string> SlugWords(string title)
+    {
+        var decomposed = title.Normalize(NormalizationForm.FormD);
+        var plain = new StringBuilder(decomposed.Length);
+
+        foreach (var character in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark) continue;
+            plain.Append(char.IsAsciiLetterOrDigit(character) ? char.ToLowerInvariant(character) : ' ');
+        }
+
+        return plain.ToString()
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(word => !SlugStopWords.Contains(word));
     }
 
     /// <summary>origin quando existe; senão o primeiro remoto; null sem remoto.</summary>

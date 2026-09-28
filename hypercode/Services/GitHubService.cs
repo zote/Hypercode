@@ -111,6 +111,20 @@ public sealed class PullRequestHead
     [JsonPropertyName("isCrossRepository")] public bool IsCrossRepository { get; set; }
 }
 
+/// <summary>O mínimo de uma issue para sugerir a branch do worktree que vai tratá-la.</summary>
+public sealed class IssueInfo
+{
+    [JsonPropertyName("number")] public int Number { get; set; }
+    [JsonPropertyName("title")] public string Title { get; set; } = string.Empty;
+    [JsonPropertyName("state")] public string State { get; set; } = string.Empty;
+    [JsonPropertyName("url")] public string Url { get; set; } = string.Empty;
+
+    /// <summary>`gh issue view` também resolve número de PR; só a URL diferencia.</summary>
+    public bool IsPullRequest => Url.Contains("/pull/", StringComparison.Ordinal);
+
+    public bool IsClosed => State.Equals("CLOSED", StringComparison.OrdinalIgnoreCase);
+}
+
 /// <param name="Failed">
 /// A consulta não trouxe resposta (sem gh, sem autenticação, rede). Diferente de "não há PRs":
 /// quem já tem PRs na tela não deve apagá-los por causa disso.
@@ -347,6 +361,29 @@ public static class GitHubService
 
         return JsonSerializer.Deserialize<PullRequestHead>(result.StandardOutput, JsonOptions)
             ?? throw new InvalidOperationException($"PR #{number}: resposta vazia do gh.");
+    }
+
+    /// <summary>Busca uma issue pelo número. Lança com a mensagem do gh quando não acha.</summary>
+    public static async Task<IssueInfo> GetIssueAsync(
+        string repositoryPath,
+        int number,
+        CancellationToken cancellationToken = default)
+    {
+        var gh = ExecutableLocator.Find("gh")
+            ?? throw new InvalidOperationException("GitHub CLI (gh) não encontrado. Instale com: brew install gh");
+
+        var result = await ProcessRunner.RunAsync(
+            gh,
+            new[] { "issue", "view", number.ToString(), "--json", "number,title,state,url" },
+            repositoryPath,
+            TimeSpan.FromSeconds(30),
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Success)
+            throw new InvalidOperationException($"Issue #{number}: {result.FirstErrorLine}");
+
+        return JsonSerializer.Deserialize<IssueInfo>(result.StandardOutput, JsonOptions)
+            ?? throw new InvalidOperationException($"Issue #{number}: resposta vazia do gh.");
     }
 
     private static async Task<ProcessResult?> TryListAsync(
