@@ -23,7 +23,14 @@ public partial class MainWindow : Window
         PropertyChanged += (_, e) =>
         {
             if (e.Property == WindowStateProperty) ReportActivity();
+            if (e.Property == WindowStateProperty || e.Property == IsExtendedIntoWindowDecorationsProperty)
+                UpdateTitleBarInset();
         };
+
+        // A faixa de abas é a barra de título (#91): a área vazia dela arrasta a janela.
+        // Borbulhamento sem handledEventsToo: clique em aba ou botão já chega tratado.
+        TabStripBar.AddHandler(PointerPressedEvent, OnTitleBarPointerPressed, RoutingStrategies.Bubble);
+        UpdateTitleBarInset();
 
         // Túnel: o ⌘F precisa funcionar mesmo com o foco dentro da lista ou de outro campo.
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
@@ -37,6 +44,40 @@ public partial class MainWindow : Window
         TabStrip.AddHandler(PointerMovedEvent, OnTabStripPointerMoved, RoutingStrategies.Bubble, handledEventsToo: true);
         TabStrip.AddHandler(PointerReleasedEvent, OnTabStripPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
         TabStrip.AddHandler(PointerCaptureLostEvent, (_, _) => _draggedTab = null, RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    private void UpdateTitleBarInset()
+        => TabStripBar.Classes.Set("extended", NeedsTitleBarInset(IsExtendedIntoWindowDecorations, WindowState));
+
+    /// <summary>
+    /// A faixa recua para os botões de janela só com a barra estendida e fora da tela cheia, em
+    /// que os botões somem.
+    /// </summary>
+    internal static bool NeedsTitleBarInset(bool extendedIntoDecorations, WindowState state)
+        => extendedIntoDecorations && state != WindowState.FullScreen;
+
+    // O AppKit só arrasta a janela por cliques nas views dele (toolbar, titlebar); a área vazia
+    // da faixa é do Avalonia, então arrastar e o duplo-clique ficam por conta daqui.
+    private void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!IsExtendedIntoWindowDecorations || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+        e.Handled = true;
+
+        if (e.ClickCount != 2)
+        {
+            BeginMoveDrag(e);
+            return;
+        }
+
+        switch (TitleBarDoubleClick.Current())
+        {
+            case TitleBarDoubleClickAction.Zoom:
+                WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+                break;
+            case TitleBarDoubleClickAction.Minimize:
+                WindowState = WindowState.Minimized;
+                break;
+        }
     }
 
     private MainViewModel? Shell => DataContext as MainViewModel;

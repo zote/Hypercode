@@ -6,9 +6,20 @@
         Width="1180" Height="640"
         MinWidth="860" MinHeight="400"
         DragDrop.AllowDrop="True"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="PreferSystemChrome, OSXThickTitleBar"
         Background="{DynamicResource Brush.Background.Window}">
 
   <Window.Styles>
+    <!-- Com a barra de título estendida, as abas começam depois dos botões de janela e sobem
+         para a altura deles; em tela cheia os botões somem, e o recuo junto (classe posta pelo
+         code-behind). O Padding fica só no estilo: valor local no Border venceria o .extended. -->
+    <Style Selector="Border#TabStripBar">
+      <Setter Property="Padding" Value="{DynamicResource Padding.TabStrip}" />
+    </Style>
+    <Style Selector="Border#TabStripBar.extended">
+      <Setter Property="Padding" Value="{DynamicResource Padding.TabStrip.Extended}" />
+    </Style>
     <Style Selector="TextBlock.cell">
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="TextTrimming" Value="CharacterEllipsis" />
@@ -108,9 +119,12 @@
 
   <Grid RowDefinitions="Auto,*">
 
-    <!-- Abas: um repositório por aba, todos monitorados. Arrastar reordena; ⌘1…⌘9 trocam. -->
-    <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Brush.Separator}"
-            Padding="{DynamicResource Padding.TabStrip}">
+    <!-- Abas: um repositório por aba, todos monitorados. Arrastar reordena; ⌘1…⌘9 trocam.
+         A faixa ocupa a barra de título (#91), com os botões de janela à esquerda: arrastar a
+         área vazia move a janela e o duplo-clique faz o que Ajustes do Sistema manda. O fundo
+         transparente é o que deixa a área vazia receber o clique. -->
+    <Border Name="TabStripBar" Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Brush.Separator}"
+            Background="Transparent">
       <Grid ColumnDefinitions="*,Auto">
         <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
           <StackPanel Orientation="Horizontal">

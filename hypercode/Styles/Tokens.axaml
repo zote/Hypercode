@@ -124,6 +124,10 @@
        Padding.TableCell soma com Margin.TableRow (6) para o conteúdo da linha cair no mesmo
        recuo de 16 do cabeçalho e das barras. -->
   <Thickness x:Key="Padding.TabStrip">8,8,16,0</Thickness>
+  <!-- Faixa de abas na barra de título estendida: recua à esquerda o espaço dos botões de
+       janela (fechar, minimizar, zoom) e sobe as abas para o centro delas ficar na altura dos
+       botões — a barra alta do macOS tem 38pt, botões no meio; 2 + 34/2 = 19 -->
+  <Thickness x:Key="Padding.TabStrip.Extended">84,2,16,0</Thickness>
   <Thickness x:Key="Padding.Tab">12,0,6,0</Thickness>
   <Thickness x:Key="Margin.Tab">0,0,2,0</Thickness>
   <x:Double x:Key="Size.Tab.MinHeight">34</x:Double>
