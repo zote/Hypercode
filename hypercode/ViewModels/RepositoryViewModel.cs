@@ -962,7 +962,12 @@ public sealed class RepositoryViewModel : ObservableObject
         _scheduler.IsWindowMinimized = isMinimized;
 
         // Voltou para a frente: o que venceu enquanto estava fora é conferido já, sem esperar o tique.
-        if (isActive && !isMinimized) _ = CheckRemoteAsync();
+        // Inclusive a sessão do Claude Code que nasceu no terminal que o app abriu (#88).
+        if (isActive && !isMinimized)
+        {
+            _ = CheckRemoteAsync();
+            _ = RefreshClaudeSessionsAsync();
+        }
     }
 
     private void StartMonitoring()
@@ -1458,13 +1463,26 @@ public sealed class RepositoryViewModel : ObservableObject
             var cancellationToken = _loadCancellation?.Token ?? default;
             await Task.WhenAll(
                     LoadStatusesAsync(rows, cancellationToken),
-                    LoadBaseDistancesAsync(rows, cancellationToken))
+                    LoadBaseDistancesAsync(rows, cancellationToken),
+                    RefreshClaudeSessionsAsync())
                 .ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
             // Um carregamento completo começou e vai reler tudo.
         }
+    }
+
+    /// <summary>
+    /// Relê se cada linha tem sessão do Claude Code. As sessões ficam fora do git dir vigiado,
+    /// então nada avisa quando uma nasce. A leitura sai da thread de UI: o volume pode ser lento (#52).
+    /// </summary>
+    private async Task RefreshClaudeSessionsAsync()
+    {
+        var rows = Worktrees.ToList();
+        var found = await Task.Run(() => rows.Select(row => ClaudeSessions.Exist(row.FullPath)).ToArray())
+            .ConfigureAwait(true);
+        for (var i = 0; i < rows.Count; i++) rows[i].HasClaudeSession = found[i];
     }
 
     /// <summary>Caminho do worktree principal — é a partir dele que se cria um novo.</summary>

@@ -9,11 +9,12 @@ public sealed class WorktreeRow : ObservableObject
     private BaseDistance? _baseDistance;
     private IReadOnlyList<string> _pullRequestChanges = Array.Empty<string>();
     private string? _cleanupNote;
+    private bool _hasClaudeSession;
 
     public WorktreeRow(WorktreeInfo worktree)
     {
         Worktree = worktree;
-        HasClaudeSession = ClaudeSessions.Exist(worktree.FullPath);
+        _hasClaudeSession = ClaudeSessions.Exist(worktree.FullPath);
     }
 
     public WorktreeInfo Worktree { get; }
@@ -383,9 +384,14 @@ public sealed class WorktreeRow : ObservableObject
 
     /// <summary>
     /// Há sessão do Claude Code gravada para esta pasta — condição para o `claude --continue`
-    /// ter o que retomar. Lido quando a linha é criada, a cada carregamento da lista.
+    /// ter o que retomar. Lido quando a linha é criada e relido quando a janela volta para a frente
+    /// ou o estado das linhas é relido: a sessão costuma nascer num terminal que o próprio app abriu.
     /// </summary>
-    public bool HasClaudeSession { get; }
+    public bool HasClaudeSession
+    {
+        get => _hasClaudeSession;
+        set => SetProperty(ref _hasClaudeSession, value);
+    }
 
     public void RefreshTags()
     {
