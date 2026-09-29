@@ -17,7 +17,10 @@ public class DialogFrame : ContentControl
     public static readonly StyledProperty<string?> MessageProperty =
         AvaloniaProperty.Register<DialogFrame, string?>(nameof(Message));
 
-    /// <summary>A pergunta ou a afirmação principal, curta. Vai em negrito.</summary>
+    /// <summary>
+    /// A pergunta ou a afirmação principal, curta. Vai em negrito. Opcional: um formulário
+    /// que já diz o que faz pelo título da janela pode ir sem.
+    /// </summary>
     public string? Headline
     {
         get => GetValue(HeadlineProperty);

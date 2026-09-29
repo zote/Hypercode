@@ -140,6 +140,17 @@
   <!-- Entre uma etiqueta de estado e a seguinte -->
   <Thickness x:Key="Margin.Badge">0,0,6,0</Thickness>
 
+  <!-- Rótulo de formulário alinhado ao topo de um campo com dica embaixo: o recuo põe o
+       texto na altura do texto do campo (24pt de campo, 16 de linha) -->
+  <Thickness x:Key="Margin.FieldLabel">0,4,12,0</Thickness>
+
+  <!-- Texto corrido (ajuda): título de seção, parágrafo, termo de glossário, e o ícone de
+       legenda alinhado à primeira linha do texto ao lado -->
+  <Thickness x:Key="Margin.Section">0,20,0,6</Thickness>
+  <Thickness x:Key="Margin.Paragraph">0,0,0,8</Thickness>
+  <Thickness x:Key="Margin.Term">0,12,0,2</Thickness>
+  <Thickness x:Key="Margin.IconAlignTop">0,2,0,0</Thickness>
+
   <!-- Diálogo (DialogFrame): do título ao conteúdo, do conteúdo aos botões, e a largura
        mínima de cada botão da barra -->
   <Thickness x:Key="Margin.DialogContent">0,12,0,0</Thickness>
