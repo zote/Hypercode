@@ -120,6 +120,15 @@
   <Thickness x:Key="Margin.MenuItem">5,0</Thickness>
   <Thickness x:Key="Margin.TableRow">6,0</Thickness>
 
+  <!-- Diálogo (DialogFrame): do título ao conteúdo, do conteúdo aos botões, e a largura
+       mínima de cada botão da barra -->
+  <Thickness x:Key="Margin.DialogContent">0,12,0,0</Thickness>
+  <Thickness x:Key="Margin.DialogButtons">0,20,0,0</Thickness>
+  <x:Double x:Key="Size.DialogButton.MinWidth">80</x:Double>
+  <!-- Detalhe longo (lista de worktrees, relatório) rola dentro da caixa em vez de esticar
+       o diálogo -->
+  <x:Double x:Key="Size.DialogDetail.MaxHeight">320</x:Double>
+
   <!-- Tamanho dos ícones (Styles/Icons.axaml), casado com a escala de texto: Small ao lado
        de Subheadline/Caption, Medium ao lado de Body, Large ao lado de Title 3 -->
   <x:Double x:Key="Size.Icon.Small">12</x:Double>

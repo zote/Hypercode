@@ -81,7 +81,7 @@ public partial class MainWindow : Window
         if (Shell is not { } shell) return;
 
         if (await shell.AddRepositoryAsync(path) is { } error)
-            await new ConfirmWindow("Abrir repositório", "Não dá para abrir essa pasta.", error, "Entendi").ShowDialog<bool>(this);
+            await ConfirmWindow.Notice("Abrir repositório", "Não dá para abrir essa pasta.", error).ShowDialog<bool>(this);
     }
 
     private void OnDragOver(object? sender, DragEventArgs e)
@@ -341,7 +341,8 @@ public partial class MainWindow : Window
             "Limpar concluídos",
             headline + " A branch local não é tocada, só o worktree.",
             RepositoryViewModel.BuildCleanupSummary(candidates),
-            "Remover").ShowDialog<bool>(this);
+            "Remover",
+            ConfirmStyle.Destructive).ShowDialog<bool>(this);
 
         if (!confirmed) return;
 
@@ -350,11 +351,10 @@ public partial class MainWindow : Window
         // O git recusa remover worktree com alteração não commitada — mostramos quais sobraram.
         if (viewModel.LastCleanupSkipped.Count > 0)
         {
-            await new ConfirmWindow(
+            await ConfirmWindow.Notice(
                 "Worktrees mantidos",
                 "Estes não foram removidos:",
-                string.Join("\n\n", viewModel.LastCleanupSkipped),
-                "Entendi").ShowDialog<bool>(this);
+                string.Join("\n\n", viewModel.LastCleanupSkipped)).ShowDialog<bool>(this);
         }
     }
 
@@ -415,11 +415,10 @@ public partial class MainWindow : Window
     }
 
     private async Task ShowBatchReportAsync(BatchOutcome outcome)
-        => await new ConfirmWindow(
+        => await ConfirmWindow.Notice(
             outcome.Action,
             outcome.Summary,
-            outcome.Report,
-            "Entendi").ShowDialog<bool>(this);
+            outcome.Report).ShowDialog<bool>(this);
 
     /// <summary>Uma janela por worktree: acima do limite, pergunta antes de abrir todas.</summary>
     private async Task<bool> ConfirmWindowsAsync(string what, IReadOnlyList<WorktreeRow> rows, Func<WorktreeRow, bool> supports)
@@ -500,11 +499,10 @@ public partial class MainWindow : Window
         if (plan.Distance is not { } distance)
         {
             viewModel.StatusMessage = $"{row.Name} não foi atualizado";
-            await new ConfirmWindow(
+            await ConfirmWindow.Notice(
                 "Atualizar a partir da base",
                 $"Não dá para atualizar {row.Name} agora.",
-                plan.Error ?? string.Empty,
-                "Entendi").ShowDialog<bool>(this);
+                plan.Error ?? string.Empty).ShowDialog<bool>(this);
             return;
         }
 
@@ -524,11 +522,10 @@ public partial class MainWindow : Window
         var outcome = await viewModel.UpdateFromBaseAsync(row, distance, chosen);
         if (outcome.Details is null) return;
 
-        await new ConfirmWindow(
+        await ConfirmWindow.Notice(
             "Atualizar a partir da base",
             outcome.Summary,
-            outcome.Details,
-            "Entendi").ShowDialog<bool>(this);
+            outcome.Details).ShowDialog<bool>(this);
     }
 
     // Duas etapas: remove sem --force; se o git recusar (alteração não commitada, arquivo
@@ -550,7 +547,8 @@ public partial class MainWindow : Window
             "Apagar o worktree",
             $"Apagar o worktree {row.Name}? A branch local não é tocada, só o worktree.",
             RepositoryViewModel.BuildRemovalSummary(row),
-            "Apagar").ShowDialog<bool>(this);
+            "Apagar",
+            ConfirmStyle.Destructive).ShowDialog<bool>(this);
 
         if (!confirmed) return;
 
@@ -561,7 +559,8 @@ public partial class MainWindow : Window
             "Forçar a remoção",
             $"O git recusou apagar {row.Name}. Forçar descarta de vez as alterações não commitadas e os arquivos não versionados da pasta.",
             $"{error}\n\n{row.FullPath}",
-            "Forçar e apagar").ShowDialog<bool>(this);
+            "Forçar e apagar",
+            ConfirmStyle.Destructive).ShowDialog<bool>(this);
 
         if (forced) await viewModel.RemoveWorktreeAsync(row, force: true);
     }
@@ -580,7 +579,8 @@ public partial class MainWindow : Window
             "Apagar os worktrees",
             headline,
             RepositoryViewModel.BuildBatchRemovalSummary(targets),
-            $"Apagar {targets.Count}").ShowDialog<bool>(this);
+            $"Apagar {targets.Count}",
+            ConfirmStyle.Destructive).ShowDialog<bool>(this);
 
         if (!confirmed) return;
 
@@ -628,7 +628,7 @@ public partial class MainWindow : Window
                 : $"Destravar {row.Name}?",
             RepositoryViewModel.BuildUnlockSummary(row),
             "Destravar",
-            cancelIsDefault: true).ShowDialog<bool>(this);
+            ConfirmStyle.CancelIsDefault).ShowDialog<bool>(this);
 
         if (!confirmed) return;
 
@@ -637,7 +637,7 @@ public partial class MainWindow : Window
     }
 
     private async Task ShowLockErrorAsync(string title, string headline, string error, WorktreeRow row)
-        => await new ConfirmWindow(title, headline, $"{error}\n\n{row.FullPath}", "Entendi").ShowDialog<bool>(this);
+        => await ConfirmWindow.Notice(title, headline, $"{error}\n\n{row.FullPath}").ShowDialog<bool>(this);
 
     private void OnMarkSeenMenuClick(object? sender, RoutedEventArgs e)
         => ViewModel?.MarkPullRequestChangesSeen(MenuTargets());

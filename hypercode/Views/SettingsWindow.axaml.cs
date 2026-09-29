@@ -38,7 +38,7 @@ public partial class SettingsWindow : Window
             RepositoryViewModel.AutoCleanupWarningTitle,
             viewModel.AutoCleanupWarning,
             "Ativar mesmo assim",
-            cancelIsDefault: true).ShowDialog<bool>(this);
+            ConfirmStyle.CancelIsDefault).ShowDialog<bool>(this);
 
         if (confirmed) viewModel.AutoCleanup = true;
     }
@@ -47,11 +47,10 @@ public partial class SettingsWindow : Window
     {
         if (DataContext is not SettingsViewModel viewModel) return;
 
-        await new ConfirmWindow(
+        await ConfirmWindow.Notice(
             "Limpeza automática",
             "O que a limpeza automática faz — e o que ela apaga junto",
-            viewModel.AutoCleanupWarning,
-            "Entendi").ShowDialog<bool>(this);
+            viewModel.AutoCleanupWarning).ShowDialog<bool>(this);
     }
 
     // Esc por KeyDown, como no Sobre: IsCancel no botão fechava a janela trazida para a frente

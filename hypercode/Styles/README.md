@@ -11,6 +11,7 @@ sistema) e os motivos estão na #64.
 | `Tokens.axaml` | cores (claro/escuro), tamanhos de fonte, espaçamento, raios | `Application.Resources` |
 | `FluentOverrides.axaml` | as chaves de recurso do Fluent apontando para os tokens | `Application.Resources`, depois dos tokens |
 | `Icons.axaml` | os ícones (`Icon.*`), como geometria no quadro de 16x16 | `Application.Resources` |
+| `Dialog.axaml` | o tema do `DialogFrame`, o layout padrão de diálogo | `Application.Resources` |
 | `Typography.axaml` | classes de texto (`title1`, `body`, `headline`…) | `Application.Styles`, depois do `FluentTheme` |
 | `Controls.axaml` | variantes e estados que o Fluent não tem (botão destrutivo, lista `table`, anel de foco…) | `Application.Styles`, depois do `FluentTheme` |
 
@@ -183,6 +184,52 @@ chave do Fluent que um controle usa, veja o template dele em
 `src/Avalonia.Themes.Fluent/Controls/` e as chaves em
 `src/Avalonia.Themes.Fluent/Accents/FluentControlResources.xaml`, no repositório do
 Avalonia, na tag da versão em uso.
+
+## Diálogos
+
+Todo diálogo usa o `DialogFrame` (`Views/DialogFrame.cs`), o layout de alerta e sheet da
+HIG ([Alerts](https://developer.apple.com/design/human-interface-guidelines/alerts),
+[Sheets](https://developer.apple.com/design/human-interface-guidelines/sheets)): título em
+negrito (`Headline`), mensagem de apoio na cor secundária (`Message`, opcional), o
+conteúdo e, embaixo, os botões alinhados à direita, com `Margin.Window` em volta. A janela
+usa `Brush.Background.Window` de fundo.
+
+```xml
+<Window … Width="540" SizeToContent="Height" CanResize="False"
+        Background="{DynamicResource Brush.Background.Window}">
+  <views:DialogFrame Headline="Travar o worktree?" Message="Ninguém mais consegue removê-lo.">
+    <TextBox Watermark="Motivo (opcional)" />
+    <views:DialogFrame.Buttons>
+      <Button Content="Cancelar" IsCancel="True" />
+      <Button Content="Travar" IsDefault="True" />
+    </views:DialogFrame.Buttons>
+  </views:DialogFrame>
+</Window>
+```
+
+Regras dos botões:
+
+- **Ordem**, da esquerda para a direita: ações alternativas, **Cancelar** e, na ponta
+  direita, o botão padrão.
+- **Return** aciona o botão com `IsDefault` (em destaque, na accent); **Esc** aciona o com
+  `IsCancel`. Um de cada por janela.
+- **Ação destrutiva** (apagar, descartar, forçar) **nunca é a padrão**: o botão leva
+  `Classes="destructive"` (rótulo vermelho) e o `IsDefault` vai para o Cancelar, para um
+  Return distraído não apagar nada.
+- **Aviso sem escolha** (relatório, erro) tem um botão só, que é `IsDefault` e `IsCancel`
+  ao mesmo tempo; não há um "Cancelar" que faz o mesmo que o "OK".
+
+Para confirmar uma ação, use o `ConfirmWindow`, que já segue essas regras:
+
+| Chamada | Botões | Return |
+|---|---|---|
+| `new ConfirmWindow(título, pergunta, detalhe, rótulo)` | Cancelar, **rótulo** | confirma |
+| … `, ConfirmStyle.CancelIsDefault)` | **Cancelar**, rótulo | cancela |
+| … `, ConfirmStyle.Destructive)` | **Cancelar**, rótulo em vermelho | cancela |
+| `ConfirmWindow.Notice(título, afirmação, detalhe)` | **Entendi** | fecha |
+
+O detalhe aparece numa caixa em `Font.Mono` que rola a partir de `Size.DialogDetail.MaxHeight`;
+detalhe vazio esconde a caixa.
 
 ## Ícones
 
