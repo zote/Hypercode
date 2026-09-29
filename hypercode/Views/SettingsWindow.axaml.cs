@@ -13,7 +13,6 @@ public partial class SettingsWindow : Window
         InitializeComponent();
     }
 
-    private void OnClose(object? sender, RoutedEventArgs e) => Close();
 
     /// <summary>
     /// Ligar a limpeza automática pede consentimento: o aviso diz o que o git apaga junto e o

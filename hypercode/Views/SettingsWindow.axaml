@@ -4,44 +4,49 @@
         Title="Configurações"
         Width="560" SizeToContent="Height"
         CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Brush.Background.Window}">
 
   <!-- DataContext é o SettingsViewModel: cada campo grava no settings.json assim que muda, e as
-       abas reagem na hora. Por isso não há Salvar nem Cancelar, só Fechar. -->
+       abas reagem na hora. Por isso não há botão nenhum, como nos Ajustes do macOS: fecha pelo
+       botão da janela, ⌘W ou Esc. -->
   <Window.Styles>
     <Style Selector="TextBlock.label">
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBlock.help">
-      <Setter Property="Opacity" Value="0.6" />
-      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Callout}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
       <Setter Property="TextWrapping" Value="Wrap" />
-      <Setter Property="Margin" Value="0,6,0,0" />
     </Style>
     <!-- Marca de campo sobrescrito no repositório do escopo. -->
     <Style Selector="TextBlock.overridden">
-      <Setter Property="Foreground" Value="#0969DA" />
-      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Link}" />
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="Text" Value="● sobrescrito neste repositório" />
     </Style>
     <!-- "Usar o global", à direita do título de cada campo, só no escopo de um repositório. -->
     <Style Selector="CheckBox.inherit">
-      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Callout}" />
       <Setter Property="MinHeight" Value="0" />
       <Setter Property="HorizontalAlignment" Value="Right" />
       <Setter Property="Content" Value="Usar o global" />
     </Style>
+    <!-- Cada ajuste: título (com a marca e o "usar o global"), o controle e a explicação. -->
+    <Style Selector="StackPanel.setting">
+      <Setter Property="Spacing" Value="{DynamicResource Spacing.Label}" />
+    </Style>
   </Window.Styles>
 
-  <StackPanel Margin="24,20,24,20" Spacing="20">
+  <StackPanel Margin="{DynamicResource Margin.Window}" Spacing="{DynamicResource Spacing.Group}">
 
     <!-- Escopo -->
-    <StackPanel Spacing="6">
+    <StackPanel Classes="setting">
       <Grid ColumnDefinitions="Auto,*">
-        <TextBlock Grid.Column="0" Classes="label" Text="Valem para" Margin="0,0,10,0" />
+        <TextBlock Grid.Column="0" Classes="label" Text="Valem para" Margin="{DynamicResource Margin.BeforeColumn}" />
         <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
                   ItemsSource="{Binding Scopes}" SelectedItem="{Binding SelectedScope, Mode=TwoWay}" />
       </Grid>
@@ -50,10 +55,10 @@
 
     <Separator />
 
-    <StackPanel>
-      <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+    <StackPanel Classes="setting">
+      <Grid ColumnDefinitions="Auto,*,Auto">
         <TextBlock Grid.Column="0" Classes="label" Text="Comando" />
-        <TextBlock Grid.Column="1" Classes="overridden" Margin="10,0,0,0" IsVisible="{Binding IsCommandOverridden}" />
+        <TextBlock Grid.Column="1" Classes="overridden" Margin="{DynamicResource Margin.AfterField}" IsVisible="{Binding IsCommandOverridden}" />
         <CheckBox Grid.Column="2" Classes="inherit" IsChecked="{Binding CommandUsesGlobal, Mode=TwoWay}"
                   IsVisible="{Binding IsRepositoryScope}" />
       </Grid>
@@ -63,13 +68,14 @@
                  Text="Duplo-clique (ou Enter) abre uma janela nova do iTerm2 no worktree e roda o comando. Vazio volta a ser claude." />
     </StackPanel>
 
-    <StackPanel>
-      <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+    <StackPanel Classes="setting">
+      <Grid ColumnDefinitions="Auto,*,Auto">
         <TextBlock Grid.Column="0" Classes="label" Text="Monitoramento do GitHub" />
-        <TextBlock Grid.Column="1" Classes="overridden" Margin="10,0,0,0" IsVisible="{Binding IsMonitorProfileOverridden}" />
+        <TextBlock Grid.Column="1" Classes="overridden" Margin="{DynamicResource Margin.AfterField}" IsVisible="{Binding IsMonitorProfileOverridden}" />
         <CheckBox Grid.Column="2" Classes="inherit" IsChecked="{Binding MonitorProfileUsesGlobal, Mode=TwoWay}"
                   IsVisible="{Binding IsRepositoryScope}" />
       </Grid>
+      <!-- 200: largura mínima do combo, para os quatro perfis caberem sem cortar. -->
       <ComboBox MinWidth="200" SelectedIndex="{Binding MonitorProfileIndex, Mode=TwoWay}"
                 IsEnabled="{Binding CanEditMonitorProfile}">
         <ComboBoxItem Content="Desligado" />
@@ -81,9 +87,9 @@
                  Text="Quão atento o app fica ao GitHub. Cada worktree tem a sua cadência, pelo estado do PR — de 30 s com a CI rodando a 30 min na branch nunca pushada —, e o perfil multiplica todas: econômico 2×, equilibrado 1×, agressivo ½. Em segundo plano — janela sem foco ou aba de trás —, o triplo; minimizado, pausa." />
     </StackPanel>
 
-    <StackPanel>
+    <StackPanel Classes="setting">
       <Grid ColumnDefinitions="*,Auto">
-        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="{DynamicResource Spacing.Related}">
           <CheckBox IsChecked="{Binding NotifyPullRequestChanges, Mode=TwoWay}" IsEnabled="{Binding CanEditNotify}"
                     Content="Notificar quando um PR mudar" />
           <TextBlock Classes="overridden" IsVisible="{Binding IsNotifyOverridden}" />
@@ -95,9 +101,9 @@
                  Text="Notificação do macOS quando o monitoramento vê checks, review, merge ou conflito mudarem, começando pelo nome do repositório. Desligada, a linha e a aba continuam com o sino." />
     </StackPanel>
 
-    <StackPanel>
+    <StackPanel Classes="setting">
       <Grid ColumnDefinitions="*,Auto">
-        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="{DynamicResource Spacing.Related}">
           <CheckBox IsChecked="{Binding AssignIssueOnCreate, Mode=TwoWay}" IsEnabled="{Binding CanEditAssignIssue}"
                     Content="Atribuir a issue a mim ao criar o worktree a partir dela" />
           <TextBlock Classes="overridden" IsVisible="{Binding IsAssignIssueOverridden}" />
@@ -109,9 +115,9 @@
                  Text="Se o usuário do gh não estiver entre os assignees, o app o acrescenta (gh issue edit --add-assignee @me); quem já estava continua. É a única opção que escreve no GitHub. Se o GitHub recusar, o worktree é criado do mesmo jeito e o motivo aparece no rodapé." />
     </StackPanel>
 
-    <StackPanel>
+    <StackPanel Classes="setting">
       <Grid ColumnDefinitions="*,Auto">
-        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="{DynamicResource Spacing.Label}">
           <!-- IsChecked só de ida: ligar passa pelo aviso no Click, que é quem grava. -->
           <CheckBox Name="AutoCleanupBox" IsChecked="{Binding AutoCleanup, Mode=OneWay}"
                     IsEnabled="{Binding CanEditAutoCleanup}"
@@ -120,14 +126,15 @@
                   ToolTip.Tip="Reler o aviso: o que o git apaga junto e o que fica de fora">
             <PathIcon Data="{StaticResource Icon.Info}" />
           </Button>
-          <TextBlock Classes="overridden" Margin="4,0,0,0" IsVisible="{Binding IsAutoCleanupOverridden}" />
+          <TextBlock Classes="overridden" IsVisible="{Binding IsAutoCleanupOverridden}" />
         </StackPanel>
         <CheckBox Grid.Column="1" Classes="inherit" IsChecked="{Binding AutoCleanupUsesGlobal, Mode=TwoWay}"
                   IsVisible="{Binding IsRepositoryScope}"
                   ToolTip.Tip="A limpeza automática e a carência dela são sobrescritas juntas." />
       </Grid>
-      <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" IsEnabled="{Binding CanEditAutoCleanupGrace}">
+      <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Spacing.Related}" IsEnabled="{Binding CanEditAutoCleanupGrace}">
         <TextBlock Text="Remover" VerticalAlignment="Center" />
+        <!-- 120: largura do campo de minutos, cabe 1440 com as setas. -->
         <NumericUpDown Value="{Binding AutoCleanupGraceMinutes, Mode=TwoWay}" Minimum="1" Maximum="1440"
                        Increment="1" FormatString="0" Width="120" />
         <TextBlock Text="min depois de concluído" VerticalAlignment="Center" />
@@ -136,6 +143,5 @@
                  Text="Sem confirmação: o monitor remove os concluídos passada a carência, e o botão do rodapé vira Limpeza automática, com o histórico no tooltip. Roda em todas as abas em que estiver ligada, inclusive as de trás. Pula os travados, os que têm um terminal aberto dentro e os que têm arquivo ignorado fora de bin/ e obj/ (.env, appsettings.Development.json) — o git os apagaria junto. Minimizado, pausa." />
     </StackPanel>
 
-    <Button Content="Fechar" Click="OnClose" HorizontalAlignment="Right" />
   </StackPanel>
 </Window>
