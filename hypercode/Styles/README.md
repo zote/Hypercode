@@ -10,6 +10,7 @@ sistema) e os motivos estão na #64.
 |---|---|---|
 | `Tokens.axaml` | cores (claro/escuro), tamanhos de fonte, espaçamento, raios | `Application.Resources` |
 | `FluentOverrides.axaml` | as chaves de recurso do Fluent apontando para os tokens | `Application.Resources`, depois dos tokens |
+| `Icons.axaml` | os ícones (`Icon.*`), como geometria no quadro de 16x16 | `Application.Resources` |
 | `Typography.axaml` | classes de texto (`title1`, `body`, `headline`…) | `Application.Styles`, depois do `FluentTheme` |
 | `Controls.axaml` | variantes e estados que o Fluent não tem (botão destrutivo, lista `table`, anel de foco…) | `Application.Styles`, depois do `FluentTheme` |
 
@@ -182,3 +183,44 @@ chave do Fluent que um controle usa, veja o template dele em
 `src/Avalonia.Themes.Fluent/Controls/` e as chaves em
 `src/Avalonia.Themes.Fluent/Accents/FluentControlResources.xaml`, no repositório do
 Avalonia, na tag da versão em uso.
+
+## Ícones
+
+Cada ícone é uma geometria em `Icons.axaml`, com nome pelo que representa (`Icon.Settings`,
+`Icon.GitPullRequest`…), sempre no mesmo quadro de 16x16. Na view, use o `PathIcon`, que
+aqui desenha a geometria nesse quadro em vez de esticá-la até as bordas do desenho (tema
+em `Controls.axaml`) — assim ícones diferentes saem do mesmo tamanho e um ponto continua
+ponto. A cor vem do `Foreground` (por padrão, a do texto em volta); o tamanho, da classe:
+
+| Classe | Tamanho | Ao lado de |
+|---|---|---|
+| `small` | `Size.Icon.Small` (12) | `subheadline`, `caption*` |
+| (nenhuma) | `Size.Icon.Medium` (14) | `body` |
+| `large` | `Size.Icon.Large` (18) | `title3` |
+
+```xml
+<Button Classes="borderless" ToolTip.Tip="Configurações">
+  <PathIcon Data="{StaticResource Icon.Settings}" />
+</Button>
+```
+
+Duas famílias, com papéis diferentes:
+
+- **Octicons** (GitHub, MIT) nas etiquetas de estado de worktree, PR, checks e review:
+  sempre que o GitHub mostra a mesma informação, o app usa o mesmo ícone e a mesma cor
+  que ele. O view-model escolhe a etiqueta pela chave do ícone (`StatusBadge.IconKey`), e
+  o `BadgeConverter.ToGeometry` busca o recurso.
+- **Phosphor** (MIT, peso regular) nos comandos do próprio app (nova aba, fechar, ajuda,
+  configurações, informação, ordenação). É o conjunto aberto mais parecido com o SF
+  Symbols.
+
+**Por que não o SF Symbols:** a licença só permite usá-los em interfaces de apps para
+plataformas Apple, e a Apple os trata como imagens fornecidas pelo sistema; copiar os
+desenhos para este repositório, público e com licença própria, seria redistribuir arte da
+Apple. Decisão registrada na issue #67.
+
+Para acrescentar um ícone do Phosphor: pegue `assets/regular/<nome>.svg` de
+`@phosphor-icons/core`, copie o `d` do único `path` para um `PathGeometry` com
+`Figures="F1 <d>"` e `Transform="0.0625,0,0,0.0625,0,0"` (de 256 para 16 — o `Transform`
+não aceita a sintaxe `scale()` do CSS). O `F1` é a regra de preenchimento NonZero do SVG;
+sem ele o Avalonia usa EvenOdd e alguns desenhos saem vazados.

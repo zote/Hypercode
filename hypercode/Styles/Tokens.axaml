@@ -120,6 +120,12 @@
   <Thickness x:Key="Margin.MenuItem">5,0</Thickness>
   <Thickness x:Key="Margin.TableRow">6,0</Thickness>
 
+  <!-- Tamanho dos ícones (Styles/Icons.axaml), casado com a escala de texto: Small ao lado
+       de Subheadline/Caption, Medium ao lado de Body, Large ao lado de Title 3 -->
+  <x:Double x:Key="Size.Icon.Small">12</x:Double>
+  <x:Double x:Key="Size.Icon.Medium">14</x:Double>
+  <x:Double x:Key="Size.Icon.Large">18</x:Double>
+
   <!-- Raios de canto -->
   <CornerRadius x:Key="Radius.Small">4</CornerRadius>
   <CornerRadius x:Key="Radius.Control">6</CornerRadius>
