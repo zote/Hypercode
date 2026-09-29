@@ -9,6 +9,9 @@
   só enxerga os tokens da mesma variante, por isso a lista se repete (o teste
   FluentOverridesTests garante que Light e Dark não divergem). Chave do Fluent que não
   aparece aqui continua com o valor dele.
+
+  Gerado por Styles/tools/gen_overrides.py: para mudar um alias, mude a regra lá e gere de
+  novo (Styles/tools/README.md), em vez de editar este arquivo à mão.
 -->
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">

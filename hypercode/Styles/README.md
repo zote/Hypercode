@@ -15,6 +15,9 @@ sistema) e os motivos estão na #64.
 | `Typography.axaml` | classes de texto (`title1`, `body`, `headline`…) | `Application.Styles`, depois do `FluentTheme` |
 | `Controls.axaml` | variantes e estados que o Fluent não tem (botão destrutivo, lista `table`, anel de foco…) | `Application.Styles`, depois do `FluentTheme` |
 
+`FluentOverrides.axaml` e `Icons.axaml` não se editam à mão: são gerados pelos scripts de
+`tools/` (uso em `tools/README.md`).
+
 Para ver tudo em claro e escuro lado a lado, abra a galeria de controles:
 
 ```bash
@@ -202,6 +205,10 @@ foco troca a borda pela accent (o Fluent não mostra anel nele).
 
 ### Como mexer em `FluentOverrides.axaml`
 
+O arquivo é gerado por `tools/gen_overrides.py`, a partir das chaves do Fluent e de uma
+lista de regras (chave → token); não edite à mão: mude a regra e rode
+`tools/regenerar.sh`, que também é o caminho ao atualizar o Avalonia (`tools/README.md`).
+
 Os aliases se repetem em `Light` e `Dark`: um `StaticResource` dentro de um dicionário de
 tema só encontra os tokens da mesma variante. O teste `FluentOverridesTests` garante que
 as duas listas são iguais e que todo alias aponta para um token que existe. Para achar a
@@ -310,8 +317,9 @@ plataformas Apple, e a Apple os trata como imagens fornecidas pelo sistema; copi
 desenhos para este repositório, público e com licença própria, seria redistribuir arte da
 Apple. Decisão registrada na issue #67.
 
-Para acrescentar um ícone do Phosphor: pegue `assets/regular/<nome>.svg` de
-`@phosphor-icons/core`, copie o `d` do único `path` para um `PathGeometry` com
-`Figures="F1 <d>"` e `Transform="0.0625,0,0,0.0625,0,0"` (de 256 para 16 — o `Transform`
-não aceita a sintaxe `scale()` do CSS). O `F1` é a regra de preenchimento NonZero do SVG;
-sem ele o Avalonia usa EvenOdd e alguns desenhos saem vazados.
+`Icons.axaml` é gerado por `tools/gen_icons.py`. Para acrescentar um ícone, some uma
+linha na lista `OCTICONS` ou `PHOSPHORS` do script e rode `tools/regenerar.sh`
+(`tools/README.md`). O script copia o `d` do SVG para a geometria com o prefixo `F1` — a
+regra de preenchimento NonZero do SVG; sem ele o Avalonia usa EvenOdd e alguns desenhos
+saem vazados — e, no Phosphor, põe o `Transform="0.0625,0,0,0.0625,0,0"` que reduz de 256
+para 16 (o `Transform` não aceita a sintaxe `scale()` do CSS).

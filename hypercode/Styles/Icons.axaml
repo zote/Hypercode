@@ -17,6 +17,9 @@
 
   "F1" = NonZero, a regra de preenchimento padrão do SVG: o Avalonia assume EvenOdd quando o
   prefixo não vem.
+
+  Gerado por Styles/tools/gen_icons.py: para acrescentar ou trocar um ícone, mude a lista lá
+  e gere de novo (Styles/tools/README.md), em vez de editar este arquivo à mão.
 -->
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
