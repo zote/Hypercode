@@ -23,12 +23,41 @@ git worktree add -b claude/issue-<numero>-<slug> \
 ```
 
 **3. Encerre com um pull request.** O trabalho não termina no commit: termina com o PR aberto
-contra a `main`, referenciando a issue.
+contra a `main`, referenciando a issue. (Se a issue depende de um PR ainda aberto, veja a
+seção seguinte.)
 
 ```bash
 git push -u origin claude/issue-<numero>-<slug>
 gh pr create --base main --title "..." --body "... Closes #<numero>"
 ```
+
+## Issue que depende de um PR ainda aberto
+
+Se a issue precisa de código de um PR que ainda não entrou na `main`, **não** crie a branch em
+cima do commit dele e abra o PR contra a `main`: se o PR de cima for mergeado primeiro (com
+squash), ele leva junto o commit do PR de baixo, que fica em conflito e redundante (#80/#81).
+Nem abra o PR contra a branch do PR anterior à mão: ele acaba mergeado lá, e não na `main`
+(#75).
+
+Monte uma pilha com [`gh stack`](https://github.com/github/gh-stack), que encadeia as bases dos
+PRs, rebaseia a pilha quando uma camada muda e faz o merge na ordem:
+
+```bash
+gh extension install github/gh-stack   # uma vez
+
+# no worktree do PR de baixo, com a branch dele em checkout
+gh stack init --adopt claude/issue-<anterior>-<slug>
+gh stack add claude/issue-<numero>-<slug>     # nova camada, em cima da anterior
+# ... commits da nova issue ...
+
+gh stack submit --auto   # push e PRs encadeados; depois ajuste título, body e label
+gh stack sync            # após mudar uma camada ou a main andar: rebase e push da pilha
+gh stack merge <pr>      # mergeia o PR e todos os de baixo, na ordem
+```
+
+A pilha inteira vive num worktree só — o do PR de baixo; o `gh stack add` troca de branch
+nele. Os nomes de branch continuam os da tabela abaixo, e cada PR segue referenciando a sua
+issue.
 
 ## Nomes
 
