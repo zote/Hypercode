@@ -83,6 +83,7 @@
         <PathIcon Data="{StaticResource Icon.Upload}" ToolTip.Tip="Icon.Upload" />
         <PathIcon Data="{StaticResource Icon.CloudOffline}" ToolTip.Tip="Icon.CloudOffline" />
         <PathIcon Data="{StaticResource Icon.BellFill}" ToolTip.Tip="Icon.BellFill" />
+        <PathIcon Data="{StaticResource Icon.Terminal}" ToolTip.Tip="Icon.Terminal" />
         <PathIcon Data="{StaticResource Icon.Trash}" ToolTip.Tip="Icon.Trash" />
         <PathIcon Data="{StaticResource Icon.GitPullRequest}" ToolTip.Tip="Icon.GitPullRequest" />
         <PathIcon Data="{StaticResource Icon.GitPullRequestDraft}" ToolTip.Tip="Icon.GitPullRequestDraft" />
@@ -96,6 +97,7 @@
         <PathIcon Data="{StaticResource Icon.CodeReview}" ToolTip.Tip="Icon.CodeReview" />
         <PathIcon Data="{StaticResource Icon.Plus}" ToolTip.Tip="Icon.Plus" />
         <PathIcon Data="{StaticResource Icon.Close}" ToolTip.Tip="Icon.Close" />
+        <PathIcon Data="{StaticResource Icon.ClearField}" ToolTip.Tip="Icon.ClearField" />
         <PathIcon Data="{StaticResource Icon.Help}" ToolTip.Tip="Icon.Help" />
         <PathIcon Data="{StaticResource Icon.Settings}" ToolTip.Tip="Icon.Settings" />
         <PathIcon Data="{StaticResource Icon.Info}" ToolTip.Tip="Icon.Info" />
