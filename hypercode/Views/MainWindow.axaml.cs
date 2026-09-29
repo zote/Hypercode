@@ -372,7 +372,7 @@ public partial class MainWindow : Window
     {
         if (e.Key is not (Key.Enter or Key.Return)) return;
         e.Handled = true;
-        if (ViewModel is { } viewModel) await viewModel.LaunchAsync(viewModel.SelectedWorktree);
+        if (ViewModel is { } viewModel) await viewModel.OpenOrFocusAsync(viewModel.SelectedWorktree);
     }
 
     private async void OnRowDoubleTapped(object? sender, TappedEventArgs e)
@@ -381,7 +381,7 @@ public partial class MainWindow : Window
 
         e.Handled = true;
         viewModel.SelectedWorktree = row;
-        await viewModel.LaunchAsync(row);
+        await viewModel.OpenOrFocusAsync(row);
     }
 
     private async void OnHelpClick(object? sender, RoutedEventArgs e)
@@ -475,6 +475,9 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Ir para o terminal é de uma linha só: com várias, qual traria para a frente?
+        FocusTerminalMenuItem.Header = "Ir para o terminal aberto";
+        FocusTerminalMenuItem.IsEnabled = rows is [{ CanFocusTerminal: true }];
         Configure(LaunchMenuItem, "Abrir no iTerm2 rodando o comando", rows, row => row.CanLaunch);
         Configure(ShellMenuItem, "Abrir o terminal", rows, row => row.CanLaunch);
         Configure(ResumeClaudeMenuItem, "Retomar a sessão do claude", rows, row => row.HasClaudeSession);
@@ -549,6 +552,11 @@ public partial class MainWindow : Window
         var rows = MenuTargets();
         if (rows.Count == 1) await viewModel.LaunchAsync(rows[0]);
         else await OpenManyAsync("Abrir no iTerm2", rows, row => row.CanLaunch, viewModel.LaunchManyAsync);
+    }
+
+    private async void OnFocusTerminalMenuClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } viewModel && MenuTargets() is [var row]) await viewModel.FocusTerminalAsync(row);
     }
 
     private async void OnOpenShellMenuClick(object? sender, RoutedEventArgs e)

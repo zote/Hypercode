@@ -50,6 +50,8 @@ public sealed class BadgeColorsTests
         [BadgeKind.ReviewRequired] = "Muted",
         [BadgeKind.NeedsRebase] = "Attention",
         [BadgeKind.PrChanged] = "Accent",
+        [BadgeKind.TerminalOpen] = "Accent",
+        [BadgeKind.ProcessOpen] = "Muted",
         [BadgeKind.RepositoryChecksFailing] = "Danger",
     };
 

@@ -10,6 +10,7 @@ public sealed class WorktreeRow : ObservableObject
     private IReadOnlyList<string> _pullRequestChanges = Array.Empty<string>();
     private string? _cleanupNote;
     private bool _hasClaudeSession;
+    private TerminalPresence _terminal = TerminalPresence.None;
 
     public WorktreeRow(WorktreeInfo worktree)
     {
@@ -191,6 +192,8 @@ public sealed class WorktreeRow : ObservableObject
         {
             var badges = new List<StatusBadge>();
 
+            if (TerminalBadge() is { } terminal) badges.Add(terminal);
+
             if (_status.PendingOperation is { } operation)
                 badges.Add(new StatusBadge(
                     BadgeKind.OperationPending,
@@ -319,6 +322,42 @@ public sealed class WorktreeRow : ObservableObject
         return $"A base {pullRequest.BaseRefName} {distance}. {hint}";
     }
 
+    /// <summary>
+    /// Terminal aberto na pasta: o que é, e que o duplo-clique vai para ele. Processo sem
+    /// terminal (um dotnet watch) também acende o ícone, apagado: a pasta está em uso, mas não
+    /// há sessão para onde ir.
+    /// </summary>
+    private StatusBadge? TerminalBadge()
+    {
+        if (_terminal.IsEmpty) return null;
+
+        var processes = string.Join(", ", _terminal.Processes);
+        if (_terminal.Sessions.Count == 0)
+            return new StatusBadge(
+                BadgeKind.ProcessOpen,
+                $"Há processo com esta pasta aberta, mas nenhuma sessão de terminal: {processes}. O duplo-clique abre um terminal novo.");
+
+        static string Describe(TerminalSession session)
+            => session.Name is { Length: > 0 } name ? $"{session.AppName} — {name}" : $"{session.AppName} ({session.Tty})";
+
+        var sessions = _terminal.Sessions;
+        var lines = new List<string>
+        {
+            sessions.Count == 1
+                ? $"Terminal aberto neste worktree: {Describe(sessions[0])}."
+                : $"{sessions.Count} sessões de terminal abertas neste worktree, da mais recente para a mais antiga:\n• "
+                  + string.Join("\n• ", sessions.Select(Describe)),
+        };
+
+        lines.Add(_terminal.Focusable is { } target
+            ? (sessions.Count == 1 ? "Duplo-clique vai para ele" : $"Duplo-clique vai para a mais recente ({Describe(target)})")
+              + "; para abrir outro, botão direito → Abrir o terminal."
+            : "Não dá para trazê-lo para a frente daqui: só o iTerm2 e o Terminal sabem. O duplo-clique abre um novo.");
+        if (_terminal.Processes.Count > 0) lines.Add($"Fora do terminal, com a pasta aberta: {processes}.");
+
+        return new StatusBadge(BadgeKind.TerminalOpen, string.Join("\n\n", lines));
+    }
+
     private string WithCleanupNote() => _cleanupNote is null ? string.Empty : $"\n\n{_cleanupNote}";
 
     private void RefreshBadges()
@@ -392,6 +431,25 @@ public sealed class WorktreeRow : ObservableObject
         get => _hasClaudeSession;
         set => SetProperty(ref _hasClaudeSession, value);
     }
+
+    /// <summary>
+    /// Terminal e processos com a pasta de trabalho dentro deste worktree, pelo lsof. Relido com
+    /// o estado das linhas e quando a janela volta para a frente; se a leitura falha, fica o de
+    /// antes — não saber não é o mesmo que não haver.
+    /// </summary>
+    public TerminalPresence Terminal
+    {
+        get => _terminal;
+        set
+        {
+            if (!SetProperty(ref _terminal, value ?? TerminalPresence.None)) return;
+            RaisePropertyChanged(nameof(CanFocusTerminal));
+            RefreshBadges();
+        }
+    }
+
+    /// <summary>Há sessão de terminal aqui a que dá para dar foco — iTerm2 ou Terminal.</summary>
+    public bool CanFocusTerminal => _terminal.Focusable is not null;
 
     public void RefreshTags()
     {

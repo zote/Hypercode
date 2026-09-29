@@ -727,6 +727,7 @@ public sealed class RepositoryViewModel : ObservableObject
                     row.PullRequestChanges = old.PullRequestChanges;
                     row.Status = old.Status;
                     row.BaseDistance = old.BaseDistance;
+                    row.Terminal = old.Terminal;
                 }
 
                 Worktrees.Add(row);
@@ -786,7 +787,7 @@ public sealed class RepositoryViewModel : ObservableObject
             if (background && changes is not null) StatusMessage = changes;
 
             // Só agora se sabe a base de cada PR, e com ela a distância até ela.
-            await Task.WhenAll(statusesTask, LoadBaseDistancesAsync(Worktrees.ToList(), cancellationToken))
+            await Task.WhenAll(statusesTask, LoadBaseDistancesAsync(Worktrees.ToList(), cancellationToken), RefreshTerminalsAsync())
                 .ConfigureAwait(true);
 
             if (!background)
@@ -962,11 +963,13 @@ public sealed class RepositoryViewModel : ObservableObject
         _scheduler.IsWindowMinimized = isMinimized;
 
         // Voltou para a frente: o que venceu enquanto estava fora é conferido já, sem esperar o tique.
-        // Inclusive a sessão do Claude Code que nasceu no terminal que o app abriu (#88).
+        // Inclusive a sessão do Claude Code que nasceu no terminal que o app abriu (#88), e o
+        // próprio terminal, aberto ou fechado enquanto a janela estava atrás (#94).
         if (isActive && !isMinimized)
         {
             _ = CheckRemoteAsync();
             _ = RefreshClaudeSessionsAsync();
+            _ = RefreshTerminalsAsync();
         }
     }
 
@@ -1464,7 +1467,8 @@ public sealed class RepositoryViewModel : ObservableObject
             await Task.WhenAll(
                     LoadStatusesAsync(rows, cancellationToken),
                     LoadBaseDistancesAsync(rows, cancellationToken),
-                    RefreshClaudeSessionsAsync())
+                    RefreshClaudeSessionsAsync(),
+                    RefreshTerminalsAsync())
                 .ConfigureAwait(true);
         }
         catch (OperationCanceledException)
@@ -1483,6 +1487,78 @@ public sealed class RepositoryViewModel : ObservableObject
         var found = await Task.Run(() => rows.Select(row => ClaudeSessions.Exist(row.FullPath)).ToArray())
             .ConfigureAwait(true);
         for (var i = 0; i < rows.Count; i++) rows[i].HasClaudeSession = found[i];
+    }
+
+    private bool _isRefreshingTerminals;
+
+    /// <summary>
+    /// Relê que linha tem terminal ou processo aberto dentro. Nada avisa quando um terminal abre
+    /// ou fecha: vai junto com o estado das linhas e com a janela voltando para a frente. Uma
+    /// leitura de cada vez — o lsof e o AppleScript dos nomes somam meio segundo. Se falhar,
+    /// as linhas ficam como estavam.
+    /// </summary>
+    private async Task RefreshTerminalsAsync()
+    {
+        if (_isRefreshingTerminals) return;
+        _isRefreshingTerminals = true;
+
+        try
+        {
+            var rows = Worktrees.Where(row => row.CanLaunch).ToList();
+            var found = await TerminalSessions.DetectAsync(rows.Select(row => row.FullPath).ToList(), withNames: true)
+                .ConfigureAwait(true);
+            if (found is null) return;
+
+            foreach (var row in rows)
+                row.Terminal = found.GetValueOrDefault(row.FullPath) ?? TerminalPresence.None;
+        }
+        finally
+        {
+            _isRefreshingTerminals = false;
+        }
+    }
+
+    /// <summary>
+    /// O duplo-clique: com terminal já aberto no worktree, vai para ele em vez de abrir outro;
+    /// sem, abre como sempre. A detecção é refeita na hora — o ícone pode estar defasado — e,
+    /// se a sessão sumiu ou o foco falhou, também abre um novo.
+    /// </summary>
+    public async Task OpenOrFocusAsync(WorktreeRow? row)
+    {
+        if (row is null) return;
+        if (!await TryFocusTerminalAsync(row).ConfigureAwait(true)) await LaunchAsync(row).ConfigureAwait(true);
+    }
+
+    /// <summary>"Ir para o terminal aberto": só o foco. Sem sessão, diz no rodapé.</summary>
+    public async Task FocusTerminalAsync(WorktreeRow? row)
+    {
+        if (row is null) return;
+        if (!await TryFocusTerminalAsync(row).ConfigureAwait(true))
+            StatusMessage = $"Nenhum terminal do iTerm2 ou do Terminal aberto em {row.Name}";
+    }
+
+    private async Task<bool> TryFocusTerminalAsync(WorktreeRow row)
+    {
+        if (!row.CanLaunch) return false;
+
+        try
+        {
+            var found = await TerminalSessions.DetectAsync(new[] { row.FullPath }, withNames: false).ConfigureAwait(true);
+            if (found?.GetValueOrDefault(row.FullPath)?.Focusable is not { } session) return false;
+            if (!await TerminalSessions.FocusAsync(session).ConfigureAwait(true)) return false;
+
+            StatusMessage = $"{session.AppName}: terminal aberto em {row.Name} trazido para a frente";
+            return true;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            StatusMessage = exception.Message;
+            return false;
+        }
+        finally
+        {
+            _ = RefreshTerminalsAsync();
+        }
     }
 
     /// <summary>Caminho do worktree principal — é a partir dele que se cria um novo.</summary>
