@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace Hypercode.Services;
 
@@ -8,15 +9,44 @@ public enum ChecksState { None, Pending, Failing, Passing }
 
 public enum ReviewState { None, Required, ChangesRequested, Approved }
 
-public sealed class CheckEntry
+public sealed partial class CheckEntry
 {
+    private long? _workflowRunId;
+
     [JsonPropertyName("name")] public string? Name { get; set; }
     [JsonPropertyName("context")] public string? Context { get; set; }
     [JsonPropertyName("status")] public string? Status { get; set; }
     [JsonPropertyName("conclusion")] public string? Conclusion { get; set; }
     [JsonPropertyName("state")] public string? State { get; set; }
 
+    /// <summary>Só vem no pr list: .../actions/runs/&lt;run-id&gt;/job/&lt;job-id&gt; num CheckRun de Actions.</summary>
+    [JsonPropertyName("detailsUrl")] public string? DetailsUrl { get; set; }
+
+    /// <summary>
+    /// Workflow run do GitHub Actions a que o check pertence — o &lt;run-id&gt; do `gh run rerun`.
+    /// O GraphQL traz direto (checkSuite.workflowRun.databaseId); no pr list sai do detailsUrl.
+    /// Null para StatusContext e para CheckRun de app que não é o Actions: esses o gh não reroda.
+    /// </summary>
+    [JsonIgnore]
+    public long? WorkflowRunId
+    {
+        get => _workflowRunId ?? RunIdFromUrl(DetailsUrl);
+        set => _workflowRunId = value;
+    }
+
     public string Label => Name ?? Context ?? "check";
+
+    public bool IsFailing =>
+        Conclusion?.ToUpperInvariant() is "FAILURE" or "TIMED_OUT" or "CANCELLED" or "ACTION_REQUIRED" or "STARTUP_FAILURE"
+        || State?.ToUpperInvariant() is "FAILURE" or "ERROR";
+
+    private static long? RunIdFromUrl(string? url)
+        => url is not null && RunIdPattern().Match(url) is { Success: true } match && long.TryParse(match.Groups[1].Value, out var id)
+            ? id
+            : null;
+
+    [GeneratedRegex(@"/actions/runs/(\d+)(?:/|$)")]
+    private static partial Regex RunIdPattern();
 }
 
 public sealed class PullRequestInfo
@@ -75,13 +105,11 @@ public sealed class PullRequestInfo
 
             foreach (var entry in StatusCheckRollup)
             {
+                if (entry.IsFailing) return ChecksState.Failing;
+
                 var conclusion = entry.Conclusion?.ToUpperInvariant();
                 var state = entry.State?.ToUpperInvariant();
                 var status = entry.Status?.ToUpperInvariant();
-
-                if (conclusion is "FAILURE" or "TIMED_OUT" or "CANCELLED" or "ACTION_REQUIRED" or "STARTUP_FAILURE"
-                    || state is "FAILURE" or "ERROR")
-                    return ChecksState.Failing;
 
                 if (state is "PENDING" or "EXPECTED") pending = true;
                 else if (status is not null && status != "COMPLETED") pending = true;
@@ -95,11 +123,28 @@ public sealed class PullRequestInfo
     public string FailingChecksSummary => StatusCheckRollup is null
         ? string.Empty
         : string.Join(", ", StatusCheckRollup
-            .Where(entry =>
-                entry.Conclusion?.ToUpperInvariant() is "FAILURE" or "TIMED_OUT" or "CANCELLED" or "ACTION_REQUIRED" or "STARTUP_FAILURE"
-                || entry.State?.ToUpperInvariant() is "FAILURE" or "ERROR")
+            .Where(entry => entry.IsFailing)
             .Select(entry => entry.Label)
             .Take(5));
+
+    /// <summary>
+    /// Workflow runs do último commit com algum job falho, sem repetir — vários jobs falhos
+    /// costumam ser do mesmo run. É o que o `gh run rerun --failed` aceita; StatusContext fica de fora.
+    /// </summary>
+    public IReadOnlyList<long> FailedWorkflowRuns => StatusCheckRollup is null
+        ? Array.Empty<long>()
+        : StatusCheckRollup
+            .Where(entry => entry.IsFailing)
+            .Select(entry => entry.WorkflowRunId)
+            .OfType<long>()
+            .Distinct()
+            .ToList();
+
+    /// <summary>owner/repo tirado da URL do PR — o -R do gh, para não depender do remoto padrão do worktree.</summary>
+    public string? Repository => Uri.TryCreate(Url, UriKind.Absolute, out var uri)
+                                 && uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries) is [var owner, var name, "pull", ..]
+        ? $"{owner}/{name}"
+        : null;
 }
 
 /// <summary>O mínimo de um PR para criar um worktree a partir dele.</summary>
@@ -169,7 +214,7 @@ public static class GitHubService
           number headRefName baseRefName state title url isDraft mergeable mergeStateStatus reviewDecision
           commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
             __typename
-            ... on CheckRun { name status conclusion }
+            ... on CheckRun { name status conclusion checkSuite { workflowRun { databaseId } } }
             ... on StatusContext { context state }
           } } } } } }
         }
@@ -363,12 +408,51 @@ public static class GitHubService
             pullRequest.StatusCheckRollup = contextNodes
                 .EnumerateArray()
                 .Where(context => context.ValueKind == JsonValueKind.Object)
-                .Select(context => context.Deserialize<CheckEntry>(JsonOptions))
+                .Select(ParseGraphCheck)
                 .OfType<CheckEntry>()
                 .ToList();
         }
 
         return pullRequest;
+    }
+
+    private static CheckEntry? ParseGraphCheck(JsonElement context)
+    {
+        var entry = context.Deserialize<CheckEntry>(JsonOptions);
+        if (entry is not null
+            && context.TryGetProperty("checkSuite", out var suite)
+            && suite.ValueKind == JsonValueKind.Object
+            && suite.TryGetProperty("workflowRun", out var run)
+            && run.ValueKind == JsonValueKind.Object
+            && run.TryGetProperty("databaseId", out var id)
+            && id.TryGetInt64(out var runId))
+            entry.WorkflowRunId = runId;
+
+        return entry;
+    }
+
+    /// <summary>
+    /// `gh run rerun &lt;id&gt; --failed`: reenfileira só os jobs que falharam, não o workflow
+    /// inteiro. Lança com a mensagem do gh quando ele recusa — sem permissão, run ainda em
+    /// andamento (o --failed exige o run concluído), run antigo demais.
+    /// </summary>
+    public static async Task RerunFailedJobsAsync(
+        string repositoryPath,
+        long runId,
+        string? repository,
+        CancellationToken cancellationToken = default)
+    {
+        var gh = ExecutableLocator.Find("gh")
+            ?? throw new InvalidOperationException("GitHub CLI (gh) não encontrado. Instale com: brew install gh");
+
+        var arguments = new List<string> { "run", "rerun", runId.ToString(CultureInfo.InvariantCulture), "--failed" };
+        if (repository is not null) arguments.AddRange(new[] { "-R", repository });
+
+        var result = await ProcessRunner.RunAsync(gh, arguments, repositoryPath, TimeSpan.FromSeconds(30), cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!result.Success)
+            throw new InvalidOperationException($"run {runId}: {result.FirstErrorLine}");
     }
 
     /// <summary>Busca um PR pelo número. Lança com a mensagem do gh quando não acha.</summary>

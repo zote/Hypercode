@@ -1,4 +1,5 @@
 using System.Globalization;
+using Avalonia;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 using Avalonia.Styling;
@@ -6,33 +7,20 @@ using Avalonia.Styling;
 namespace Hypercode.Views;
 
 /// <summary>
-/// Converte as strings do BadgeVisuals nos tipos do Avalonia. Fica na camada de view
-/// justamente para o view-model não depender do Avalonia.
+/// Converte a chave de ícone do BadgeVisuals (StatusBadge.IconKey) na geometria de
+/// Styles/Icons.axaml. Fica na camada de view justamente para o view-model não depender
+/// do Avalonia.
 /// </summary>
 public sealed class BadgeConverter : IValueConverter
 {
     public static readonly BadgeConverter ToGeometry = new();
 
-    private static readonly object CacheLock = new();
-    private static readonly Dictionary<string, Geometry> Geometries = new(StringComparer.Ordinal);
-
     private BadgeConverter() { }
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        if (value is not string text || text.Length == 0) return null;
-
-        lock (CacheLock)
-        {
-            if (!Geometries.TryGetValue(text, out var geometry))
-            {
-                geometry = Geometry.Parse(text);
-                Geometries[text] = geometry;
-            }
-
-            return geometry;
-        }
-    }
+        => value is string key && Application.Current?.TryGetResource(key, null, out var icon) == true
+            ? icon as Geometry
+            : null;
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();

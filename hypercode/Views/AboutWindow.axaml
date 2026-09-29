@@ -2,28 +2,29 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Hypercode.Views.AboutWindow"
         Title="Sobre o Hypercode"
-        Width="360" SizeToContent="Height"
-        CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        Width="340" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Brush.Background.Window}">
 
-  <StackPanel Margin="28,28,28,20" Spacing="6" HorizontalAlignment="Center">
+  <!-- Painel Sobre do macOS: ícone, nome, versão e as linhas de crédito, centralizados e sem
+       botão — fecha pelo botão da janela, ⌘W ou Esc. -->
+  <StackPanel Margin="{DynamicResource Margin.Window}" Spacing="{DynamicResource Space.XS}" HorizontalAlignment="Center">
+    <!-- 96: tamanho do ícone do app no painel. -->
     <Image Source="avares://Hypercode/Assets/icon.png" Width="96" Height="96"
-           HorizontalAlignment="Center" Margin="0,0,0,8" />
+           HorizontalAlignment="Center" Margin="{DynamicResource Margin.Paragraph}" />
 
-    <TextBlock Text="Hypercode" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" />
-    <TextBlock Name="VersionText" Opacity="0.6" HorizontalAlignment="Center" />
+    <TextBlock Classes="title3 emphasized" Text="Hypercode" HorizontalAlignment="Center" />
+    <TextBlock Name="VersionText" Classes="subheadline" HorizontalAlignment="Center"
+               Foreground="{DynamicResource Brush.Label.Secondary}" />
 
-    <TextBlock Text="Os worktrees do repositório, o estado de cada um e o atalho para abrir o Claude neles."
-               TextWrapping="Wrap" TextAlignment="Center" Margin="0,10,0,0" />
+    <TextBlock Classes="callout" Margin="{DynamicResource Margin.Section}"
+               Text="Os worktrees do repositório, o estado de cada um e o atalho para abrir o Claude neles."
+               TextWrapping="Wrap" TextAlignment="Center" />
 
-    <Button Content="github.com/zote/Hypercode" Click="OnRepositoryClick"
-            HorizontalAlignment="Center" Margin="0,6,0,0"
-            Background="Transparent" Foreground="{DynamicResource SystemAccentColor}" />
+    <Button Classes="borderless" Content="github.com/zote/Hypercode" Click="OnRepositoryClick"
+            HorizontalAlignment="Center" Foreground="{DynamicResource Brush.Text.Link}" />
 
-    <TextBlock Text="Feito com Avalonia." FontSize="11" Opacity="0.45"
-               HorizontalAlignment="Center" Margin="0,10,0,0" />
-
-    <Button Content="Fechar" Click="OnClose"
-            HorizontalAlignment="Center" Margin="0,14,0,0" />
+    <TextBlock Classes="footnote" Text="Feito com Avalonia." HorizontalAlignment="Center"
+               Foreground="{DynamicResource Brush.Label.Secondary}" />
   </StackPanel>
 </Window>

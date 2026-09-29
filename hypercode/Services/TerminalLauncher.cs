@@ -49,11 +49,23 @@ public static class TerminalLauncher
     public static Task OpenUrlAsync(string url, CancellationToken cancellationToken = default)
         => ProcessRunner.RunAsync("/usr/bin/open", new[] { url }, null, TimeSpan.FromSeconds(10), cancellationToken: cancellationToken);
 
-    /// <summary>`cd` na pasta e, havendo comando, `&amp;&amp; comando`.</summary>
+    /// <summary>
+    /// Variáveis que o Claude Code usa para marcar uma sessão como filha de outra. O iTerm2 as
+    /// herda quando é aberto de dentro de uma sessão do Claude e as repassa a todo shell novo, o que
+    /// faz o `claude` aberto por aqui não gravar transcript (e sumir do `--resume`).
+    /// </summary>
+    private static readonly string[] InheritedSessionVariables =
+    {
+        "CLAUDE_CODE_CHILD_SESSION",
+        "CLAUDE_CODE_ENTRYPOINT",
+    };
+
+    /// <summary>`unset` das variáveis de sessão herdadas, `cd` na pasta e, havendo comando, `&amp;&amp; comando`.</summary>
     internal static string BuildShellCommand(string directory, string? command)
-        => string.IsNullOrWhiteSpace(command)
-            ? $"cd {QuoteForShell(directory)}"
-            : $"cd {QuoteForShell(directory)} && {command.Trim()}";
+    {
+        var prefix = $"unset {string.Join(' ', InheritedSessionVariables)}; cd {QuoteForShell(directory)}";
+        return string.IsNullOrWhiteSpace(command) ? prefix : $"{prefix} && {command.Trim()}";
+    }
 
     // A referência por bundle id evita a ambiguidade entre os nomes "iTerm" e "iTerm2".
     internal static string BuildITerm2Script(string shellCommand, string? title = null)

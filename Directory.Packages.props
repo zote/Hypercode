@@ -13,8 +13,12 @@
   </ItemGroup>
 
   <ItemGroup Label="Testes">
-    <PackageVersion Include="xunit.v3" Version="4.0.1" />
-    <PackageVersion Include="coverlet.MTP" Version="10.1.0" />
+    <!-- xUnit v2: o Avalonia.Headless.XUnit 11 (testes de janela) depende dele e do VSTest. -->
+    <PackageVersion Include="Avalonia.Headless.XUnit" Version="11.3.22" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
   </ItemGroup>
 
 </Project>

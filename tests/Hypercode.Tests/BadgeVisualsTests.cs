@@ -12,14 +12,6 @@ public partial class BadgeVisualsTests
 
     [Theory]
     [MemberData(nameof(AllKinds))]
-    public void PathData_TodoIconeTemDesenhoComRegraNonZero(BadgeKind kind)
-    {
-        // Sem o "F1" o Avalonia assume EvenOdd e os Octicons saem com buracos.
-        Assert.StartsWith("F1 M", BadgeVisuals.PathData(kind), StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [MemberData(nameof(AllKinds))]
     public void Tone_TodoIconeTemCorNosDoisTemas(BadgeKind kind)
     {
         var tone = BadgeVisuals.Tone(kind);
@@ -53,9 +45,9 @@ public partial class BadgeVisualsTests
     }
 
     [Fact]
-    public void PathData_ConflitoERebaseUsamOMesmoAlertaComCoresDiferentes()
+    public void IconKey_ConflitoERebaseUsamOMesmoAlertaComCoresDiferentes()
     {
-        Assert.Equal(BadgeVisuals.PathData(BadgeKind.Conflicted), BadgeVisuals.PathData(BadgeKind.NeedsRebase));
+        Assert.Equal(BadgeVisuals.IconKey(BadgeKind.Conflicted), BadgeVisuals.IconKey(BadgeKind.NeedsRebase));
         Assert.NotEqual(BadgeVisuals.Tone(BadgeKind.Conflicted), BadgeVisuals.Tone(BadgeKind.NeedsRebase));
     }
 
@@ -64,7 +56,7 @@ public partial class BadgeVisualsTests
     {
         var badge = new StatusBadge(BadgeKind.PrMerged, "mergeado");
 
-        Assert.Equal(BadgeVisuals.PathData(BadgeKind.PrMerged), badge.PathData);
+        Assert.Equal(BadgeVisuals.IconKey(BadgeKind.PrMerged), badge.IconKey);
         Assert.Equal(BadgeVisuals.Done.Light, badge.LightColorHex);
         Assert.Equal(BadgeVisuals.Done.Dark, badge.DarkColorHex);
     }

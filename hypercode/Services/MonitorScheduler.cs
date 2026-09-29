@@ -44,6 +44,9 @@ public sealed class MonitorScheduler
     /// <summary>Promoção depois de um push numa branch que já tinha upstream e segue sem PR.</summary>
     public static readonly TimeSpan PushPromotion = TimeSpan.FromMinutes(3);
 
+    /// <summary>Depois de rodar de novo os checks falhos: o run pode demorar a aparecer como pendente.</summary>
+    public static readonly TimeSpan RerunPromotion = TimeSpan.FromMinutes(3);
+
     /// <summary>Cadência de quem está promovido.</summary>
     public static readonly TimeSpan PromotedCadence = TimeSpan.FromSeconds(30);
 

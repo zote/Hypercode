@@ -1,0 +1,138 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Hypercode.Views.ControlGallerySample"
+             Background="{DynamicResource Brush.Background.Window}">
+
+  <!-- Cada controle do design system em cada estado que dá para mostrar parado. Hover e
+       pressionado só aparecem com o mouse; o anel de foco, com Tab. -->
+  <StackPanel Margin="{DynamicResource Margin.Window}" Spacing="{DynamicResource Spacing.Group}">
+
+    <StackPanel Spacing="{DynamicResource Spacing.Label}">
+      <TextBlock Classes="headline" Text="Botões" />
+      <WrapPanel ItemSpacing="{DynamicResource Spacing.Related}" LineSpacing="{DynamicResource Spacing.Related}">
+        <Button Content="Comum" />
+        <Button Content="Padrão" IsDefault="True" />
+        <Button Classes="accent" Content="accent" />
+        <Button Classes="destructive" Content="Remover" />
+        <Button Classes="borderless" Content="Sem borda" />
+      </WrapPanel>
+      <WrapPanel ItemSpacing="{DynamicResource Spacing.Related}" LineSpacing="{DynamicResource Spacing.Related}">
+        <Button Content="Comum" IsEnabled="False" />
+        <Button Content="Padrão" IsDefault="True" IsEnabled="False" />
+        <Button Classes="destructive" Content="Remover" IsEnabled="False" />
+        <Button Classes="borderless" Content="Sem borda" IsEnabled="False" />
+      </WrapPanel>
+    </StackPanel>
+
+    <StackPanel Spacing="{DynamicResource Spacing.Label}">
+      <TextBlock Classes="headline" Text="Campos" />
+      <TextBox Watermark="Filtrar por worktree, branch ou PR" />
+      <TextBox Text="claude/issue-66-controles" />
+      <TextBox Text="Desabilitado" IsEnabled="False" />
+      <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Spacing.Related}">
+        <NumericUpDown Value="7" Minimum="0" Maximum="90" Width="120" />
+        <ComboBox SelectedIndex="0" Width="160">
+          <ComboBoxItem Content="origin/main" />
+          <ComboBoxItem Content="origin/develop" />
+        </ComboBox>
+        <ComboBox SelectedIndex="0" Width="120" IsEnabled="False">
+          <ComboBoxItem Content="Desabilitado" />
+        </ComboBox>
+      </StackPanel>
+    </StackPanel>
+
+    <StackPanel Spacing="{DynamicResource Spacing.Label}">
+      <TextBlock Classes="headline" Text="Seleção" />
+      <WrapPanel ItemSpacing="{DynamicResource Spacing.Group}" LineSpacing="{DynamicResource Spacing.Related}">
+        <CheckBox Content="Desmarcado" />
+        <CheckBox Content="Marcado" IsChecked="True" />
+        <CheckBox Content="Misto" IsThreeState="True" IsChecked="{x:Null}" />
+        <CheckBox Content="Desabilitado" IsChecked="True" IsEnabled="False" />
+      </WrapPanel>
+      <WrapPanel ItemSpacing="{DynamicResource Spacing.Group}">
+        <RadioButton Content="Branch nova" IsChecked="True" />
+        <RadioButton Content="A partir de um PR" />
+        <RadioButton Content="Desabilitado" IsEnabled="False" />
+      </WrapPanel>
+    </StackPanel>
+
+    <StackPanel Spacing="{DynamicResource Spacing.Label}">
+      <TextBlock Classes="headline" Text="Lista (Classes=&quot;table&quot;)" />
+      <TextBlock Classes="subheadline" Foreground="{DynamicResource Brush.Label.Secondary}"
+                 Text="Seleção na accent com a lista em foco; cinza sem foco." />
+      <ListBox Name="Table" Classes="table" SelectedIndex="1" Height="84"
+               CornerRadius="{DynamicResource Radius.Control}">
+        <ListBoxItem Content="main" />
+        <ListBoxItem Content="issue-66-controles" />
+        <ListBoxItem Content="issue-67-icones" />
+      </ListBox>
+    </StackPanel>
+
+    <StackPanel Spacing="{DynamicResource Spacing.Label}">
+      <TextBlock Classes="headline" Text="Ícones (Styles/Icons.axaml)" />
+      <TextBlock Classes="subheadline" Foreground="{DynamicResource Brush.Label.Secondary}"
+                 Text="Octicons nas etiquetas de estado; Phosphor nos comandos. Tamanhos small, medium e large."
+                 TextWrapping="Wrap" />
+      <WrapPanel ItemSpacing="{DynamicResource Spacing.Related}" LineSpacing="{DynamicResource Spacing.Related}">
+        <PathIcon Data="{StaticResource Icon.DiffModified}" ToolTip.Tip="Icon.DiffModified" />
+        <PathIcon Data="{StaticResource Icon.Alert}" ToolTip.Tip="Icon.Alert" />
+        <PathIcon Data="{StaticResource Icon.Stop}" ToolTip.Tip="Icon.Stop" />
+        <PathIcon Data="{StaticResource Icon.GitCompare}" ToolTip.Tip="Icon.GitCompare" />
+        <PathIcon Data="{StaticResource Icon.ArrowUp}" ToolTip.Tip="Icon.ArrowUp" />
+        <PathIcon Data="{StaticResource Icon.ArrowDown}" ToolTip.Tip="Icon.ArrowDown" />
+        <PathIcon Data="{StaticResource Icon.Upload}" ToolTip.Tip="Icon.Upload" />
+        <PathIcon Data="{StaticResource Icon.CloudOffline}" ToolTip.Tip="Icon.CloudOffline" />
+        <PathIcon Data="{StaticResource Icon.BellFill}" ToolTip.Tip="Icon.BellFill" />
+        <PathIcon Data="{StaticResource Icon.Trash}" ToolTip.Tip="Icon.Trash" />
+        <PathIcon Data="{StaticResource Icon.GitPullRequest}" ToolTip.Tip="Icon.GitPullRequest" />
+        <PathIcon Data="{StaticResource Icon.GitPullRequestDraft}" ToolTip.Tip="Icon.GitPullRequestDraft" />
+        <PathIcon Data="{StaticResource Icon.GitMerge}" ToolTip.Tip="Icon.GitMerge" />
+        <PathIcon Data="{StaticResource Icon.GitPullRequestClosed}" ToolTip.Tip="Icon.GitPullRequestClosed" />
+        <PathIcon Data="{StaticResource Icon.Check}" ToolTip.Tip="Icon.Check" />
+        <PathIcon Data="{StaticResource Icon.X}" ToolTip.Tip="Icon.X" />
+        <PathIcon Data="{StaticResource Icon.DotFill}" ToolTip.Tip="Icon.DotFill" />
+        <PathIcon Data="{StaticResource Icon.CheckCircle}" ToolTip.Tip="Icon.CheckCircle" />
+        <PathIcon Data="{StaticResource Icon.FileDiff}" ToolTip.Tip="Icon.FileDiff" />
+        <PathIcon Data="{StaticResource Icon.CodeReview}" ToolTip.Tip="Icon.CodeReview" />
+        <PathIcon Data="{StaticResource Icon.Plus}" ToolTip.Tip="Icon.Plus" />
+        <PathIcon Data="{StaticResource Icon.Close}" ToolTip.Tip="Icon.Close" />
+        <PathIcon Data="{StaticResource Icon.Help}" ToolTip.Tip="Icon.Help" />
+        <PathIcon Data="{StaticResource Icon.Settings}" ToolTip.Tip="Icon.Settings" />
+        <PathIcon Data="{StaticResource Icon.Info}" ToolTip.Tip="Icon.Info" />
+        <PathIcon Data="{StaticResource Icon.SortAscending}" ToolTip.Tip="Icon.SortAscending" />
+        <PathIcon Data="{StaticResource Icon.SortDescending}" ToolTip.Tip="Icon.SortDescending" />
+      </WrapPanel>
+      <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Spacing.Related}">
+        <PathIcon Classes="small" Data="{StaticResource Icon.Settings}" />
+        <PathIcon Data="{StaticResource Icon.Settings}" />
+        <PathIcon Classes="large" Data="{StaticResource Icon.Settings}" />
+        <Button Classes="borderless" ToolTip.Tip="Botão sem borda com ícone">
+          <PathIcon Data="{StaticResource Icon.Help}" />
+        </Button>
+        <Button ToolTip.Tip="Botão comum com ícone">
+          <PathIcon Data="{StaticResource Icon.Plus}" />
+        </Button>
+        <Button IsEnabled="False" ToolTip.Tip="Desabilitado: o ícone acompanha a cor do texto">
+          <PathIcon Data="{StaticResource Icon.Close}" />
+        </Button>
+      </StackPanel>
+    </StackPanel>
+
+    <StackPanel Spacing="{DynamicResource Spacing.Label}">
+      <TextBlock Classes="headline" Text="Menu e tooltip" />
+      <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Spacing.Group}">
+        <!-- O menu fica fixo na página para dar para ver (sem foco, senão ele o rouba da lista
+             ao ativar a janela); o tooltip abre sob o mouse. -->
+        <MenuFlyoutPresenter Focusable="False" HorizontalAlignment="Left" VerticalAlignment="Top">
+          <MenuItem Header="Abrir no iTerm2" Focusable="False" />
+          <MenuItem Header="Atualizar a partir da base…" Focusable="False" />
+          <Separator />
+          <MenuItem Header="Travar worktree" IsEnabled="False" Focusable="False" />
+        </MenuFlyoutPresenter>
+        <Button Name="TipButton" Content="Passe o mouse" VerticalAlignment="Top"
+                ToolTip.Tip="Travado pelo supacode há 2 dias" />
+      </StackPanel>
+    </StackPanel>
+
+  </StackPanel>
+</UserControl>

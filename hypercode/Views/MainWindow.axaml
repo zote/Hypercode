@@ -4,20 +4,32 @@
         x:Class="Hypercode.Views.MainWindow"
         Title="Hypercode — Git Worktrees"
         Width="1180" Height="640"
-        MinWidth="860" MinHeight="400">
+        MinWidth="860" MinHeight="400"
+        DragDrop.AllowDrop="True"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="PreferSystemChrome, OSXThickTitleBar"
+        Background="{DynamicResource Brush.Background.Window}">
 
   <Window.Styles>
-    <Style Selector="TextBlock.header">
-      <Setter Property="FontSize" Value="11" />
-      <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Opacity" Value="0.6" />
-      <Setter Property="VerticalAlignment" Value="Center" />
+    <!-- Com a barra de título estendida, as abas começam depois dos botões de janela e sobem
+         para a altura deles; em tela cheia os botões somem, e o recuo junto (classe posta pelo
+         code-behind). O Padding fica só no estilo: valor local no Border venceria o .extended. -->
+    <Style Selector="Border#TabStripBar">
+      <Setter Property="Padding" Value="{DynamicResource Padding.TabStrip}" />
+    </Style>
+    <Style Selector="Border#TabStripBar.extended">
+      <Setter Property="Padding" Value="{DynamicResource Padding.TabStrip.Extended}" />
     </Style>
     <Style Selector="TextBlock.cell">
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
-    <!-- Cabeçalho clicável: ordena pela coluna. Sem fundo nem borda, para parecer texto. -->
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
+    </Style>
+
+    <!-- Cabeçalho clicável da tabela: ordena pela coluna. Sem fundo nem borda, para parecer
+         texto; o rótulo acende sob o mouse. -->
     <Style Selector="Button.header">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
@@ -25,50 +37,78 @@
       <Setter Property="MinHeight" Value="0" />
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="HorizontalAlignment" Value="Left" />
-      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
       <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Opacity" Value="0.6" />
-    </Style>
-    <Style Selector="Button.header:pointerover">
-      <Setter Property="Opacity" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
     </Style>
     <Style Selector="Button.header:pointerover /template/ ContentPresenter, Button.header:pressed /template/ ContentPresenter">
       <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Primary}" />
     </Style>
-    <Style Selector="TextBlock.muted">
-      <Setter Property="Opacity" Value="0.55" />
+
+    <!-- Linha da tabela de worktrees: duas linhas de texto (nome e etiquetas). -->
+    <Style Selector="ListBox.table ListBoxItem">
+      <Setter Property="Padding" Value="{DynamicResource Padding.TableCell}" />
+      <Setter Property="MinHeight" Value="{DynamicResource Size.TableRow.TwoLine}" />
     </Style>
-    <Style Selector="ListBox">
+
+    <!-- Abas: a selecionada tem o fundo do conteúdo e se encaixa nele; as outras ficam no
+         fundo da janela, com um realce discreto sob o mouse. -->
+    <Style Selector="ListBox.tabs">
       <Setter Property="Padding" Value="0" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Background" Value="Transparent" />
     </Style>
-    <Style Selector="ListBoxItem">
-      <Setter Property="Padding" Value="16,0" />
-      <Setter Property="MinHeight" Value="40" />
+    <Style Selector="ListBox.tabs ListBoxItem">
+      <Setter Property="Padding" Value="{DynamicResource Padding.Tab}" />
+      <Setter Property="MinHeight" Value="{DynamicResource Size.Tab.MinHeight}" />
+      <Setter Property="Margin" Value="{DynamicResource Margin.Tab}" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Radius.Tab}" />
+    </Style>
+    <Style Selector="ListBox.tabs ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
+    </Style>
+    <Style Selector="ListBox.tabs ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Brush.Label.Quaternary}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Primary}" />
+    </Style>
+    <Style Selector="ListBox.tabs ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Brush.Background.Content}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Primary}" />
+    </Style>
+
+    <!-- × da aba: discreto até o mouse passar. -->
+    <Style Selector="Button.tabclose">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Tertiary}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.tabclose:pointerover /template/ ContentPresenter">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Primary}" />
+    </Style>
+
+    <!-- Aviso do rodapé (cota do GitHub, FSEvents): texto de aviso, menor que o status. -->
+    <Style Selector="TextBlock.notice">
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Warning}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
   </Window.Styles>
 
   <Window.Resources>
     <DataTemplate x:Key="BadgeTemplate">
-      <!-- Viewbox + Path de 16x16 fixo, em vez de PathIcon: o PathIcon estica o
-           desenho até as bordas, e os Octicons dependem da caixa 16x16 para manter a
-           proporção (o dot-fill, por exemplo, é um ponto no meio, não um círculo
-           cheio). O Border transparente faz o tooltip responder na caixa toda, não
-           só no traço do ícone. -->
-      <Border Margin="0,0,7,0" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
-        <Viewbox Width="14" Height="14">
-          <Path Width="16" Height="16"
-                Data="{Binding PathData, Converter={x:Static views:BadgeConverter.ToGeometry}}">
-            <Path.Fill>
-              <MultiBinding Converter="{x:Static views:BadgeBrushConverter.Instance}">
-                <Binding Path="LightColorHex" />
-                <Binding Path="DarkColorHex" />
-                <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource Self}" />
-              </MultiBinding>
-            </Path.Fill>
-          </Path>
-        </Viewbox>
+      <!-- O Border transparente faz o tooltip responder na caixa toda, não só no traço do
+           ícone. O PathIcon desenha no quadro 16x16 do Octicon (Styles/Controls.axaml). -->
+      <Border Margin="{DynamicResource Margin.Badge}" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
+        <PathIcon Data="{Binding IconKey, Converter={x:Static views:BadgeConverter.ToGeometry}}">
+          <PathIcon.Foreground>
+            <MultiBinding Converter="{x:Static views:BadgeBrushConverter.Instance}">
+              <Binding Path="LightColorHex" />
+              <Binding Path="DarkColorHex" />
+              <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource Self}" />
+            </MultiBinding>
+          </PathIcon.Foreground>
+        </PathIcon>
       </Border>
     </DataTemplate>
 
@@ -77,35 +117,109 @@
     </ItemsPanelTemplate>
   </Window.Resources>
 
-  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+  <Grid RowDefinitions="Auto,*">
 
-    <!-- Repositório -->
-    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="16,16,16,12">
-      <TextBlock Grid.Column="0" Text="Repositório" VerticalAlignment="Center" Margin="0,0,10,0" />
-      <TextBox Grid.Column="1"
-               Text="{Binding RepositoryPath, Mode=TwoWay}"
-               Watermark="/Users/voce/dev/meu-repo"
-               KeyDown="OnRepositoryPathKeyDown" />
-      <Button Grid.Column="2" Content="Escolher…" Margin="8,0,0,0" Click="OnBrowseClick" />
-      <Button Grid.Column="3" Content="Atualizar" Margin="8,0,0,0"
-              Click="OnRefreshClick" IsEnabled="{Binding IsNotBusy}" HotKey="Cmd+R"
-              ToolTip.Tip="Relê tudo, inclusive os PRs (⌘R). Worktree criado ou apagado fora do app e commit, fetch ou push já aparecem sozinhos." />
-      <Button Grid.Column="4" Content="?" Width="34" Margin="8,0,0,0"
-              HorizontalContentAlignment="Center" FontWeight="SemiBold"
-              Click="OnHelpClick" ToolTip.Tip="O que significam as etiquetas, a coluna PR e a limpeza" />
-      <!-- O ⌘, fica no item do menu do app: um HotKey aqui dispararia junto com ele. -->
-      <Button Grid.Column="5" Content="⚙" Width="34" Margin="8,0,0,0" FontSize="16" Padding="0"
-              HorizontalContentAlignment="Center"
-              Click="OnSettingsClick" ToolTip.Tip="Configurações: comando, monitoramento, atribuição de issue, limpeza automática (⌘,)" />
-    </Grid>
+    <!-- Abas: um repositório por aba, todos monitorados. Arrastar reordena; ⌘1…⌘9 trocam.
+         A faixa ocupa a barra de título (#91), com os botões de janela à esquerda: arrastar a
+         área vazia move a janela e o duplo-clique faz o que Ajustes do Sistema manda. O fundo
+         transparente é o que deixa a área vazia receber o clique. -->
+    <Border Name="TabStripBar" Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Brush.Separator}"
+            Background="Transparent">
+      <Grid ColumnDefinitions="*,Auto">
+        <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+          <StackPanel Orientation="Horizontal">
+            <ListBox Name="TabStrip" Classes="tabs"
+                     ItemsSource="{Binding Repositories}"
+                     SelectedItem="{Binding SelectedRepository, Mode=TwoWay}"
+                     SelectionMode="Single">
+              <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ListBox.ItemsPanel>
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Spacing.Label}" Background="Transparent"
+                              VerticalAlignment="Center" ToolTip.Tip="{Binding TabToolTip}">
+                    <StackPanel.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem Header="Configurações deste repositório…" Click="OnTabSettingsClick" />
+                        <MenuItem Header="Revelar no Finder" Click="OnTabRevealClick" />
+                        <Separator />
+                        <MenuItem Header="Fechar a aba…" Click="OnTabCloseClick" />
+                      </ContextMenu>
+                    </StackPanel.ContextMenu>
+                    <TextBlock Classes="body emphasized" Text="{Binding DisplayName}" VerticalAlignment="Center" />
+                    <TextBlock Classes="subheadline muted" VerticalAlignment="Center" Text="{Binding WorktreeCount}" />
+                    <ContentControl VerticalAlignment="Center"
+                                    Content="{Binding FailingBadge}" ContentTemplate="{StaticResource BadgeTemplate}"
+                                    IsVisible="{Binding HasFailingChecks}" />
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding HasCompleted}">
+                      <ContentControl Content="{Binding CompletedBadge}" ContentTemplate="{StaticResource BadgeTemplate}" />
+                      <!-- Margem negativa: cola a contagem no ícone, desfazendo parte do
+                           Margin.Badge que separa uma etiqueta da seguinte. -->
+                      <TextBlock Classes="subheadline" VerticalAlignment="Center" Margin="-3,0,0,0" Text="{Binding CompletedCount}"
+                                 ToolTip.Tip="{Binding CompletedBadge.Tooltip}" />
+                    </StackPanel>
+                    <ContentControl VerticalAlignment="Center"
+                                    Content="{Binding UnseenBadge}" ContentTemplate="{StaticResource BadgeTemplate}"
+                                    IsVisible="{Binding HasUnseenChanges}" />
+                    <Button Classes="borderless tabclose" Click="OnTabCloseClick"
+                            ToolTip.Tip="Fechar a aba (⌘W). Nada no disco é apagado.">
+                      <PathIcon Classes="small" Data="{StaticResource Icon.Close}" />
+                    </Button>
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <Button Classes="borderless" VerticalAlignment="Center" Click="OnAddRepositoryClick" HotKey="Cmd+O"
+                    ToolTip.Tip="Abrir um repositório numa aba nova (⌘O). Também dá para arrastar a pasta do Finder para a janela.">
+              <PathIcon Data="{StaticResource Icon.Plus}" />
+            </Button>
+          </StackPanel>
+        </ScrollViewer>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                    Spacing="{DynamicResource Spacing.Related}">
+          <Button Content="Atualizar"
+                  Click="OnRefreshClick" IsEnabled="{Binding SelectedRepository.IsNotBusy, FallbackValue=False}" HotKey="Cmd+R"
+                  ToolTip.Tip="Relê tudo da aba, inclusive os PRs (⌘R). Worktree criado ou apagado fora do app e commit, fetch ou push já aparecem sozinhos." />
+          <Button Classes="borderless" Click="OnHelpClick"
+                  ToolTip.Tip="O que significam as etiquetas, a coluna PR, as abas e a limpeza">
+            <PathIcon Data="{StaticResource Icon.Help}" />
+          </Button>
+          <!-- O ⌘, fica no item do menu do app: um HotKey aqui dispararia junto com ele. -->
+          <Button Classes="borderless" Click="OnSettingsClick"
+                  ToolTip.Tip="Configurações, globais ou de um repositório: comando, monitoramento, atribuição de issue, limpeza automática (⌘,)">
+            <PathIcon Data="{StaticResource Icon.Settings}" />
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Sem aba nenhuma -->
+    <StackPanel Grid.Row="1" IsVisible="{Binding HasNoRepositories}"
+                HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="{DynamicResource Space.M}">
+      <TextBlock Classes="title2" Text="Nenhum repositório aberto" HorizontalAlignment="Center" />
+      <TextBlock Classes="body muted" HorizontalAlignment="Center" TextAlignment="Center"
+                 Text="Abra um repositório git pela aba +, pelo ⌘O ou arrastando a pasta do Finder para cá.&#10;Cada repositório ganha a sua aba e continua monitorado em segundo plano." />
+      <Button Content="Abrir repositório…" IsDefault="True" HorizontalAlignment="Center" Click="OnAddRepositoryClick" />
+    </StackPanel>
+
+    <!-- A aba da frente: tudo daqui para baixo é do repositório selecionado. -->
+    <!-- Fundo de conteúdo, o mesmo da aba selecionada: a aba se encaixa nele. -->
+    <Grid Grid.Row="1" RowDefinitions="Auto,Auto,*,Auto"
+          Background="{DynamicResource Brush.Background.Content}"
+          DataContext="{Binding SelectedRepository}"
+          IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
 
     <!-- Filtro e criação -->
-    <Grid Grid.Row="1" ColumnDefinitions="320,Auto,*,Auto" Margin="16,0,16,12">
+    <!-- 320: largura do filtro, layout desta barra. -->
+    <Grid Grid.Row="0" ColumnDefinitions="320,Auto,*,Auto" Margin="{DynamicResource Padding.Bar}">
       <TextBox Grid.Column="0" Name="FilterBox"
                Text="{Binding FilterText, Mode=TwoWay}"
                Watermark="Filtrar por worktree, branch ou PR  (⌘F)"
                KeyDown="OnFilterKeyDown" />
-      <TextBlock Grid.Column="1" Classes="muted" VerticalAlignment="Center" Margin="10,0,0,0"
+      <TextBlock Grid.Column="1" Classes="callout muted" VerticalAlignment="Center" Margin="{DynamicResource Margin.AfterField}"
                  Text="{Binding FilterSummary}" IsVisible="{Binding HasHiddenRows}" />
       <Button Grid.Column="3" Content="Novo worktree…" Click="OnCreateWorktreeClick"
               IsEnabled="{Binding CanCreateWorktree}" HotKey="Cmd+N"
@@ -113,18 +227,44 @@
     </Grid>
 
     <!-- Cabeçalho da lista: clicar ordena; clicar de novo inverte -->
-    <Border Grid.Row="2" BorderThickness="0,0,0,1" BorderBrush="#22808080" Padding="16,0,16,8">
+    <!-- As larguras de coluna (2.8*, 2.2*, 162, 2.4*) e a calha de 72 dos ícones são o layout
+         desta tabela, repetido nas linhas abaixo; não são tokens. -->
+    <Border Grid.Row="1" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Brush.Separator}"
+            Padding="{DynamicResource Padding.TableHeader}">
       <Grid ColumnDefinitions="2.8*,2.2*,162,2.4*">
-        <Button Grid.Column="0" Classes="header" Content="{Binding NameHeader}" Margin="72,0,0,0"
-                Click="OnSortClick" Tag="Name" />
-        <Button Grid.Column="1" Classes="header" Content="{Binding BranchHeader}" Click="OnSortClick" Tag="Branch" />
-        <Button Grid.Column="2" Classes="header" Content="{Binding PullRequestHeader}" Click="OnSortClick" Tag="PullRequest" />
-        <Button Grid.Column="3" Classes="header" Content="{Binding PathHeader}" Click="OnSortClick" Tag="Path" />
+        <Button Grid.Column="0" Classes="header" Margin="72,0,0,0" Click="OnSortClick" Tag="Name">
+          <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Space.XS}">
+            <TextBlock Text="Worktree" />
+            <PathIcon Classes="small" Data="{Binding NameSortIcon, Converter={x:Static views:BadgeConverter.ToGeometry}}"
+                      IsVisible="{Binding NameSortIcon, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="1" Classes="header" Click="OnSortClick" Tag="Branch">
+          <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Space.XS}">
+            <TextBlock Text="Branch" />
+            <PathIcon Classes="small" Data="{Binding BranchSortIcon, Converter={x:Static views:BadgeConverter.ToGeometry}}"
+                      IsVisible="{Binding BranchSortIcon, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="2" Classes="header" Click="OnSortClick" Tag="PullRequest">
+          <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Space.XS}">
+            <TextBlock Text="PR" />
+            <PathIcon Classes="small" Data="{Binding PullRequestSortIcon, Converter={x:Static views:BadgeConverter.ToGeometry}}"
+                      IsVisible="{Binding PullRequestSortIcon, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="3" Classes="header" Click="OnSortClick" Tag="Path">
+          <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Space.XS}">
+            <TextBlock Text="Caminho" />
+            <PathIcon Classes="small" Data="{Binding PathSortIcon, Converter={x:Static views:BadgeConverter.ToGeometry}}"
+                      IsVisible="{Binding PathSortIcon, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          </StackPanel>
+        </Button>
       </Grid>
     </Border>
 
     <!-- Lista de worktrees -->
-    <ListBox Grid.Row="3" Name="WorktreeList"
+    <ListBox Grid.Row="2" Name="WorktreeList" Classes="table"
              ItemsSource="{Binding VisibleWorktrees}"
              SelectionMode="Multiple"
              SelectedItems="{Binding SelectedWorktrees}"
@@ -144,6 +284,8 @@
           <MenuItem Name="OpenPullRequestMenuItem" Click="OnOpenPullRequestMenuClick" />
           <MenuItem Name="MarkSeenMenuItem" Click="OnMarkSeenMenuClick"
                     ToolTip.Tip="Tira o sino da linha: as mudanças do PR avisadas pelo monitoramento ficam como vistas. Abrir o PR no navegador faz o mesmo." />
+          <MenuItem Name="RerunFailedChecksMenuItem" Click="OnRerunFailedChecksMenuClick"
+                    ToolTip.Tip="gh run rerun --failed em cada workflow run do GitHub Actions com job falho no último commit do PR: só os jobs que falharam voltam para a fila. Check de CI externo (status commit) não é reexecutado." />
           <Separator />
           <MenuItem Name="UpdateBranchMenuItem" Click="OnUpdateBranchMenuClick"
                     ToolTip.Tip="git pull --ff-only: traz os commits do upstream da própria branch. Se a branch divergiu, o git recusa e nada muda. Não traz a base do PR." />
@@ -169,17 +311,18 @@
                             ItemsSource="{Binding GitBadges}"
                             ItemTemplate="{StaticResource BadgeTemplate}"
                             ItemsPanel="{StaticResource BadgeRowPanel}" />
-              <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                <TextBlock Classes="cell" Text="{Binding Name}" FontWeight="SemiBold" />
-                <TextBlock Classes="cell muted" FontSize="11" Text="{Binding Tags}"
+              <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="{DynamicResource Space.XXS}">
+                <TextBlock Classes="cell body emphasized" Text="{Binding Name}" />
+                <TextBlock Classes="cell subheadline muted" Text="{Binding Tags}"
                            ToolTip.Tip="{Binding TagsTooltip}"
                            IsVisible="{Binding Tags, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
               </StackPanel>
             </Grid>
-            <TextBlock Grid.Column="1" Classes="cell" Text="{Binding Branch}" Margin="0,0,12,0" />
+            <TextBlock Grid.Column="1" Classes="cell callout mono" Text="{Binding Branch}" Margin="{DynamicResource Margin.BeforeColumn}" />
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
-              <TextBlock Classes="cell" Width="50" Text="{Binding PullRequestLabel}"
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="{DynamicResource Spacing.Related}">
+              <!-- 50: largura do número do PR, para os ícones alinharem entre linhas. -->
+              <TextBlock Classes="cell body" Width="50" Text="{Binding PullRequestLabel}"
                          ToolTip.Tip="{Binding PullRequestTooltip}" />
               <ItemsControl VerticalAlignment="Center"
                             ItemsSource="{Binding PullRequestBadges}"
@@ -187,7 +330,8 @@
                             ItemsPanel="{StaticResource BadgeRowPanel}" />
             </StackPanel>
 
-            <TextBlock Grid.Column="3" Classes="cell muted" FontSize="11" Text="{Binding FullPath}"
+            <!-- Caminho sem monoespaçada: a Menlo, mais larga, cortaria o caminho cedo demais. -->
+            <TextBlock Grid.Column="3" Classes="cell subheadline muted" Text="{Binding FullPath}"
                        ToolTip.Tip="{Binding FullPath}" />
           </Grid>
         </DataTemplate>
@@ -195,25 +339,32 @@
     </ListBox>
 
     <!-- Rodapé -->
-    <Border Grid.Row="4" BorderThickness="0,1,0,0" BorderBrush="#22808080" Padding="16,10">
-      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+    <Border Grid.Row="3" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Brush.Separator}"
+            Background="{DynamicResource Brush.Background.Window}" Padding="{DynamicResource Padding.Bar}">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+        <!-- 80x4: tamanho do indicador de atividade, layout deste rodapé. -->
         <ProgressBar Grid.Column="0" Width="80" Height="4" IsIndeterminate="True"
-                     VerticalAlignment="Center" Margin="0,0,12,0"
+                     VerticalAlignment="Center" Margin="{DynamicResource Margin.BeforeColumn}"
                      IsVisible="{Binding IsBusy}" />
-        <TextBlock Grid.Column="1" Classes="muted" VerticalAlignment="Center"
+        <TextBlock Grid.Column="1" Classes="callout muted" VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" Text="{Binding StatusMessage}" />
         <!-- Fica enquanto o monitoramento recua pela cota: a coluna PR parada não é travamento. -->
-        <TextBlock Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0" FontSize="11"
-                   Foreground="#C9822B"
+        <TextBlock Grid.Column="2" Classes="notice" Margin="{DynamicResource Margin.AroundColumn}"
                    Text="{Binding MonitorNotice}" IsVisible="{Binding HasMonitorNotice}"
                    ToolTip.Tip="A cota de consultas GraphQL do GitHub (5000/h, da conta inteira — outras ferramentas gastam dela também) passou de 60 %. Todas as cadências ficam mais longas até o reset ou até o consumo baixar." />
-        <Button Grid.Column="3" Content="{Binding CleanupButtonLabel}" Margin="0,0,8,0"
+        <!-- Fica enquanto o FSEvents não subiu: a lista não acompanha o git na hora. -->
+        <TextBlock Grid.Column="3" Classes="notice" Margin="{DynamicResource Margin.BeforeColumn}"
+                   Text="{Binding WatcherNotice}" IsVisible="{Binding HasWatcherNotice}"
+                   ToolTip.Tip="O acompanhamento do git dir (FSEvents) não ficou pronto a tempo — comum em disco externo ou máquina sob carga. A lista é relida periodicamente e o app tenta de novo; o Atualizar relê na hora." />
+        <Button Grid.Column="4" Content="{Binding CleanupButtonLabel}" Margin="{DynamicResource Margin.BeforeButton}"
                 Click="OnCleanupClick" IsEnabled="{Binding CanCleanupManually}"
                 ToolTip.Tip="{Binding CleanupToolTip}" ToolTip.ShowOnDisabled="True" />
-        <Button Grid.Column="4" Content="Abrir no iTerm2" Click="OnOpenTerminalClick"
+        <Button Grid.Column="5" Content="Abrir no iTerm2" Click="OnOpenTerminalClick"
                 IsEnabled="{Binding SelectedWorktree, Converter={x:Static ObjectConverters.IsNotNull}}" />
       </Grid>
     </Border>
+
+    </Grid>
 
   </Grid>
 </Window>

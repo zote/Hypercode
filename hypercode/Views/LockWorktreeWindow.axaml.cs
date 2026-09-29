@@ -17,7 +17,7 @@ public partial class LockWorktreeWindow : Window
 
     public LockWorktreeWindow(string headline, string confirmLabel) : this()
     {
-        HeadlineText.Text = headline;
+        Frame.Headline = headline;
         ConfirmButton.Content = confirmLabel;
         Opened += (_, _) => ReasonBox.Focus();
     }

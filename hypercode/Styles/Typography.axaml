@@ -1,0 +1,65 @@
+<!--
+  Estilos de texto da HIG do macOS como classes de TextBlock: tamanho, peso e altura de
+  linha de cada um. Os tamanhos vêm de Styles/Tokens.axaml; uso em Styles/README.md.
+-->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <Style Selector="TextBlock.large-title">
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.LargeTitle}" />
+    <Setter Property="LineHeight" Value="32" />
+  </Style>
+  <Style Selector="TextBlock.title1">
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Title1}" />
+    <Setter Property="LineHeight" Value="26" />
+  </Style>
+  <Style Selector="TextBlock.title2">
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Title2}" />
+    <Setter Property="LineHeight" Value="22" />
+  </Style>
+  <Style Selector="TextBlock.title3">
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Title3}" />
+    <Setter Property="LineHeight" Value="20" />
+  </Style>
+  <Style Selector="TextBlock.headline">
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Headline}" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="LineHeight" Value="16" />
+  </Style>
+  <Style Selector="TextBlock.body">
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+    <Setter Property="LineHeight" Value="16" />
+  </Style>
+  <Style Selector="TextBlock.callout">
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Callout}" />
+    <Setter Property="LineHeight" Value="15" />
+  </Style>
+  <Style Selector="TextBlock.subheadline">
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
+    <Setter Property="LineHeight" Value="14" />
+  </Style>
+  <Style Selector="TextBlock.footnote">
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Footnote}" />
+    <Setter Property="LineHeight" Value="13" />
+  </Style>
+  <Style Selector="TextBlock.caption1">
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Caption1}" />
+    <Setter Property="LineHeight" Value="13" />
+  </Style>
+  <Style Selector="TextBlock.caption2">
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Caption2}" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="LineHeight" Value="13" />
+  </Style>
+
+  <!-- Variante enfática, combinável com qualquer estilo acima: Classes="body emphasized".
+       Fica depois dos estilos para vencer o peso deles. -->
+  <Style Selector="TextBlock.emphasized">
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="TextBlock.mono">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Mono}" />
+  </Style>
+
+</Styles>

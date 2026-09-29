@@ -2,23 +2,33 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <RootNamespace>Hypercode.Tests</RootNamespace>
+    <RuntimeIdentifiers>osx-arm64;osx-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="xunit.v3" />
-    <PackageReference Include="coverlet.MTP" />
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../hypercode/Hypercode.csproj" />
+    <ProjectReference Include="..\..\hypercode\Hypercode.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- TokensTests, FluentOverridesTests e IconsTests leem o XAML para conferir contraste, paridade das
+         variantes e os aliases das chaves do Fluent -->
+    <None Include="..\..\hypercode\Styles\Tokens.axaml" Link="Tokens.axaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\hypercode\Styles\FluentOverrides.axaml" Link="FluentOverrides.axaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\hypercode\Styles\Icons.axaml" Link="Icons.axaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

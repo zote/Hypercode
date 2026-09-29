@@ -13,7 +13,6 @@ public partial class SettingsWindow : Window
         InitializeComponent();
     }
 
-    private void OnClose(object? sender, RoutedEventArgs e) => Close();
 
     /// <summary>
     /// Ligar a limpeza automática pede consentimento: o aviso diz o que o git apaga junto e o
@@ -22,7 +21,7 @@ public partial class SettingsWindow : Window
     /// </summary>
     private async void OnAutoCleanupClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel viewModel) return;
+        if (DataContext is not SettingsViewModel viewModel) return;
 
         var wanted = AutoCleanupBox.IsChecked == true;
         AutoCleanupBox.SetCurrentValue(ToggleButton.IsCheckedProperty, viewModel.AutoCleanup);
@@ -35,23 +34,22 @@ public partial class SettingsWindow : Window
 
         var confirmed = await new ConfirmWindow(
             "Limpeza automática",
-            MainViewModel.AutoCleanupWarningTitle,
+            RepositoryViewModel.AutoCleanupWarningTitle,
             viewModel.AutoCleanupWarning,
             "Ativar mesmo assim",
-            cancelIsDefault: true).ShowDialog<bool>(this);
+            ConfirmStyle.CancelIsDefault).ShowDialog<bool>(this);
 
         if (confirmed) viewModel.AutoCleanup = true;
     }
 
     private async void OnAutoCleanupInfoClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel viewModel) return;
+        if (DataContext is not SettingsViewModel viewModel) return;
 
-        await new ConfirmWindow(
+        await ConfirmWindow.Notice(
             "Limpeza automática",
             "O que a limpeza automática faz — e o que ela apaga junto",
-            viewModel.AutoCleanupWarning,
-            "Entendi").ShowDialog<bool>(this);
+            viewModel.AutoCleanupWarning).ShowDialog<bool>(this);
     }
 
     // Esc por KeyDown, como no Sobre: IsCancel no botão fechava a janela trazida para a frente

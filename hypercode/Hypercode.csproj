@@ -21,11 +21,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Hypercode.Tests" />
+    <AvaloniaResource Include="Assets\icon.png" />
   </ItemGroup>
 
   <ItemGroup>
-    <AvaloniaResource Include="Assets\icon.png" />
+    <InternalsVisibleTo Include="Hypercode.Tests" />
   </ItemGroup>
 
 </Project>

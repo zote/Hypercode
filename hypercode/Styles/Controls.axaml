@@ -1,0 +1,176 @@
+<!--
+  Estilos de controle no padrão do macOS que o FluentTheme não tem como recurso: botão padrão
+  em destaque, botão destrutivo e sem borda, lista estilo tabela, anel de foco e itens de
+  menu recuados. As cores dos estados comuns vêm de Styles/FluentOverrides.axaml; uso e
+  classes em Styles/README.md.
+
+  Estes estilos ficam em Application.Styles, depois do FluentTheme: estilo comum vence o
+  ControlTheme do Fluent, e estilo de janela (Window.Styles) vence estes.
+-->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Anel de foco do teclado (Tab): a accent a 50% por fora do controle, como no macOS. -->
+  <Style Selector="AdornerLayer">
+    <Setter Property="DefaultFocusAdorner">
+      <FocusAdornerTemplate>
+        <!-- IsClipEnabled=False: sem isso o adorner é recortado nos limites do controle e o
+             anel, que fica por fora, some. -->
+        <Border AdornerLayer.IsClipEnabled="False" Margin="-3" BorderThickness="3"
+                BorderBrush="{DynamicResource Brush.Focus}"
+                CornerRadius="{DynamicResource Radius.FocusRing}" />
+      </FocusAdornerTemplate>
+    </Setter>
+  </Style>
+
+  <!-- Ícone: desenha a geometria de Styles/Icons.axaml no quadro de 16x16 dela, em vez de
+       esticá-la até as bordas do desenho como o PathIcon do Fluent — assim um ponto continua
+       ponto e ícones diferentes saem do mesmo tamanho. Tamanho pelas classes small/large. -->
+  <Style Selector="PathIcon">
+    <Setter Property="Width" Value="{DynamicResource Size.Icon.Medium}" />
+    <Setter Property="Height" Value="{DynamicResource Size.Icon.Medium}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Viewbox>
+          <Path Width="16" Height="16" Data="{TemplateBinding Data}" Fill="{TemplateBinding Foreground}" />
+        </Viewbox>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="PathIcon.small">
+    <Setter Property="Width" Value="{DynamicResource Size.Icon.Small}" />
+    <Setter Property="Height" Value="{DynamicResource Size.Icon.Small}" />
+  </Style>
+  <Style Selector="PathIcon.large">
+    <Setter Property="Width" Value="{DynamicResource Size.Icon.Large}" />
+    <Setter Property="Height" Value="{DynamicResource Size.Icon.Large}" />
+  </Style>
+
+  <!-- Botão: sem o "encolher" do Fluent ao pressionar, que o macOS não tem. -->
+  <Style Selector="Button:pressed, RepeatButton:pressed">
+    <Setter Property="RenderTransform" Value="none" />
+  </Style>
+
+  <!-- Botão padrão (IsDefault, o que o Return aciona) em destaque, como no macOS — o mesmo
+       visual de Classes="accent". -->
+  <Style Selector="Button[IsDefault=True]">
+    <Setter Property="Background" Value="{DynamicResource AccentButtonBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentButtonBorderBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentButtonForeground}" />
+  </Style>
+  <Style Selector="Button[IsDefault=True]:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentButtonBackgroundPointerOver}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentButtonBorderBrushPointerOver}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundPointerOver}" />
+  </Style>
+  <Style Selector="Button[IsDefault=True]:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentButtonBackgroundPressed}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentButtonBorderBrushPressed}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundPressed}" />
+  </Style>
+  <Style Selector="Button[IsDefault=True]:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentButtonBackgroundDisabled}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentButtonBorderBrushDisabled}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundDisabled}" />
+  </Style>
+
+  <!-- Em janela fora de foco o botão padrão perde o destaque (classe "inactive": App). -->
+  <Style Selector="Window.inactive Button[IsDefault=True]">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorderBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}" />
+  </Style>
+
+  <!-- Destrutivo: botão comum com o rótulo em vermelho. Vem depois do padrão para vencê-lo —
+       a HIG pede que a ação destrutiva não seja a padrão, mas se for, continua vermelha. -->
+  <Style Selector="Button.destructive">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorderBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Danger}" />
+  </Style>
+  <Style Selector="Button.destructive:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackgroundPointerOver}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorderBrushPointerOver}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Danger}" />
+  </Style>
+  <Style Selector="Button.destructive:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackgroundPressed}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorderBrushPressed}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Danger}" />
+  </Style>
+  <Style Selector="Button.destructive:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackgroundDisabled}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorderBrushDisabled}" />
+    <Setter Property="Foreground" Value="{DynamicResource ButtonForegroundDisabled}" />
+  </Style>
+
+  <!-- Sem borda (barra de ferramentas, ação dentro de linha): só o conteúdo, com um fundo
+       discreto sob o mouse. -->
+  <Style Selector="Button.borderless">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Padding" Value="{DynamicResource Padding.Borderless}" />
+  </Style>
+  <Style Selector="Button.borderless:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Brush.Label.Quaternary}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.borderless:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Brush.Background.ControlPressed}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.borderless:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <!-- Placeholder do campo: o Fluent o deixa na cor do texto a 50% de opacidade; aqui a
+       opacidade é 1 (FluentOverrides) e a cor vem do token, igual em todos os estados. -->
+  <Style Selector="TextBox /template/ TextBlock#PART_Watermark">
+    <Setter Property="Foreground" Value="{DynamicResource TextControlPlaceholderForeground}" />
+  </Style>
+  <Style Selector="TextBox:disabled /template/ TextBlock#PART_Watermark">
+    <Setter Property="Foreground" Value="{DynamicResource TextControlPlaceholderForegroundDisabled}" />
+  </Style>
+
+  <!-- Tooltip: menor e menos arredondado que o overlay do Fluent, como o do macOS. -->
+  <Style Selector="ToolTip">
+    <Setter Property="CornerRadius" Value="{DynamicResource Radius.Small}" />
+  </Style>
+
+  <!-- Menu: itens recuados das bordas, com o destaque arredondado do macOS. -->
+  <Style Selector="MenuItem">
+    <Setter Property="Margin" Value="{DynamicResource Margin.MenuItem}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Radius.Small}" />
+  </Style>
+  <Style Selector="Menu > MenuItem">
+    <Setter Property="Margin" Value="0" />
+  </Style>
+
+  <!-- Lista estilo tabela do macOS (opcional: Classes="table"). Sem destaque sob o mouse;
+       seleção na accent com a lista em foco e cinza quando o foco está em outro lugar ou a
+       janela está inativa (a janela inativa perde o :focus-within). -->
+  <Style Selector="ListBox.table">
+    <Setter Property="Background" Value="{DynamicResource Brush.Background.Content}" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="ListBox.table ListBoxItem">
+    <Setter Property="Margin" Value="{DynamicResource Margin.TableRow}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Radius.Small}" />
+  </Style>
+  <Style Selector="ListBox.table ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                   ListBox.table ListBoxItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Primary}" />
+  </Style>
+  <Style Selector="ListBox.table ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter,
+                   ListBox.table ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Brush.Selection.Inactive}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Primary}" />
+  </Style>
+  <Style Selector="ListBox.table:focus-within ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Brush.Selection.Active}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.OnAccent}" />
+  </Style>
+
+</Styles>

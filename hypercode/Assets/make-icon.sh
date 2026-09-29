@@ -1,27 +1,31 @@
 #!/usr/bin/env bash
-# Gera Assets/icon.icns (ícone do bundle) e Assets/icon.png (exibido na janela Sobre)
-# a partir de Assets/icon.svg.  Rode depois de editar o SVG e commite os três: o
-# build-app.sh só copia o .icns, não precisa gerar nada.
-# Usa só o que vem com o macOS (swift/AppKit, sips, iconutil).
+# Gera, a partir de Assets/Hypercode.icon (o ícone em camadas do Icon Composer):
+#   Assets/Assets.car  o ícone do macOS 26+, com as variantes claro, escuro, tinted e clear
+#   Assets/icon.icns   a versão plana, para macOS anterior ao 26 (o actool gera junto)
+#   Assets/icon.png    a imagem da janela Sobre
+# Rode depois de editar o .icon e commite os três: o build-app.sh só copia, não precisa do
+# Xcode. Este script precisa: Xcode 26 ou mais novo (actool e o ictool do Icon Composer).
+# Para editar: Xcode → Open Developer Tool → Icon Composer → abrir Assets/Hypercode.icon.
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-ICONSET="$WORK/icon.iconset"
-mkdir "$ICONSET"
 
-echo "▸ rasterizando icon.svg…"
-swift render-svg.swift icon.svg "$WORK/icon-1024.png" 1024
+echo "▸ compilando Hypercode.icon…"
+# Caminhos absolutos: o actool e o ictool não resolvem os relativos ao diretório atual.
+# O nome do ícone (--app-icon) é o CFBundleIconName do Info.plist, no build-app.sh.
+xcrun actool "$PWD/Hypercode.icon" --compile "$WORK" \
+  --platform macosx --minimum-deployment-target 11.0 \
+  --app-icon Hypercode --output-partial-info-plist "$WORK/partial.plist" >/dev/null
+cp "$WORK/Assets.car" Assets.car
+cp "$WORK/Hypercode.icns" icon.icns
 
-# Os tamanhos e nomes que o iconutil espera num .iconset.
-for size in 16 32 128 256 512; do
-  sips -z "$size" "$size" "$WORK/icon-1024.png" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
-  double=$((size * 2))
-  sips -z "$double" "$double" "$WORK/icon-1024.png" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
-done
+echo "▸ exportando a imagem do Sobre…"
+# O ictool que exporta imagem é o de dentro do Icon Composer; o de xcrun é outro.
+ICTOOL="$(xcode-select -p)/../Applications/Icon Composer.app/Contents/Executables/ictool"
+"$ICTOOL" "$PWD/Hypercode.icon" --export-image --output-file "$PWD/icon.png" \
+  --platform macOS --rendition Default --width 256 --height 256 --scale 1 >/dev/null
 
-iconutil -c icns "$ICONSET" -o icon.icns
-cp "$ICONSET/icon_256x256.png" icon.png
-echo "✓ pronto: Assets/icon.icns e Assets/icon.png"
+echo "✓ pronto: Assets/Assets.car, Assets/icon.icns e Assets/icon.png"

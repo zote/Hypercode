@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- O ramo: um worktree saindo do tronco. -->
+  <path d="M566 600 C566 520 700 540 700 452 V392" fill="none" stroke="#38BDF8" stroke-width="44"
+        stroke-linecap="round"/>
+  <circle cx="700" cy="392" r="46" fill="#38BDF8"/>
+</svg>

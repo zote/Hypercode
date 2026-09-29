@@ -48,8 +48,8 @@ jobs:
 
       - name: Testes com cobertura
         run: >
-          dotnet test --solution Hypercode.sln -c Release --no-build
-          --coverlet --coverlet-output-format cobertura
+          dotnet test Hypercode.sln -c Release --no-build
+          --collect "XPlat Code Coverage"
           --results-directory "$GITHUB_WORKSPACE/artifacts/test-results"
 
       - name: Resumo da cobertura

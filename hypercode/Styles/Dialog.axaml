@@ -1,0 +1,50 @@
+<!--
+  Tema do DialogFrame (Views/DialogFrame.cs): o layout padrão de diálogo e sheet do macOS.
+  Título em negrito (Headline), mensagem na cor secundária, o conteúdo e, embaixo, os
+  botões alinhados à direita. Uso em Styles/README.md.
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:views="clr-namespace:Hypercode.Views">
+
+  <ControlTheme x:Key="{x:Type views:DialogFrame}" TargetType="views:DialogFrame">
+    <Setter Property="Padding" Value="{DynamicResource Margin.Window}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <DockPanel Margin="{TemplateBinding Padding}">
+          <StackPanel DockPanel.Dock="Top" Spacing="{DynamicResource Spacing.Label}">
+            <TextBlock Classes="headline" TextWrapping="Wrap"
+                       Foreground="{DynamicResource Brush.Label.Primary}"
+                       Text="{TemplateBinding Headline}"
+                       IsVisible="{Binding Headline, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <TextBlock Classes="body" TextWrapping="Wrap"
+                       Foreground="{DynamicResource Brush.Label.Secondary}"
+                       Text="{TemplateBinding Message}"
+                       IsVisible="{Binding Message, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          </StackPanel>
+          <ItemsControl Name="PART_Buttons" DockPanel.Dock="Bottom" HorizontalAlignment="Right"
+                        Margin="{DynamicResource Margin.DialogButtons}"
+                        ItemsSource="{Binding Buttons, RelativeSource={RelativeSource TemplatedParent}}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Spacing.Related}" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+          </ItemsControl>
+          <ContentPresenter Margin="{DynamicResource Margin.DialogContent}"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            IsVisible="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static ObjectConverters.IsNotNull}}" />
+        </DockPanel>
+      </ControlTemplate>
+    </Setter>
+
+    <!-- Botões da barra com largura mínima, como os do macOS: "OK" não fica do tamanho da
+         palavra ao lado de "Cancelar". -->
+    <Style Selector="^ /template/ ItemsControl#PART_Buttons Button">
+      <Setter Property="MinWidth" Value="{DynamicResource Size.DialogButton.MinWidth}" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+  </ControlTheme>
+
+</ResourceDictionary>

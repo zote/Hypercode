@@ -8,6 +8,7 @@ public sealed class WorktreeRow : ObservableObject
     private WorktreeStatus _status = WorktreeStatus.Unknown;
     private BaseDistance? _baseDistance;
     private IReadOnlyList<string> _pullRequestChanges = Array.Empty<string>();
+    private string? _cleanupNote;
 
     public WorktreeRow(WorktreeInfo worktree)
     {
@@ -36,6 +37,7 @@ public sealed class WorktreeRow : ObservableObject
                 RaisePropertyChanged(nameof(HasPullRequest));
                 RaisePropertyChanged(nameof(BaseBranch));
                 RaisePropertyChanged(nameof(CanUpdateFromBase));
+                RaisePropertyChanged(nameof(CanRerunFailedChecks));
                 RefreshTags();
             }
         }
@@ -62,6 +64,21 @@ public sealed class WorktreeRow : ObservableObject
     }
 
     public bool HasPullRequestChanges => _pullRequestChanges.Count > 0;
+
+    /// <summary>
+    /// Com a limpeza automática ligada, desde quando ela vê este worktree concluído e quando
+    /// ele sai (ou por que ficou). Vai para o tooltip do PR mergeado/fechado e do removível.
+    /// </summary>
+    public string? CleanupNote
+    {
+        get => _cleanupNote;
+        set
+        {
+            if (_cleanupNote == value) return;
+            _cleanupNote = value;
+            RefreshBadges();
+        }
+    }
 
     /// <summary>Base do PR aberto desta branch — de onde vem o "atualizar a partir da base".</summary>
     public string? BaseBranch => _pullRequest is { IsOpen: true, BaseRefName: { Length: > 0 } baseRef } ? baseRef : null;
@@ -114,6 +131,17 @@ public sealed class WorktreeRow : ObservableObject
         && (Worktree.IsPrunable
             || (_pullRequest is not null && !_pullRequest.IsOpen)
             || IsGoneAndInBase);
+
+    /// <summary>
+    /// Sabe-se que este worktree não é candidato: PR aberto, ou principal, bare ou travado à
+    /// mão. É mais forte que <c>!IsCompleted</c>, que também vale para o PR que ainda não
+    /// chegou — e nesse caso a limpeza automática não pode esquecer que ele já estava concluído.
+    /// </summary>
+    public bool IsKnownNotCompleted =>
+        Worktree.IsMain
+        || Worktree.IsBare
+        || (Worktree.IsLocked && !Worktree.IsToolLock)
+        || _pullRequest is { IsOpen: true };
 
     /// <summary>Upstream "gone" e HEAD contido na base — dispensa achar o PR. Não vale com PR aberto.</summary>
     private bool IsGoneAndInBase =>
@@ -196,7 +224,8 @@ public sealed class WorktreeRow : ObservableObject
                 badges.Add(new StatusBadge(
                     BadgeKind.Removable,
                     $"Pode ser removido — {CompletionReason}."
-                    + (_status.HasUncommittedChanges ? " Mas há alterações não commitadas: o git vai recusar." : string.Empty)));
+                    + (_status.HasUncommittedChanges ? " Mas há alterações não commitadas: o git vai recusar." : string.Empty)
+                    + WithCleanupNote()));
 
             return badges;
         }
@@ -219,8 +248,8 @@ public sealed class WorktreeRow : ObservableObject
 
             badges.Add(pullRequest.State.ToUpperInvariant() switch
             {
-                "MERGED" => new StatusBadge(BadgeKind.PrMerged, $"PR #{pullRequest.Number} mergeado."),
-                "CLOSED" => new StatusBadge(BadgeKind.PrClosed, $"PR #{pullRequest.Number} fechado sem merge."),
+                "MERGED" => new StatusBadge(BadgeKind.PrMerged, $"PR #{pullRequest.Number} mergeado.{WithCleanupNote()}"),
+                "CLOSED" => new StatusBadge(BadgeKind.PrClosed, $"PR #{pullRequest.Number} fechado sem merge.{WithCleanupNote()}"),
                 _ => pullRequest.IsDraft
                     ? new StatusBadge(BadgeKind.PrDraft, $"PR #{pullRequest.Number} aberto como rascunho.")
                     : new StatusBadge(BadgeKind.PrOpen, $"PR #{pullRequest.Number} aberto."),
@@ -285,6 +314,8 @@ public sealed class WorktreeRow : ObservableObject
         return $"A base {pullRequest.BaseRefName} {distance}. {hint}";
     }
 
+    private string WithCleanupNote() => _cleanupNote is null ? string.Empty : $"\n\n{_cleanupNote}";
+
     private void RefreshBadges()
     {
         RaisePropertyChanged(nameof(GitBadges));
@@ -337,6 +368,14 @@ public sealed class WorktreeRow : ObservableObject
         && Worktree.Branch is not null
         && BaseBranch is not null
         && (_pullRequest!.IsBehindBase || _pullRequest.HasConflicts || _baseDistance is { Behind: > 0 });
+
+    /// <summary>
+    /// PR aberto com checks falhando e ao menos um deles de um workflow run do Actions — o que
+    /// o `gh run rerun --failed` sabe rodar de novo. Falha só de StatusContext (CI externo) não conta.
+    /// </summary>
+    public bool CanRerunFailedChecks =>
+        _pullRequest is { IsOpen: true, Checks: ChecksState.Failing } pullRequest
+        && pullRequest.FailedWorkflowRuns.Count > 0;
 
     /// <summary>
     /// Há sessão do Claude Code gravada para esta pasta — condição para o `claude --continue`

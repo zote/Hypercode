@@ -2,7 +2,7 @@ namespace Hypercode.ViewModels;
 
 public sealed record LegendEntry(StatusBadge Badge, string Title, string Description)
 {
-    public string PathData => Badge.PathData;
+    public string IconKey => Badge.IconKey;
     public string LightColorHex => Badge.LightColorHex;
     public string DarkColorHex => Badge.DarkColorHex;
 }
@@ -54,5 +54,15 @@ public sealed class HelpViewModel
         Entry(BadgeKind.ReviewApproved, "Review aprovado", "O pull request recebeu aprovação."),
         Entry(BadgeKind.ReviewChangesRequested, "Mudanças solicitadas", "Um revisor pediu alterações."),
         Entry(BadgeKind.ReviewRequired, "Aguardando review", "O pull request ainda precisa de revisão."),
+    };
+
+    public IReadOnlyList<LegendEntry> TabLegend { get; } = new[]
+    {
+        Entry(BadgeKind.RepositoryChecksFailing, "CI falhando no repositório",
+            "Algum PR aberto do repositório está com check falhando. O tooltip da aba diz quais."),
+        Entry(BadgeKind.Removable, "Concluídos",
+            "Quantos worktrees do repositório estão prontos para a limpeza — o mesmo número do Limpar concluídos daquela aba."),
+        Entry(BadgeKind.PrChanged, "Novidade em segundo plano",
+            "O monitoramento viu um PR do repositório mudar enquanto a aba estava atrás. Some ao trazer a aba para a frente; o sino da linha continua até marcar como visto."),
     };
 }

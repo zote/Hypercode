@@ -1,0 +1,183 @@
+<!--
+  Tokens do design system (#63). Valores das cores de sistema do macOS e da escala da HIG;
+  onde o valor da Apple não passa em WCAG AA como texto, o token de texto usa um tom
+  ajustado (e o teste TokensTests garante o contraste). Uso e nomes: Styles/README.md.
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <ResourceDictionary.ThemeDictionaries>
+
+    <ResourceDictionary x:Key="Light">
+      <!-- Texto. Secondary é 60% (o macOS usa 50%, que dá 3,8:1 sobre o fundo de janela).
+           Tertiary e Quaternary não passam em AA: só para texto desabilitado e decoração. -->
+      <SolidColorBrush x:Key="Brush.Label.Primary" Color="#D9000000" />
+      <SolidColorBrush x:Key="Brush.Label.Secondary" Color="#99000000" />
+      <SolidColorBrush x:Key="Brush.Label.Tertiary" Color="#42000000" />
+      <SolidColorBrush x:Key="Brush.Label.Quaternary" Color="#1A000000" />
+      <SolidColorBrush x:Key="Brush.Text.Link" Color="#0064D6" />
+      <SolidColorBrush x:Key="Brush.Text.Danger" Color="#B3221A" />
+      <SolidColorBrush x:Key="Brush.Text.Warning" Color="#8A5A00" />
+      <SolidColorBrush x:Key="Brush.Text.Success" Color="#157031" />
+
+      <!-- Fundos -->
+      <SolidColorBrush x:Key="Brush.Background.Window" Color="#ECECEC" />
+      <SolidColorBrush x:Key="Brush.Background.Content" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Brush.Background.ContentAlternate" Color="#F4F5F5" />
+      <SolidColorBrush x:Key="Brush.Background.Control" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Brush.Background.ControlPressed" Color="#E3E3E3" />
+      <SolidColorBrush x:Key="Brush.Background.Overlay" Color="#F6F6F6" />
+      <SolidColorBrush x:Key="Brush.Background.Danger" Color="#1FFF3B30" />
+      <SolidColorBrush x:Key="Brush.Background.Warning" Color="#26FF9500" />
+      <SolidColorBrush x:Key="Brush.Selection.Inactive" Color="#DCDCDC" />
+      <SolidColorBrush x:Key="Brush.Separator" Color="#1A000000" />
+      <SolidColorBrush x:Key="Brush.Border.Control" Color="#26000000" />
+      <SolidColorBrush x:Key="Brush.Border.Overlay" Color="#1F000000" />
+
+      <!-- Status para ícone, ponto e borda — não para texto (ver Brush.Text.*) -->
+      <SolidColorBrush x:Key="Brush.Status.Danger" Color="#FF3B30" />
+      <SolidColorBrush x:Key="Brush.Status.Warning" Color="#FF9500" />
+      <SolidColorBrush x:Key="Brush.Status.Success" Color="#28CD41" />
+    </ResourceDictionary>
+
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="Brush.Label.Primary" Color="#D9FFFFFF" />
+      <SolidColorBrush x:Key="Brush.Label.Secondary" Color="#8CFFFFFF" />
+      <SolidColorBrush x:Key="Brush.Label.Tertiary" Color="#40FFFFFF" />
+      <SolidColorBrush x:Key="Brush.Label.Quaternary" Color="#1AFFFFFF" />
+      <SolidColorBrush x:Key="Brush.Text.Link" Color="#419CFF" />
+      <SolidColorBrush x:Key="Brush.Text.Danger" Color="#FF8A84" />
+      <SolidColorBrush x:Key="Brush.Text.Warning" Color="#FF9F0A" />
+      <SolidColorBrush x:Key="Brush.Text.Success" Color="#32D74B" />
+
+      <SolidColorBrush x:Key="Brush.Background.Window" Color="#323232" />
+      <SolidColorBrush x:Key="Brush.Background.Content" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Brush.Background.ContentAlternate" Color="#262626" />
+      <SolidColorBrush x:Key="Brush.Background.Control" Color="#40FFFFFF" />
+      <SolidColorBrush x:Key="Brush.Background.ControlPressed" Color="#59FFFFFF" />
+      <SolidColorBrush x:Key="Brush.Background.Overlay" Color="#2C2C2C" />
+      <SolidColorBrush x:Key="Brush.Background.Danger" Color="#29FF453A" />
+      <SolidColorBrush x:Key="Brush.Background.Warning" Color="#29FF9F0A" />
+      <SolidColorBrush x:Key="Brush.Selection.Inactive" Color="#464646" />
+      <SolidColorBrush x:Key="Brush.Separator" Color="#1AFFFFFF" />
+      <SolidColorBrush x:Key="Brush.Border.Control" Color="#1FFFFFFF" />
+      <SolidColorBrush x:Key="Brush.Border.Overlay" Color="#26FFFFFF" />
+
+      <SolidColorBrush x:Key="Brush.Status.Danger" Color="#FF453A" />
+      <SolidColorBrush x:Key="Brush.Status.Warning" Color="#FF9F0A" />
+      <SolidColorBrush x:Key="Brush.Status.Success" Color="#32D74B" />
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+
+  <!-- Destaque e seleção seguem a accent color do sistema, que o FluentTheme lê do macOS (#64). -->
+  <SolidColorBrush x:Key="Brush.Accent" Color="{DynamicResource SystemAccentColor}" />
+  <SolidColorBrush x:Key="Brush.Selection.Active" Color="{DynamicResource SystemAccentColorDark1}" />
+  <SolidColorBrush x:Key="Brush.Accent.Pressed" Color="{DynamicResource SystemAccentColorDark2}" />
+  <!-- Anel de foco do teclado: a accent a 50%, por fora do controle -->
+  <SolidColorBrush x:Key="Brush.Focus" Color="{DynamicResource SystemAccentColor}" Opacity="0.5" />
+  <SolidColorBrush x:Key="Brush.Text.OnAccent" Color="#FFFFFF" />
+
+  <!-- Tipografia: escala da HIG do macOS. Peso e altura de linha de cada estilo ficam nas
+       classes de Styles/Typography.axaml. -->
+  <FontFamily x:Key="Font.Mono">Menlo</FontFamily>
+  <x:Double x:Key="Font.Size.LargeTitle">26</x:Double>
+  <x:Double x:Key="Font.Size.Title1">22</x:Double>
+  <x:Double x:Key="Font.Size.Title2">17</x:Double>
+  <x:Double x:Key="Font.Size.Title3">15</x:Double>
+  <x:Double x:Key="Font.Size.Headline">13</x:Double>
+  <x:Double x:Key="Font.Size.Body">13</x:Double>
+  <x:Double x:Key="Font.Size.Callout">12</x:Double>
+  <x:Double x:Key="Font.Size.Subheadline">11</x:Double>
+  <x:Double x:Key="Font.Size.Footnote">10</x:Double>
+  <x:Double x:Key="Font.Size.Caption1">10</x:Double>
+  <x:Double x:Key="Font.Size.Caption2">10</x:Double>
+
+  <!-- Espaçamento: grade de 4pt. Nas views, prefira os nomes semânticos logo abaixo. -->
+  <x:Double x:Key="Space.XXS">2</x:Double>
+  <x:Double x:Key="Space.XS">4</x:Double>
+  <x:Double x:Key="Space.S">8</x:Double>
+  <x:Double x:Key="Space.M">12</x:Double>
+  <x:Double x:Key="Space.L">16</x:Double>
+  <x:Double x:Key="Space.XL">20</x:Double>
+  <x:Double x:Key="Space.XXL">24</x:Double>
+  <x:Double x:Key="Space.XXXL">32</x:Double>
+
+  <!-- Da borda da janela ao conteúdo (a HIG usa 20pt) -->
+  <Thickness x:Key="Margin.Window">20</Thickness>
+  <!-- Entre controles relacionados: campo e botão da mesma linha, botões de uma barra -->
+  <x:Double x:Key="Spacing.Related">8</x:Double>
+  <!-- Entre grupos de controles: seções de um diálogo -->
+  <x:Double x:Key="Spacing.Group">20</x:Double>
+  <!-- Entre um rótulo e o controle que ele descreve -->
+  <x:Double x:Key="Spacing.Label">6</x:Double>
+  <!-- Dentro de uma caixa de conteúdo: aviso, bloco de detalhe -->
+  <Thickness x:Key="Padding.Box">12</Thickness>
+  <!-- Botão sem borda: o fundo só aparece sob o mouse, então o padding é menor -->
+  <Thickness x:Key="Padding.Borderless">6,3</Thickness>
+  <!-- Recuo do item de menu e da linha de lista estilo tabela, para o destaque arredondado
+       não encostar nas bordas -->
+  <Thickness x:Key="Margin.MenuItem">5,0</Thickness>
+  <Thickness x:Key="Margin.TableRow">6,0</Thickness>
+
+  <!-- Janela principal: faixa de abas, barras (filtro, rodapé) e a tabela de worktrees.
+       Padding.TableCell soma com Margin.TableRow (6) para o conteúdo da linha cair no mesmo
+       recuo de 16 do cabeçalho e das barras. -->
+  <Thickness x:Key="Padding.TabStrip">8,8,16,0</Thickness>
+  <!-- Faixa de abas na barra de título estendida: recua à esquerda o espaço dos botões de
+       janela (fechar, minimizar, zoom) e sobe as abas para o centro delas ficar na altura dos
+       botões — a barra alta do macOS tem 38pt, botões no meio; 2 + 34/2 = 19 -->
+  <Thickness x:Key="Padding.TabStrip.Extended">84,2,16,0</Thickness>
+  <Thickness x:Key="Padding.Tab">12,0,6,0</Thickness>
+  <Thickness x:Key="Margin.Tab">0,0,2,0</Thickness>
+  <x:Double x:Key="Size.Tab.MinHeight">34</x:Double>
+  <Thickness x:Key="Padding.Bar">16,10</Thickness>
+  <Thickness x:Key="Padding.TableHeader">16,0,16,6</Thickness>
+  <Thickness x:Key="Padding.TableCell">10,0</Thickness>
+  <x:Double x:Key="Size.TableRow.TwoLine">40</x:Double>
+  <!-- Recuos à direita de um elemento de linha: antes da próxima coluna (12) e antes do
+       botão seguinte numa barra (8); o texto logo depois de um campo (10 à esquerda) -->
+  <Thickness x:Key="Margin.BeforeColumn">0,0,12,0</Thickness>
+  <Thickness x:Key="Margin.AroundColumn">12,0</Thickness>
+  <Thickness x:Key="Margin.BeforeButton">0,0,8,0</Thickness>
+  <Thickness x:Key="Margin.AfterField">10,0,0,0</Thickness>
+  <!-- Entre uma etiqueta de estado e a seguinte -->
+  <Thickness x:Key="Margin.Badge">0,0,6,0</Thickness>
+
+  <!-- Rótulo de formulário alinhado ao topo de um campo com dica embaixo: o recuo põe o
+       texto na altura do texto do campo (24pt de campo, 16 de linha) -->
+  <Thickness x:Key="Margin.FieldLabel">0,4,12,0</Thickness>
+
+  <!-- Texto corrido (ajuda): título de seção, parágrafo, termo de glossário, e o ícone de
+       legenda alinhado à primeira linha do texto ao lado -->
+  <Thickness x:Key="Margin.Section">0,20,0,6</Thickness>
+  <Thickness x:Key="Margin.Paragraph">0,0,0,8</Thickness>
+  <Thickness x:Key="Margin.Term">0,12,0,2</Thickness>
+  <Thickness x:Key="Margin.IconAlignTop">0,2,0,0</Thickness>
+
+  <!-- Diálogo (DialogFrame): do título ao conteúdo, do conteúdo aos botões, e a largura
+       mínima de cada botão da barra -->
+  <Thickness x:Key="Margin.DialogContent">0,12,0,0</Thickness>
+  <Thickness x:Key="Margin.DialogButtons">0,20,0,0</Thickness>
+  <x:Double x:Key="Size.DialogButton.MinWidth">80</x:Double>
+  <!-- Detalhe longo (lista de worktrees, relatório) rola dentro da caixa em vez de esticar
+       o diálogo -->
+  <x:Double x:Key="Size.DialogDetail.MaxHeight">320</x:Double>
+
+  <!-- Tamanho dos ícones (Styles/Icons.axaml), casado com a escala de texto: Small ao lado
+       de Subheadline/Caption, Medium ao lado de Body, Large ao lado de Title 3 -->
+  <x:Double x:Key="Size.Icon.Small">12</x:Double>
+  <x:Double x:Key="Size.Icon.Medium">14</x:Double>
+  <x:Double x:Key="Size.Icon.Large">18</x:Double>
+
+  <!-- Raios de canto -->
+  <CornerRadius x:Key="Radius.Small">4</CornerRadius>
+  <CornerRadius x:Key="Radius.Control">6</CornerRadius>
+  <CornerRadius x:Key="Radius.Group">10</CornerRadius>
+  <CornerRadius x:Key="Radius.Window">12</CornerRadius>
+  <!-- Aba: só os cantos de cima, para a aba selecionada se encaixar no conteúdo abaixo -->
+  <CornerRadius x:Key="Radius.Tab">6,6,0,0</CornerRadius>
+  <!-- Radius.Control + a espessura do anel (3), para o anel acompanhar a curva do controle -->
+  <CornerRadius x:Key="Radius.FocusRing">9</CornerRadius>
+
+</ResourceDictionary>
