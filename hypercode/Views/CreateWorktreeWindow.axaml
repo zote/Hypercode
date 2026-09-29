@@ -1,119 +1,149 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Hypercode.Views"
         x:Class="Hypercode.Views.CreateWorktreeWindow"
         Title="Novo worktree"
-        Width="620" SizeToContent="Height"
-        MinWidth="480"
-        CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        Width="620" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Brush.Background.Window}">
 
   <Window.Styles>
+    <!-- Formulário: rótulo à esquerda, na coluna de 110 (layout deste formulário), e o campo
+         com a dica embaixo, à direita. -->
     <Style Selector="TextBlock.label">
       <Setter Property="VerticalAlignment" Value="Center" />
-      <Setter Property="Margin" Value="0,0,12,0" />
+      <Setter Property="Margin" Value="{DynamicResource Margin.BeforeColumn}" />
     </Style>
     <Style Selector="TextBlock.hint">
-      <Setter Property="FontSize" Value="11" />
-      <Setter Property="Opacity" Value="0.6" />
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
       <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="StackPanel.field">
+      <Setter Property="Spacing" Value="{DynamicResource Space.XS}" />
+    </Style>
+    <Style Selector="StackPanel.group">
+      <Setter Property="Spacing" Value="{DynamicResource Spacing.Related}" />
     </Style>
   </Window.Styles>
 
-  <StackPanel Margin="20" Spacing="14">
+  <!-- Layout de diálogo da HIG (Styles/Dialog.axaml), sem título: o da janela já diz o que
+       é. Return num campo cria (OnFieldKeyDown), porque o IsDefault não alcança o
+       AutoCompleteBox. -->
+  <views:DialogFrame>
+    <StackPanel Spacing="{DynamicResource Spacing.Group}">
 
-    <StackPanel Orientation="Horizontal" Spacing="20" IsEnabled="{Binding IsNotBusy}">
-      <RadioButton GroupName="mode" Content="A partir de uma issue" IsChecked="{Binding IsIssueMode, Mode=TwoWay}" />
-      <RadioButton GroupName="mode" Content="A partir de um PR" IsChecked="{Binding IsPullRequestMode, Mode=TwoWay}" />
-      <RadioButton GroupName="mode" Content="Branch nova" IsChecked="{Binding IsNewBranchMode, Mode=TwoWay}" />
-    </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Spacing.Group}" IsEnabled="{Binding IsNotBusy}">
+        <RadioButton GroupName="mode" Content="A partir de uma issue" IsChecked="{Binding IsIssueMode, Mode=TwoWay}" />
+        <RadioButton GroupName="mode" Content="A partir de um PR" IsChecked="{Binding IsPullRequestMode, Mode=TwoWay}" />
+        <RadioButton GroupName="mode" Content="Branch nova" IsChecked="{Binding IsNewBranchMode, Mode=TwoWay}" />
+      </StackPanel>
 
-    <!-- Branch nova -->
-    <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,8,Auto,4,Auto"
-          IsVisible="{Binding IsNewBranchMode}" IsEnabled="{Binding IsNotBusy}">
-      <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Branch" />
-      <TextBox Grid.Row="0" Grid.Column="1" Name="BranchNameBox"
-               Text="{Binding BranchName, Mode=TwoWay}" Watermark="feature/minha-tarefa"
-               KeyDown="OnFieldKeyDown" />
+      <StackPanel Classes="group">
+        <!-- Branch nova -->
+        <StackPanel Classes="group" IsVisible="{Binding IsNewBranchMode}" IsEnabled="{Binding IsNotBusy}">
+          <Grid ColumnDefinitions="110,*">
+            <TextBlock Classes="label" Text="Branch" />
+            <TextBox Grid.Column="1" Name="BranchNameBox"
+                     Text="{Binding BranchName, Mode=TwoWay}" Watermark="feature/minha-tarefa"
+                     KeyDown="OnFieldKeyDown" />
+          </Grid>
+          <Grid ColumnDefinitions="110,*">
+            <TextBlock Classes="label" Text="A partir de" VerticalAlignment="Top" Margin="{DynamicResource Margin.FieldLabel}" />
+            <StackPanel Grid.Column="1" Classes="field">
+              <AutoCompleteBox Text="{Binding BaseRef, Mode=TwoWay}"
+                               ItemsSource="{Binding Branches}"
+                               FilterMode="ContainsOrdinal"
+                               MinimumPrefixLength="0"
+                               Watermark="origin/main"
+                               KeyDown="OnFieldKeyDown" />
+              <TextBlock Classes="hint"
+                         Text="Base remota é atualizada com fetch antes de criar. A branch nova nasce sem upstream: o primeiro push define." />
+            </StackPanel>
+          </Grid>
+        </StackPanel>
 
-      <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="A partir de" />
-      <AutoCompleteBox Grid.Row="2" Grid.Column="1"
-                       Text="{Binding BaseRef, Mode=TwoWay}"
-                       ItemsSource="{Binding Branches}"
-                       FilterMode="ContainsOrdinal"
-                       MinimumPrefixLength="0"
-                       Watermark="origin/main"
+        <!-- A partir de um PR -->
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding IsPullRequestMode}" IsEnabled="{Binding IsNotBusy}">
+          <TextBlock Classes="label" Text="PR" VerticalAlignment="Top" Margin="{DynamicResource Margin.FieldLabel}" />
+          <StackPanel Grid.Column="1" Classes="field">
+            <TextBox Name="PullRequestBox"
+                     Text="{Binding PullRequestNumberText, Mode=TwoWay}" Watermark="412, #412 ou a URL do PR"
+                     KeyDown="OnFieldKeyDown" />
+            <TextBlock Classes="hint"
+                       Text="{Binding PullRequestSummary}"
+                       IsVisible="{Binding PullRequestSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          </StackPanel>
+        </Grid>
+
+        <!-- A partir de uma issue -->
+        <StackPanel Classes="group" IsVisible="{Binding IsIssueMode}" IsEnabled="{Binding IsNotBusy}">
+          <Grid ColumnDefinitions="110,*">
+            <TextBlock Classes="label" Text="Issue" VerticalAlignment="Top" Margin="{DynamicResource Margin.FieldLabel}" />
+            <StackPanel Grid.Column="1" Classes="field">
+              <TextBox Name="IssueBox"
+                       Text="{Binding IssueNumberText, Mode=TwoWay}" Watermark="34, #34 ou a URL da issue"
                        KeyDown="OnFieldKeyDown" />
-      <TextBlock Grid.Row="4" Grid.Column="1" Classes="hint"
-                 Text="Base remota é atualizada com fetch antes de criar. A branch nova nasce sem upstream: o primeiro push define." />
-    </Grid>
-
-    <!-- A partir de um PR -->
-    <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,4,Auto"
-          IsVisible="{Binding IsPullRequestMode}" IsEnabled="{Binding IsNotBusy}">
-      <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="PR" />
-      <TextBox Grid.Row="0" Grid.Column="1" Name="PullRequestBox"
-               Text="{Binding PullRequestNumberText, Mode=TwoWay}" Watermark="412, #412 ou a URL do PR"
-               KeyDown="OnFieldKeyDown" />
-      <TextBlock Grid.Row="2" Grid.Column="1" Classes="hint"
-                 Text="{Binding PullRequestSummary}"
-                 IsVisible="{Binding PullRequestSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-    </Grid>
-
-    <!-- A partir de uma issue -->
-    <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,4,Auto,8,Auto,4,Auto,8,Auto"
-          IsVisible="{Binding IsIssueMode}" IsEnabled="{Binding IsNotBusy}">
-      <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Issue" />
-      <TextBox Grid.Row="0" Grid.Column="1" Name="IssueBox"
-               Text="{Binding IssueNumberText, Mode=TwoWay}" Watermark="34, #34 ou a URL da issue"
-               KeyDown="OnFieldKeyDown" />
-      <TextBlock Grid.Row="2" Grid.Column="1" Classes="hint"
-                 Text="{Binding IssueSummary}"
-                 IsVisible="{Binding IssueSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-
-      <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Branch" />
-      <TextBox Grid.Row="4" Grid.Column="1"
-               Text="{Binding IssueBranchName, Mode=TwoWay}" Watermark="claude/issue-34-assunto"
-               KeyDown="OnFieldKeyDown" />
-      <TextBlock Grid.Row="6" Grid.Column="1" Classes="hint" Foreground="#D29922"
-                 Text="{Binding IssueBranchWarning}"
-                 IsVisible="{Binding IssueBranchWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-
-      <TextBlock Grid.Row="8" Grid.Column="0" Classes="label" Text="A partir de" />
-      <AutoCompleteBox Grid.Row="8" Grid.Column="1"
-                       Text="{Binding BaseRef, Mode=TwoWay}"
-                       ItemsSource="{Binding Branches}"
-                       FilterMode="ContainsOrdinal"
-                       MinimumPrefixLength="0"
-                       Watermark="origin/main"
+              <TextBlock Classes="hint"
+                         Text="{Binding IssueSummary}"
+                         IsVisible="{Binding IssueSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+          </Grid>
+          <Grid ColumnDefinitions="110,*">
+            <TextBlock Classes="label" Text="Branch" VerticalAlignment="Top" Margin="{DynamicResource Margin.FieldLabel}" />
+            <StackPanel Grid.Column="1" Classes="field">
+              <TextBox Text="{Binding IssueBranchName, Mode=TwoWay}" Watermark="claude/issue-34-assunto"
                        KeyDown="OnFieldKeyDown" />
-    </Grid>
+              <TextBlock Classes="hint" Foreground="{DynamicResource Brush.Text.Warning}"
+                         Text="{Binding IssueBranchWarning}"
+                         IsVisible="{Binding IssueBranchWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+          </Grid>
+          <Grid ColumnDefinitions="110,*">
+            <TextBlock Classes="label" Text="A partir de" />
+            <AutoCompleteBox Grid.Column="1"
+                             Text="{Binding BaseRef, Mode=TwoWay}"
+                             ItemsSource="{Binding Branches}"
+                             FilterMode="ContainsOrdinal"
+                             MinimumPrefixLength="0"
+                             Watermark="origin/main"
+                             KeyDown="OnFieldKeyDown" />
+          </Grid>
+        </StackPanel>
 
-    <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,4,Auto" IsEnabled="{Binding IsNotBusy}">
-      <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Pasta" />
-      <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding WorktreePath, Mode=TwoWay}"
-               Watermark="{Binding WorktreesRoot}" FontFamily="Menlo,Consolas,monospace" FontSize="12"
-               KeyDown="OnFieldKeyDown" />
-      <TextBlock Grid.Row="2" Grid.Column="1" Classes="hint" Text="{Binding IncludeSummary}" />
-    </Grid>
+        <Grid ColumnDefinitions="110,*" IsEnabled="{Binding IsNotBusy}">
+          <TextBlock Classes="label" Text="Pasta" VerticalAlignment="Top" Margin="{DynamicResource Margin.FieldLabel}" />
+          <StackPanel Grid.Column="1" Classes="field">
+            <TextBox Text="{Binding WorktreePath, Mode=TwoWay}"
+                     Watermark="{Binding WorktreesRoot}"
+                     FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Font.Size.Callout}"
+                     KeyDown="OnFieldKeyDown" />
+            <TextBlock Classes="hint" Text="{Binding IncludeSummary}" />
+          </StackPanel>
+        </Grid>
+      </StackPanel>
 
-    <CheckBox Content="{Binding OpenTerminalLabel}" IsChecked="{Binding OpenTerminal, Mode=TwoWay}"
-              IsEnabled="{Binding IsNotBusy}" />
+      <CheckBox Content="{Binding OpenTerminalLabel}" IsChecked="{Binding OpenTerminal, Mode=TwoWay}"
+                IsEnabled="{Binding IsNotBusy}" />
 
-    <Border IsVisible="{Binding HasError}" Background="#1FE5534B" CornerRadius="6" Padding="10,8">
-      <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" Foreground="#E5534B" />
-    </Border>
+      <Border IsVisible="{Binding HasError}"
+              Background="{DynamicResource Brush.Background.Danger}"
+              CornerRadius="{DynamicResource Radius.Control}"
+              Padding="{DynamicResource Padding.Box}">
+        <TextBlock Classes="body" Text="{Binding ErrorMessage}" TextWrapping="Wrap"
+                   Foreground="{DynamicResource Brush.Text.Danger}" />
+      </Border>
 
-    <Grid ColumnDefinitions="Auto,*,Auto">
-      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"
-                  IsVisible="{Binding IsBusy}">
+      <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Spacing.Related}" IsVisible="{Binding IsBusy}">
+        <!-- 80x4: tamanho do indicador de atividade, layout desta linha. -->
         <ProgressBar Width="80" Height="4" IsIndeterminate="True" VerticalAlignment="Center" />
         <TextBlock Classes="hint" Text="{Binding ProgressMessage}" VerticalAlignment="Center" />
       </StackPanel>
-      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-        <Button Content="Cancelar" Click="OnCancel" IsCancel="True" IsEnabled="{Binding IsNotBusy}" />
-        <Button Content="Criar" Click="OnCreate" IsDefault="True" IsEnabled="{Binding CanCreate}" />
-      </StackPanel>
-    </Grid>
+    </StackPanel>
 
-  </StackPanel>
+    <views:DialogFrame.Buttons>
+      <Button Content="Cancelar" Click="OnCancel" IsCancel="True" IsEnabled="{Binding IsNotBusy}" />
+      <Button Content="Criar" Click="OnCreate" IsDefault="True" IsEnabled="{Binding CanCreate}" />
+    </views:DialogFrame.Buttons>
+  </views:DialogFrame>
 </Window>
