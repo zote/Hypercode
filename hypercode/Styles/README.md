@@ -80,6 +80,7 @@ texto passa em WCAG AA (4,5:1) sobre os fundos.
 | Token | Uso |
 |---|---|
 | `Brush.Status.Danger` / `Warning` / `Success` | ícone, ponto e borda de status — **não para texto** |
+| `Brush.Badge.Success` / `Danger` / `Done` / `Attention` / `Accent` / `Muted` | ícone das etiquetas de estado de worktree, PR, checks e review — **não para texto** |
 | `Brush.Accent` | destaque: borda do campo em foco, ícone ativo |
 | `Brush.Accent.Pressed` | botão de destaque e checkbox marcado, pressionados |
 | `Brush.Focus` | anel de foco do teclado (a accent a 50%) |
@@ -103,6 +104,20 @@ fica no token de status (ícone, ponto):
 | `Brush.Text.Danger` | `#FF3B30` / `#FF453A` | `#B3221A` / `#FF8A84` | legível também dentro da caixa de erro |
 | `Brush.Text.Warning` (claro) | `#FF9500` | `#8A5A00` | laranja do sistema dá 1,9:1 |
 | `Brush.Text.Success` (claro) | `#28CD41` | `#157031` | verde do sistema dá 1,8:1 |
+
+### Etiquetas de estado: a paleta do GitHub
+
+As etiquetas de estado mostram informação do GitHub, e a regra do app é mostrá-la com o
+ícone e a cor que o GitHub usa. Por isso os `Brush.Badge.*` não usam as cores do macOS:
+são os `fg.*` do [Primer](https://primer.style/foundations/color) em claro e escuro
+(`fg.success`, `fg.danger`, `fg.done`, `fg.attention`, `fg.accent`, `fg.muted`). Ficam nos
+tokens, e não no código, para ter uma fonte só de cor e para o `TokensTests` conferir o
+contraste delas (#103). O papel de cada etiqueta fica em `BadgeVisuals.Tone`, que devolve
+a chave do token, e o `BadgeBrushConverter` busca o pincel na variante de tema do controle.
+
+Como etiqueta é ícone, o mínimo é 3:1 (WCAG 1.4.11), não o 4,5:1 de texto. Todas passam
+sobre os fundos de janela, conteúdo, linha alternada e overlay. Sobre
+`Brush.Selection.Inactive`, o `Danger` escuro dá 2,8:1 — pendência na #108.
 
 ## Tipografia
 
@@ -276,7 +291,7 @@ Duas famílias, com papéis diferentes:
 - **Octicons** (GitHub, MIT) nas etiquetas de estado de worktree, PR, checks e review:
   sempre que o GitHub mostra a mesma informação, o app usa o mesmo ícone e a mesma cor
   que ele. O view-model escolhe a etiqueta pela chave do ícone (`StatusBadge.IconKey`), e
-  o `BadgeConverter.ToGeometry` busca o recurso.
+  o `BadgeConverter.ToGeometry` busca o recurso; a cor vem dos `Brush.Badge.*`.
 - **Phosphor** (MIT, peso regular) nos comandos do próprio app (nova aba, fechar, ajuda,
   configurações, informação, ordenação). É o conjunto aberto mais parecido com o SF
   Symbols.

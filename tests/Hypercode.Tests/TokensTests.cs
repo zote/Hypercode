@@ -6,17 +6,24 @@ namespace Hypercode.Tests;
 
 /// <summary>
 /// Confere as cores de Styles/Tokens.axaml lendo o XAML direto: as duas variantes têm as
-/// mesmas chaves e todo token de texto passa em WCAG AA (4,5:1) sobre os fundos em que
-/// pode aparecer.
+/// mesmas chaves, todo token de texto passa em WCAG AA (4,5:1) e todo ícone de etiqueta em
+/// 3:1 (1.4.11, contraste não textual) sobre os fundos em que pode aparecer.
 /// </summary>
 public class TokensTests
 {
     private const double MinimoAA = 4.5;
+    private const double MinimoNaoTextual = 3.0;
 
     private static readonly string[] Textos =
     [
         "Brush.Label.Primary", "Brush.Label.Secondary", "Brush.Text.Link",
         "Brush.Text.Danger", "Brush.Text.Warning", "Brush.Text.Success",
+    ];
+
+    private static readonly string[] Etiquetas =
+    [
+        "Brush.Badge.Success", "Brush.Badge.Danger", "Brush.Badge.Done",
+        "Brush.Badge.Attention", "Brush.Badge.Accent", "Brush.Badge.Muted",
     ];
 
     private static readonly string[] Fundos =
@@ -46,6 +53,22 @@ public class TokensTests
             let razao = Contraste(cores[texto], cores[fundo])
             where razao < MinimoAA
             select $"{texto} sobre {fundo}: {razao:F2}";
+
+        Assert.Empty(falhas);
+    }
+
+    // Brush.Selection.Inactive fica de fora por ora: o Danger escuro do Primer dá 2,8:1 sobre ela (#108).
+    [Theory]
+    [MemberData(nameof(Variantes))]
+    public void EtiquetaPassaEmContrasteNaoTextualSobreOsFundos(string variante)
+    {
+        var cores = Carregar()[variante];
+        var falhas =
+            from etiqueta in Etiquetas
+            from fundo in Fundos
+            let razao = Contraste(cores[etiqueta], cores[fundo])
+            where razao < MinimoNaoTextual
+            select $"{etiqueta} sobre {fundo}: {razao:F2}";
 
         Assert.Empty(falhas);
     }

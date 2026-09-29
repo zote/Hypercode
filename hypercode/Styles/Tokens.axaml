@@ -38,6 +38,15 @@
       <SolidColorBrush x:Key="Brush.Status.Danger" Color="#FF3B30" />
       <SolidColorBrush x:Key="Brush.Status.Warning" Color="#FF9500" />
       <SolidColorBrush x:Key="Brush.Status.Success" Color="#28CD41" />
+
+      <!-- Etiquetas de estado de worktree, PR, checks e review: os fg.* do Primer, a mesma
+           cor que o GitHub usa para a mesma informação (#103). Ícone, não texto. -->
+      <SolidColorBrush x:Key="Brush.Badge.Success" Color="#1A7F37" />
+      <SolidColorBrush x:Key="Brush.Badge.Danger" Color="#D1242F" />
+      <SolidColorBrush x:Key="Brush.Badge.Done" Color="#8250DF" />
+      <SolidColorBrush x:Key="Brush.Badge.Attention" Color="#9A6700" />
+      <SolidColorBrush x:Key="Brush.Badge.Accent" Color="#0969DA" />
+      <SolidColorBrush x:Key="Brush.Badge.Muted" Color="#59636E" />
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="Dark">
@@ -66,6 +75,13 @@
       <SolidColorBrush x:Key="Brush.Status.Danger" Color="#FF453A" />
       <SolidColorBrush x:Key="Brush.Status.Warning" Color="#FF9F0A" />
       <SolidColorBrush x:Key="Brush.Status.Success" Color="#32D74B" />
+
+      <SolidColorBrush x:Key="Brush.Badge.Success" Color="#3FB950" />
+      <SolidColorBrush x:Key="Brush.Badge.Danger" Color="#F85149" />
+      <SolidColorBrush x:Key="Brush.Badge.Done" Color="#AB7DF8" />
+      <SolidColorBrush x:Key="Brush.Badge.Attention" Color="#D29922" />
+      <SolidColorBrush x:Key="Brush.Badge.Accent" Color="#4493F8" />
+      <SolidColorBrush x:Key="Brush.Badge.Muted" Color="#9198A1" />
     </ResourceDictionary>
 
   </ResourceDictionary.ThemeDictionaries>
