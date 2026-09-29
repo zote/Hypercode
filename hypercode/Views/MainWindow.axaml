@@ -62,7 +62,6 @@
       <Setter Property="Padding" Value="4,0" />
       <Setter Property="MinHeight" Value="0" />
       <Setter Property="MinWidth" Value="0" />
-      <Setter Property="FontSize" Value="14" />
       <Setter Property="Opacity" Value="0.45" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
@@ -72,7 +71,6 @@
     <Style Selector="Button.addtab">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="FontSize" Value="16" />
       <Setter Property="Padding" Value="10,0" />
       <Setter Property="MinHeight" Value="34" />
       <Setter Property="VerticalAlignment" Value="Bottom" />
@@ -81,24 +79,18 @@
 
   <Window.Resources>
     <DataTemplate x:Key="BadgeTemplate">
-      <!-- Viewbox + Path de 16x16 fixo, em vez de PathIcon: o PathIcon estica o
-           desenho até as bordas, e os Octicons dependem da caixa 16x16 para manter a
-           proporção (o dot-fill, por exemplo, é um ponto no meio, não um círculo
-           cheio). O Border transparente faz o tooltip responder na caixa toda, não
-           só no traço do ícone. -->
+      <!-- O Border transparente faz o tooltip responder na caixa toda, não só no traço do
+           ícone. O PathIcon desenha no quadro 16x16 do Octicon (Styles/Controls.axaml). -->
       <Border Margin="0,0,7,0" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
-        <Viewbox Width="14" Height="14">
-          <Path Width="16" Height="16"
-                Data="{Binding PathData, Converter={x:Static views:BadgeConverter.ToGeometry}}">
-            <Path.Fill>
-              <MultiBinding Converter="{x:Static views:BadgeBrushConverter.Instance}">
-                <Binding Path="LightColorHex" />
-                <Binding Path="DarkColorHex" />
-                <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource Self}" />
-              </MultiBinding>
-            </Path.Fill>
-          </Path>
-        </Viewbox>
+        <PathIcon Data="{Binding IconKey, Converter={x:Static views:BadgeConverter.ToGeometry}}">
+          <PathIcon.Foreground>
+            <MultiBinding Converter="{x:Static views:BadgeBrushConverter.Instance}">
+              <Binding Path="LightColorHex" />
+              <Binding Path="DarkColorHex" />
+              <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource Self}" />
+            </MultiBinding>
+          </PathIcon.Foreground>
+        </PathIcon>
       </Border>
     </DataTemplate>
 
@@ -148,26 +140,34 @@
                     <ContentControl VerticalAlignment="Center"
                                     Content="{Binding UnseenBadge}" ContentTemplate="{StaticResource BadgeTemplate}"
                                     IsVisible="{Binding HasUnseenChanges}" />
-                    <Button Classes="tabclose" Content="×" Click="OnTabCloseClick"
-                            ToolTip.Tip="Fechar a aba (⌘W). Nada no disco é apagado." />
+                    <Button Classes="tabclose" Click="OnTabCloseClick"
+                            ToolTip.Tip="Fechar a aba (⌘W). Nada no disco é apagado.">
+                      <PathIcon Classes="small" Data="{StaticResource Icon.Close}" />
+                    </Button>
                   </StackPanel>
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
-            <Button Classes="addtab" Content="+" Click="OnAddRepositoryClick" HotKey="Cmd+O"
-                    ToolTip.Tip="Abrir um repositório numa aba nova (⌘O). Também dá para arrastar a pasta do Finder para a janela." />
+            <Button Classes="addtab" Click="OnAddRepositoryClick" HotKey="Cmd+O"
+                    ToolTip.Tip="Abrir um repositório numa aba nova (⌘O). Também dá para arrastar a pasta do Finder para a janela.">
+              <PathIcon Data="{StaticResource Icon.Plus}" />
+            </Button>
           </StackPanel>
         </ScrollViewer>
         <Button Grid.Column="1" Content="Atualizar" Margin="8,0,0,6" VerticalAlignment="Center"
                 Click="OnRefreshClick" IsEnabled="{Binding SelectedRepository.IsNotBusy, FallbackValue=False}" HotKey="Cmd+R"
                 ToolTip.Tip="Relê tudo da aba, inclusive os PRs (⌘R). Worktree criado ou apagado fora do app e commit, fetch ou push já aparecem sozinhos." />
-        <Button Grid.Column="2" Content="?" Width="34" Margin="8,0,0,6" VerticalAlignment="Center"
-                HorizontalContentAlignment="Center" FontWeight="SemiBold"
-                Click="OnHelpClick" ToolTip.Tip="O que significam as etiquetas, a coluna PR, as abas e a limpeza" />
-        <!-- O ⌘, fica no item do menu do app: um HotKey aqui dispararia junto com ele. -->
-        <Button Grid.Column="3" Content="⚙" Width="34" Margin="8,0,0,6" FontSize="16" Padding="0" VerticalAlignment="Center"
+        <Button Grid.Column="2" Width="34" Margin="8,0,0,6" VerticalAlignment="Center"
                 HorizontalContentAlignment="Center"
-                Click="OnSettingsClick" ToolTip.Tip="Configurações, globais ou de um repositório: comando, monitoramento, atribuição de issue, limpeza automática (⌘,)" />
+                Click="OnHelpClick" ToolTip.Tip="O que significam as etiquetas, a coluna PR, as abas e a limpeza">
+          <PathIcon Data="{StaticResource Icon.Help}" />
+        </Button>
+        <!-- O ⌘, fica no item do menu do app: um HotKey aqui dispararia junto com ele. -->
+        <Button Grid.Column="3" Width="34" Margin="8,0,0,6" Padding="0" VerticalAlignment="Center"
+                HorizontalContentAlignment="Center"
+                Click="OnSettingsClick" ToolTip.Tip="Configurações, globais ou de um repositório: comando, monitoramento, atribuição de issue, limpeza automática (⌘,)">
+          <PathIcon Data="{StaticResource Icon.Settings}" />
+        </Button>
       </Grid>
     </Border>
 

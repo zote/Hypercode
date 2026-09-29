@@ -116,8 +116,10 @@
           <CheckBox Name="AutoCleanupBox" IsChecked="{Binding AutoCleanup, Mode=OneWay}"
                     IsEnabled="{Binding CanEditAutoCleanup}"
                     Click="OnAutoCleanupClick" Content="Limpeza automática dos concluídos" />
-          <Button Content="ⓘ" Padding="6,0" VerticalAlignment="Center" Click="OnAutoCleanupInfoClick"
-                  ToolTip.Tip="Reler o aviso: o que o git apaga junto e o que fica de fora" />
+          <Button Classes="borderless" VerticalAlignment="Center" Click="OnAutoCleanupInfoClick"
+                  ToolTip.Tip="Reler o aviso: o que o git apaga junto e o que fica de fora">
+            <PathIcon Data="{StaticResource Icon.Info}" />
+          </Button>
           <TextBlock Classes="overridden" Margin="4,0,0,0" IsVisible="{Binding IsAutoCleanupOverridden}" />
         </StackPanel>
         <CheckBox Grid.Column="1" Classes="inherit" IsChecked="{Binding AutoCleanupUsesGlobal, Mode=TwoWay}"

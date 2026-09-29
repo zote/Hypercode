@@ -23,6 +23,29 @@
     </Setter>
   </Style>
 
+  <!-- Ícone: desenha a geometria de Styles/Icons.axaml no quadro de 16x16 dela, em vez de
+       esticá-la até as bordas do desenho como o PathIcon do Fluent — assim um ponto continua
+       ponto e ícones diferentes saem do mesmo tamanho. Tamanho pelas classes small/large. -->
+  <Style Selector="PathIcon">
+    <Setter Property="Width" Value="{DynamicResource Size.Icon.Medium}" />
+    <Setter Property="Height" Value="{DynamicResource Size.Icon.Medium}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Viewbox>
+          <Path Width="16" Height="16" Data="{TemplateBinding Data}" Fill="{TemplateBinding Foreground}" />
+        </Viewbox>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="PathIcon.small">
+    <Setter Property="Width" Value="{DynamicResource Size.Icon.Small}" />
+    <Setter Property="Height" Value="{DynamicResource Size.Icon.Small}" />
+  </Style>
+  <Style Selector="PathIcon.large">
+    <Setter Property="Width" Value="{DynamicResource Size.Icon.Large}" />
+    <Setter Property="Height" Value="{DynamicResource Size.Icon.Large}" />
+  </Style>
+
   <!-- Botão: sem o "encolher" do Fluent ao pressionar, que o macOS não tem. -->
   <Style Selector="Button:pressed, RepeatButton:pressed">
     <Setter Property="RenderTransform" Value="none" />

@@ -19,6 +19,7 @@
         <ResourceInclude Source="avares://Hypercode/Styles/Tokens.axaml" />
         <!-- Depois dos tokens: os aliases das chaves do Fluent apontam para eles -->
         <ResourceInclude Source="avares://Hypercode/Styles/FluentOverrides.axaml" />
+        <ResourceInclude Source="avares://Hypercode/Styles/Icons.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>

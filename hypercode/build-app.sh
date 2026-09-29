@@ -60,6 +60,10 @@ chmod +x "$APP/Contents/MacOS/$APP_NAME"
 # Gerado a partir de Assets/icon.svg por Assets/make-icon.sh.
 cp Assets/icon.icns "$APP/Contents/Resources/icon.icns"
 
+# Licença do app e avisos dos ícones de terceiros (MIT pede que acompanhem as cópias).
+cp ../LICENSE "$APP/Contents/Resources/LICENSE"
+cp ../THIRD-PARTY-NOTICES.md "$APP/Contents/Resources/THIRD-PARTY-NOTICES.md"
+
 # Assinatura ad-hoc: sem isso o macOS (Apple Silicon) mata o app ao abrir.
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || \
   echo "⚠ codesign falhou — se o app não abrir, rode: codesign --force --deep --sign - $APP"

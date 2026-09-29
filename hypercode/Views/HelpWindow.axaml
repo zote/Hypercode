@@ -31,19 +31,17 @@
   <Window.Resources>
     <DataTemplate x:Key="LegendTemplate">
       <Grid ColumnDefinitions="28,*" Margin="0,0,0,11">
-        <Viewbox Grid.Column="0" Width="15" Height="15"
-                 VerticalAlignment="Top" HorizontalAlignment="Left" Margin="0,2,0,0">
-          <Path Width="16" Height="16"
-                Data="{Binding PathData, Converter={x:Static views:BadgeConverter.ToGeometry}}">
-            <Path.Fill>
-              <MultiBinding Converter="{x:Static views:BadgeBrushConverter.Instance}">
-                <Binding Path="LightColorHex" />
-                <Binding Path="DarkColorHex" />
-                <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource Self}" />
-              </MultiBinding>
-            </Path.Fill>
-          </Path>
-        </Viewbox>
+        <PathIcon Grid.Column="0" Width="15" Height="15"
+                  VerticalAlignment="Top" HorizontalAlignment="Left" Margin="0,2,0,0"
+                  Data="{Binding IconKey, Converter={x:Static views:BadgeConverter.ToGeometry}}">
+          <PathIcon.Foreground>
+            <MultiBinding Converter="{x:Static views:BadgeBrushConverter.Instance}">
+              <Binding Path="LightColorHex" />
+              <Binding Path="DarkColorHex" />
+              <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource Self}" />
+            </MultiBinding>
+          </PathIcon.Foreground>
+        </PathIcon>
         <StackPanel Grid.Column="1" Spacing="1">
           <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
           <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Opacity="0.72" LineHeight="18" />
