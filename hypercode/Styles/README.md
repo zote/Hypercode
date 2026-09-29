@@ -218,6 +218,14 @@ negrito (`Headline`), mensagem de apoio na cor secundária (`Message`, opcional)
 conteúdo e, embaixo, os botões alinhados à direita, com `Margin.Window` em volta. A janela
 usa `Brush.Background.Window` de fundo.
 
+O espaço entre as partes se ajusta ao que existe: sem título nem mensagem (um formulário),
+o conteúdo começa direto na `Margin.Window`, sem a `Margin.DialogContent`; com o conteúdo
+nulo ou escondido (`IsVisible="False"`), os botões ficam a `Margin.DialogButtons` do texto.
+
+O diálogo não é redimensionável: a altura acompanha o conteúdo (`SizeToContent="Height"`),
+e o que pode crescer sem limite rola dentro de uma caixa de altura máxima, como o detalhe
+do `ConfirmWindow`.
+
 ```xml
 <Window … Width="540" SizeToContent="Height" CanResize="False"
         Background="{DynamicResource Brush.Background.Window}">
@@ -264,7 +272,7 @@ largura fixa, campo à direita e a dica embaixo do campo, em `subheadline` secun
 dica embaixo, o rótulo alinha ao topo com `Margin.FieldLabel`.
 
 O detalhe aparece numa caixa em `Font.Mono` que rola a partir de `Size.DialogDetail.MaxHeight`;
-detalhe vazio esconde a caixa.
+detalhe vazio esconde a caixa e o espaço dela.
 
 ## Ícones
 

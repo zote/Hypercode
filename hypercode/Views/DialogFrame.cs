@@ -39,4 +39,38 @@ public class DialogFrame : ContentControl
     /// &lt;DialogFrame.Buttons&gt;; o Content fica para o corpo do diálogo.
     /// </summary>
     public Avalonia.Controls.Controls Buttons { get; } = new();
+
+    // Pseudo-classes que o tema usa para não deixar respiro sobrando: ":untitled" (sem título
+    // nem mensagem) tira a margem do conteúdo, que só separa o conteúdo do texto de cima;
+    // ":no-content" (conteúdo nulo ou escondido, como a caixa de detalhe vazio) esconde o
+    // espaço do conteúdo inteiro.
+    public DialogFrame()
+    {
+        PseudoClasses.Set(":untitled", true);
+        PseudoClasses.Set(":no-content", true);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == HeadlineProperty || change.Property == MessageProperty)
+        {
+            PseudoClasses.Set(":untitled", string.IsNullOrEmpty(Headline) && string.IsNullOrEmpty(Message));
+        }
+        else if (change.Property == ContentProperty)
+        {
+            if (change.OldValue is Visual oldContent) oldContent.PropertyChanged -= OnContentPropertyChanged;
+            if (change.NewValue is Visual newContent) newContent.PropertyChanged += OnContentPropertyChanged;
+            UpdateNoContent();
+        }
+    }
+
+    private void OnContentPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == IsVisibleProperty) UpdateNoContent();
+    }
+
+    private void UpdateNoContent()
+        => PseudoClasses.Set(":no-content", Content is null || Content is Visual { IsVisible: false });
 }
