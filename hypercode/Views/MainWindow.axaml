@@ -103,8 +103,7 @@
         <PathIcon Data="{Binding IconKey, Converter={x:Static views:BadgeConverter.ToGeometry}}">
           <PathIcon.Foreground>
             <MultiBinding Converter="{x:Static views:BadgeBrushConverter.Instance}">
-              <Binding Path="LightColorHex" />
-              <Binding Path="DarkColorHex" />
+              <Binding Path="BrushKey" />
               <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource Self}" />
             </MultiBinding>
           </PathIcon.Foreground>

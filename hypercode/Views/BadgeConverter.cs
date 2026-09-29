@@ -27,35 +27,20 @@ public sealed class BadgeConverter : IValueConverter
 }
 
 /// <summary>
-/// Escolhe a cor clara ou escura do ícone conforme o tema efetivo do controle.
-/// Entradas do MultiBinding: cor do tema claro, cor do tema escuro e o
-/// ActualThemeVariant — que, por ser binding, troca a cor na hora em que o macOS
-/// muda de tema.
+/// Busca o token de cor da etiqueta (StatusBadge.BrushKey, um Brush.Badge.*) na variante de
+/// tema efetiva do controle. Entradas do MultiBinding: a chave do token e o
+/// ActualThemeVariant — que, por ser binding, troca a cor na hora em que o macOS muda de
+/// tema. Um DynamicResource não serve porque a chave vem do binding.
 /// </summary>
 public sealed class BadgeBrushConverter : IMultiValueConverter
 {
     public static readonly BadgeBrushConverter Instance = new();
 
-    private static readonly object CacheLock = new();
-    private static readonly Dictionary<string, IBrush> Brushes = new(StringComparer.Ordinal);
-
     private BadgeBrushConverter() { }
 
     public object? Convert(IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
-    {
-        if (values.Count < 3 || values[0] is not string light || values[1] is not string dark) return null;
-
-        var text = values[2] is ThemeVariant variant && variant == ThemeVariant.Dark ? dark : light;
-
-        lock (CacheLock)
-        {
-            if (!Brushes.TryGetValue(text, out var brush))
-            {
-                brush = new SolidColorBrush(Color.Parse(text));
-                Brushes[text] = brush;
-            }
-
-            return brush;
-        }
-    }
+        => values.Count >= 2 && values[0] is string key && values[1] is ThemeVariant variant
+           && Application.Current?.TryGetResource(key, variant, out var brush) == true
+            ? brush as IBrush
+            : null;
 }

@@ -31,29 +31,25 @@ public enum BadgeKind
 public sealed record StatusBadge(BadgeKind Kind, string Tooltip)
 {
     public string IconKey => BadgeVisuals.IconKey(Kind);
-    public string LightColorHex => BadgeVisuals.Tone(Kind).Light;
-    public string DarkColorHex => BadgeVisuals.Tone(Kind).Dark;
+    public string BrushKey => BadgeVisuals.Tone(Kind);
 }
-
-/// <summary>Cor de um ícone nos temas claro e escuro, como o GitHub alterna.</summary>
-public readonly record struct BadgeTone(string Light, string Dark);
 
 /// <summary>
 /// Ícone e cor de cada etiqueta. Só strings aqui de propósito: mantém a camada de
 /// view-model livre do Avalonia e testável fora da interface. O ícone é a chave de um
 /// recurso de Styles/Icons.axaml — os Octicons de 16px do GitHub
-/// (https://primer.style/octicons/) — e as cores são os papéis de cor do Primer. Sempre
-/// que o GitHub mostra a mesma informação, usa-se o mesmo ícone e a mesma cor que ele usa.
+/// (https://primer.style/octicons/) — e a cor é a chave de um token Brush.Badge.* de
+/// Styles/Tokens.axaml, com os papéis de cor do Primer em claro e escuro. Sempre que o
+/// GitHub mostra a mesma informação, usa-se o mesmo ícone e a mesma cor que ele usa.
 /// </summary>
 public static class BadgeVisuals
 {
-    // fg.* do Primer (primitives) — o tom de texto/ícone de cada papel, em cada tema.
-    public static readonly BadgeTone Success = new("#1A7F37", "#3FB950");
-    public static readonly BadgeTone Danger = new("#D1242F", "#F85149");
-    public static readonly BadgeTone Done = new("#8250DF", "#AB7DF8");
-    public static readonly BadgeTone Attention = new("#9A6700", "#D29922");
-    public static readonly BadgeTone Accent = new("#0969DA", "#4493F8");
-    public static readonly BadgeTone Muted = new("#59636E", "#9198A1");
+    public const string Success = "Brush.Badge.Success";
+    public const string Danger = "Brush.Badge.Danger";
+    public const string Done = "Brush.Badge.Done";
+    public const string Attention = "Brush.Badge.Attention";
+    public const string Accent = "Brush.Badge.Accent";
+    public const string Muted = "Brush.Badge.Muted";
 
     public static string IconKey(BadgeKind kind) => kind switch
     {
@@ -82,7 +78,7 @@ public static class BadgeVisuals
         _ => "Icon.DotFill",
     };
 
-    public static BadgeTone Tone(BadgeKind kind) => kind switch
+    public static string Tone(BadgeKind kind) => kind switch
     {
         BadgeKind.Dirty => Attention,
         BadgeKind.Conflicted => Danger,

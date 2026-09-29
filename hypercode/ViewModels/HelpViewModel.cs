@@ -3,8 +3,7 @@ namespace Hypercode.ViewModels;
 public sealed record LegendEntry(StatusBadge Badge, string Title, string Description)
 {
     public string IconKey => Badge.IconKey;
-    public string LightColorHex => Badge.LightColorHex;
-    public string DarkColorHex => Badge.DarkColorHex;
+    public string BrushKey => Badge.BrushKey;
 }
 
 /// <summary>
