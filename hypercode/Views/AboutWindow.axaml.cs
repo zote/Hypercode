@@ -29,10 +29,8 @@ public partial class AboutWindow : Window
     private async void OnRepositoryClick(object? sender, RoutedEventArgs e)
         => await Launcher.LaunchUriAsync(RepositoryUri);
 
-    private void OnClose(object? sender, RoutedEventArgs e) => Close();
-
-    // Esc por KeyDown, não por IsCancel/IsDefault no botão: com eles, trazer a janela
-    // já aberta para a frente pelo menu (Activate) às vezes a fechava sozinha.
+    // Esc por KeyDown: o painel não tem botão (como o Sobre do macOS). Com IsCancel num botão,
+    // trazer a janela já aberta para a frente pelo menu (Activate) às vezes a fechava sozinha.
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
