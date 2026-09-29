@@ -510,11 +510,17 @@ public partial class MainWindow : Window
         item.IsEnabled = count > 0;
     }
 
+    // Relatório só quando algo falhou ou ficou de fora; o sucesso fica no rodapé, que o
+    // ViewModel já preencheu com o Summary — como no caminho de um worktree só.
     private async Task ShowBatchReportAsync(BatchOutcome outcome)
-        => await ConfirmWindow.Notice(
+    {
+        if (!outcome.HasProblems) return;
+
+        await ConfirmWindow.Notice(
             outcome.Action,
             outcome.Summary,
             outcome.Report).ShowDialog<bool>(this);
+    }
 
     /// <summary>Uma janela por worktree: acima do limite, pergunta antes de abrir todas.</summary>
     private async Task<bool> ConfirmWindowsAsync(string what, IReadOnlyList<WorktreeRow> rows, Func<WorktreeRow, bool> supports)
@@ -529,7 +535,7 @@ public partial class MainWindow : Window
             $"Abrir {targets.Count}").ShowDialog<bool>(this);
     }
 
-    /// <summary>Abrir janelas em lote: só há relatório se algo falhou ou ficou de fora.</summary>
+    /// <summary>Abrir janelas em lote, perguntando antes se forem muitas.</summary>
     private async Task OpenManyAsync(
         string what,
         IReadOnlyList<WorktreeRow> rows,
@@ -538,8 +544,7 @@ public partial class MainWindow : Window
     {
         if (!await ConfirmWindowsAsync(what, rows, supports)) return;
 
-        var outcome = await open(rows);
-        if (outcome.HasProblems) await ShowBatchReportAsync(outcome);
+        await ShowBatchReportAsync(await open(rows));
     }
 
     private async void OnOpenTerminalMenuClick(object? sender, RoutedEventArgs e)
@@ -708,8 +713,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var outcome = await viewModel.LockWorktreesAsync(MenuTargets(), reason);
-        if (outcome.Failed.Count > 0) await ShowBatchReportAsync(outcome);
+        await ShowBatchReportAsync(await viewModel.LockWorktreesAsync(MenuTargets(), reason));
     }
 
     // Sempre com confirmação, e com Cancelar como padrão: a trava pode ser de outra ferramenta.
@@ -753,7 +757,7 @@ public partial class MainWindow : Window
 
         var rows = MenuTargets();
         if (rows.Count == 1) await viewModel.RevealAsync(rows[0]);
-        else if (await viewModel.RevealManyAsync(rows) is { HasProblems: true } outcome) await ShowBatchReportAsync(outcome);
+        else await ShowBatchReportAsync(await viewModel.RevealManyAsync(rows));
     }
 
     private async void OnOpenPullRequestMenuClick(object? sender, RoutedEventArgs e)
