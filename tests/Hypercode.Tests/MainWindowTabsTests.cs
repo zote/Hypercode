@@ -105,6 +105,81 @@ public sealed class MainWindowTabsTests : IDisposable
         window.Close();
     }
 
+    private static ListBox WorktreeList(Window window) => window.FindControl<ListBox>("WorktreeList")!;
+
+    private static TextBox FilterBox(Window window) => window.FindControl<TextBox>("FilterBox")!;
+
+    /// <summary>O foco está na linha selecionada — é o que deixa a seleção na accent.</summary>
+    private static void AssertSelectedRowFocused(Window window)
+    {
+        var list = WorktreeList(window);
+        Assert.True(list.SelectedIndex >= 0);
+        Assert.Same(list.ContainerFromIndex(list.SelectedIndex), window.FocusManager?.GetFocusedElement());
+        Assert.True(list.IsKeyboardFocusWithin);
+    }
+
+    [AvaloniaFact]
+    public async Task AoAbrirOFocoVaiParaALinhaSelecionada()
+    {
+        var api = _sandbox.CreateRepository("api", "feature");
+        var (window, _) = await OpenAsync(api);
+        Dispatcher.UIThread.RunJobs();
+
+        AssertSelectedRowFocused(window);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task TrocarDeAbaLevaOFocoParaALista()
+    {
+        var api = _sandbox.CreateRepository("api", "feature");
+        var web = _sandbox.CreateRepository("web", "hotfix");
+        var (window, shell) = await OpenAsync(api, web);
+        Dispatcher.UIThread.RunJobs();
+
+        // Pelo atalho, com o foco na lista da aba de antes.
+        window.KeyPressQwerty(PhysicalKey.Digit2, RawInputModifiers.Meta);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(web, shell.SelectedRepository?.RepositoryPath);
+        AssertSelectedRowFocused(window);
+
+        // Pelo clique na aba, que antes deixava o foco na faixa.
+        var click = Inside(window, Tab(window, 0), 12);
+        window.MouseDown(click, MouseButton.Left);
+        window.MouseUp(click, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(api, shell.SelectedRepository?.RepositoryPath);
+        AssertSelectedRowFocused(window);
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task CmdFContinuaLevandoAoFiltroETrocarDeAbaNaoOTira()
+    {
+        var api = _sandbox.CreateRepository("api", "feature");
+        var web = _sandbox.CreateRepository("web", "hotfix");
+        var (window, shell) = await OpenAsync(api, web);
+        Dispatcher.UIThread.RunJobs();
+
+        window.KeyPressQwerty(PhysicalKey.F, RawInputModifiers.Meta);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(FilterBox(window), window.FocusManager?.GetFocusedElement());
+
+        // Quem está digitando no filtro e troca de aba continua no filtro.
+        window.KeyPressQwerty(PhysicalKey.Digit2, RawInputModifiers.Meta);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(web, shell.SelectedRepository?.RepositoryPath);
+        Assert.Same(FilterBox(window), window.FocusManager?.GetFocusedElement());
+
+        // E o ↓ desce para a lista, como antes.
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        AssertSelectedRowFocused(window);
+
+        window.Close();
+    }
+
     [AvaloniaFact]
     public async Task CmdWPedeConfirmacaoAntesDeFechar()
     {

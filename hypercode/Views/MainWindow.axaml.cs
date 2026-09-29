@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Hypercode.Services;
 using Hypercode.ViewModels;
@@ -44,6 +45,52 @@ public partial class MainWindow : Window
         TabStrip.AddHandler(PointerMovedEvent, OnTabStripPointerMoved, RoutingStrategies.Bubble, handledEventsToo: true);
         TabStrip.AddHandler(PointerReleasedEvent, OnTabStripPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
         TabStrip.AddHandler(PointerCaptureLostEvent, (_, _) => _draggedTab = null, RoutingStrategies.Bubble, handledEventsToo: true);
+
+        // Ao abrir e ao trocar de aba o foco vai para a lista (#100): as linhas chegam depois,
+        // então a entrega espera a linha selecionada existir.
+        _listFocusPending = true;
+        DataContextChanged += (_, _) => WatchShell();
+        WorktreeList.LayoutUpdated += (_, _) => DeliverListFocus();
+        WorktreeList.SelectionChanged += (_, _) => DeliverListFocus();
+    }
+
+    private MainViewModel? _watchedShell;
+    private bool _listFocusPending;
+
+    private void WatchShell()
+    {
+        if (_watchedShell is not null) _watchedShell.PropertyChanged -= OnShellPropertyChanged;
+        _watchedShell = Shell;
+        if (_watchedShell is not null) _watchedShell.PropertyChanged += OnShellPropertyChanged;
+    }
+
+    private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MainViewModel.SelectedRepository)) return;
+        _listFocusPending = true;
+        Dispatcher.UIThread.Post(DeliverListFocus, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// Põe o foco na linha selecionada — com a lista em foco a seleção fica na accent e as setas,
+    /// o Enter e o menu já agem nela. Só toma o foco de ninguém ou da faixa de abas: no filtro
+    /// (⌘F) ou em outro controle, ele fica onde o usuário o pôs.
+    /// </summary>
+    private void DeliverListFocus()
+    {
+        if (!_listFocusPending) return;
+
+        var focused = FocusManager?.GetFocusedElement();
+        if (focused is not null && !ReferenceEquals(focused, this) && !TabStrip.IsKeyboardFocusWithin)
+        {
+            _listFocusPending = false;
+            return;
+        }
+
+        if (!WorktreeList.IsEffectivelyVisible || WorktreeList.SelectedIndex < 0) return;
+        if (WorktreeList.ContainerFromIndex(WorktreeList.SelectedIndex) is not { } row) return;
+
+        _listFocusPending = !row.Focus();
     }
 
     private void UpdateTitleBarInset()
