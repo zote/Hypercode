@@ -57,7 +57,8 @@ public class TokensTests
         Assert.Empty(falhas);
     }
 
-    // Brush.Selection.Inactive fica de fora por ora: o Danger escuro do Primer dá 2,8:1 sobre ela (#108).
+    // Brush.Selection.Inactive fica de fora: na linha selecionada a etiqueta não usa o
+    // Brush.Badge.*, e sim a cor do texto da seleção (MainWindow.axaml, #108).
     [Theory]
     [MemberData(nameof(Variantes))]
     public void EtiquetaPassaEmContrasteNaoTextualSobreOsFundos(string variante)
@@ -71,6 +72,18 @@ public class TokensTests
             select $"{etiqueta} sobre {fundo}: {razao:F2}";
 
         Assert.Empty(falhas);
+    }
+
+    // Sobre Brush.Selection.Active vai Brush.Text.OnAccent, que não dá para medir aqui: o
+    // fundo é a accent do sistema.
+    [Theory]
+    [MemberData(nameof(Variantes))]
+    public void EtiquetaNaLinhaSelecionadaPassaEmContrasteNaoTextual(string variante)
+    {
+        var cores = Carregar()[variante];
+        var razao = Contraste(cores["Brush.Label.Primary"], cores["Brush.Selection.Inactive"]);
+
+        Assert.True(razao >= MinimoNaoTextual, $"Brush.Label.Primary sobre Brush.Selection.Inactive: {razao:F2}");
     }
 
     [Theory]
