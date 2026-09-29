@@ -828,29 +828,29 @@ public sealed class RepositoryViewModel : ObservableObject
 
     private static IReadOnlyCollection<string> QueryNames(IEnumerable<WorktreeRow> rows)
         => rows
-            .SelectMany(row => new[] { row.Worktree.UpstreamBranch, row.Worktree.Branch })
+            .SelectMany(row => new[] { row.Worktree.UpstreamBranch, row.Worktree.TrackedBranch })
             .OfType<string>()
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
     /// <summary>Branches locais dos worktrees — a chave do agendador.</summary>
     private IReadOnlyCollection<string> LocalBranches()
-        => Worktrees.Select(row => row.Worktree.Branch).OfType<string>().ToList();
+        => Worktrees.Select(row => row.Worktree.TrackedBranch).OfType<string>().ToList();
 
     /// <summary>
     /// PR da linha: primeiro pelo nome da branch no remoto, depois pelo local. O upstream é
     /// ignorado quando é a branch local de outro worktree — branch criada de origin/main sem
     /// --no-track rastreia main, e o PR de main é da linha do main.
     /// </summary>
-    private static PullRequestInfo? FindPullRequest(WorktreeInfo worktree, PullRequestLookup lookup, ISet<string> localBranches)
+    internal static PullRequestInfo? FindPullRequest(WorktreeInfo worktree, PullRequestLookup lookup, ISet<string> localBranches)
     {
         if (worktree.UpstreamBranch is { } upstream
-            && upstream != worktree.Branch
+            && upstream != worktree.TrackedBranch
             && !localBranches.Contains(upstream)
             && lookup.ByBranch.TryGetValue(upstream, out var byUpstream))
             return byUpstream;
 
-        return worktree.Branch is { } branch && lookup.ByBranch.TryGetValue(branch, out var byBranch)
+        return worktree.TrackedBranch is { } branch && lookup.ByBranch.TryGetValue(branch, out var byBranch)
             ? byBranch
             : null;
     }
@@ -868,11 +868,11 @@ public sealed class RepositoryViewModel : ObservableObject
         var matched = 0;
         var changed = new List<(WorktreeRow Row, PullRequestInfo PullRequest, IReadOnlyList<string> Transitions)>();
 
-        var localBranches = Worktrees.Select(row => row.Worktree.Branch).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var localBranches = Worktrees.Select(row => row.Worktree.TrackedBranch).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var row in Worktrees)
         {
-            if (scope is not null && (row.Worktree.Branch is not { } scoped || !scope.Contains(scoped))) continue;
+            if (scope is not null && (row.Worktree.TrackedBranch is not { } scoped || !scope.Contains(scoped))) continue;
 
             // PR mergeado ou fechado não deixa de existir: se a consulta não o trouxe (o gh pr list
             // devolve só os 100 mais recentes), vale o que já se sabia — senão a linha deixa de ser
@@ -1005,9 +1005,9 @@ public sealed class RepositoryViewModel : ObservableObject
     /// <summary>As branches dos worktrees com a faixa de cadência de cada uma, pelo estado de agora.</summary>
     private IEnumerable<ScheduledBranch> ScheduledBranches()
         => Worktrees
-            .Where(row => row.Worktree.Branch is not null && !row.Worktree.IsBare)
+            .Where(row => row.Worktree.TrackedBranch is not null && !row.Worktree.IsBare)
             .Select(row => new ScheduledBranch(
-                row.Worktree.Branch!,
+                row.Worktree.TrackedBranch!,
                 MonitorScheduler.Classify(row.PullRequest, row.Status, row.Worktree.IsMain),
                 row.PullRequest is not null));
 
@@ -1066,7 +1066,7 @@ public sealed class RepositoryViewModel : ObservableObject
 
             // O agendador fala em branch local; a consulta leva também o nome no remoto.
             var scope = due.ToHashSet(StringComparer.Ordinal);
-            var rows = Worktrees.Where(row => row.Worktree.Branch is { } branch && scope.Contains(branch)).ToList();
+            var rows = Worktrees.Where(row => row.Worktree.TrackedBranch is { } branch && scope.Contains(branch)).ToList();
 
             var lookup = await GitHubService.LoadPullRequestsAsync(path, QueryNames(rows), cancellationToken).ConfigureAwait(true);
             if (cancellationToken.IsCancellationRequested || _loadedRepositoryPath != path) return;
@@ -1976,7 +1976,7 @@ public sealed class RepositoryViewModel : ObservableObject
         if (rows.Count == 0 || _loadedRepositoryPath is not { } path) return;
 
         var now = DateTimeOffset.UtcNow;
-        var branches = rows.Select(row => row.Worktree.Branch).OfType<string>().ToList();
+        var branches = rows.Select(row => row.Worktree.TrackedBranch).OfType<string>().ToList();
         foreach (var branch in branches) _scheduler.Promote(branch, MonitorScheduler.RerunPromotion, now);
 
         var cancellationToken = _monitorCancellation?.Token ?? default;

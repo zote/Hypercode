@@ -22,6 +22,19 @@ public sealed record WorktreeInfo
     /// </summary>
     public string? UpstreamBranch { get; init; }
 
+    /// <summary>
+    /// Branch de origem de um rebase pausado, lida de rebase-merge/head-name (ou rebase-apply).
+    /// Durante o rebase o git destaca o HEAD e o porcelain não traz mais a branch — sem isto a
+    /// linha perde o nome e o PR.
+    /// </summary>
+    public string? RebasingBranch { get; init; }
+
+    /// <summary>
+    /// A branch que identifica o worktree para o GitHub e o monitoramento: a do checkout ou,
+    /// com rebase pausado, a que está sendo rebaseada.
+    /// </summary>
+    public string? TrackedBranch => Branch ?? RebasingBranch;
+
     /// <summary>Nome do worktree = última pasta do caminho.</summary>
     public string Name
     {
@@ -121,12 +134,16 @@ public static class GitService
         if (!result.Success)
             throw new InvalidOperationException(result.FirstErrorLine);
 
-        var worktrees = ParsePorcelain(result.StandardOutput);
+        var worktrees = ParsePorcelain(result.StandardOutput)
+            .Select(worktree => worktree.IsDetached && ReadRebasingBranch(worktree.FullPath) is { } rebasing
+                ? worktree with { RebasingBranch = rebasing }
+                : worktree)
+            .ToList();
         var upstreams = await ReadUpstreamBranchesAsync(repositoryPath, cancellationToken).ConfigureAwait(false);
         if (upstreams.Count == 0) return worktrees;
 
         return worktrees
-            .Select(worktree => worktree.Branch is { } branch && upstreams.TryGetValue(branch, out var upstream)
+            .Select(worktree => worktree.TrackedBranch is { } branch && upstreams.TryGetValue(branch, out var upstream)
                 ? worktree with { UpstreamBranch = upstream }
                 : worktree)
             .ToList();
@@ -717,6 +734,53 @@ public static class GitService
 
         Flush();
         return worktrees;
+    }
+
+    /// <summary>
+    /// Branch que um rebase pausado neste worktree está reescrevendo, ou null se não há rebase
+    /// ou se ele partiu de HEAD destacado (o git grava "detached HEAD" no head-name).
+    /// </summary>
+    internal static string? ReadRebasingBranch(string worktreePath)
+    {
+        try
+        {
+            if (ResolveGitDir(worktreePath) is not { } gitDir) return null;
+
+            foreach (var state in new[] { "rebase-merge", "rebase-apply" })
+            {
+                var headName = Path.Combine(gitDir, state, "head-name");
+                if (!File.Exists(headName)) continue;
+
+                var reference = File.ReadAllText(headName).Trim();
+                return reference.StartsWith("refs/heads/", StringComparison.Ordinal)
+                    ? StripRefPrefix(reference)
+                    : null;
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Rebase terminando enquanto se lê: a próxima leitura da lista acerta.
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Git dir do worktree sem subprocesso: o `.git` é a própria pasta no principal e, num
+    /// worktree ligado, um arquivo "gitdir: &lt;caminho&gt;" (relativo ao worktree, se for o caso).
+    /// </summary>
+    private static string? ResolveGitDir(string worktreePath)
+    {
+        var dotGit = Path.Combine(worktreePath, ".git");
+        if (Directory.Exists(dotGit)) return dotGit;
+        if (!File.Exists(dotGit)) return null;
+
+        const string prefix = "gitdir:";
+        var line = File.ReadLines(dotGit).FirstOrDefault(text => text.StartsWith(prefix, StringComparison.Ordinal));
+        if (line is null) return null;
+
+        var gitDir = line[prefix.Length..].Trim();
+        return gitDir.Length == 0 ? null : Path.GetFullPath(gitDir, worktreePath);
     }
 
     private static string StripRefPrefix(string reference) =>
