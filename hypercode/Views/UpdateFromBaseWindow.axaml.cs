@@ -20,7 +20,7 @@ public partial class UpdateFromBaseWindow : Window
     {
         var commits = distance.Behind == 1 ? "1 commit" : $"{distance.Behind} commits";
 
-        SetText("HeadlineText", $"Trazer {distance.Ref} para dentro de {row.Branch}?");
+        Frame.Headline = $"Trazer {distance.Ref} para dentro de {row.Branch}?";
         SetText("DetailText",
             $"base:   {distance.Ref}  ({commits} que a branch não tem)\n"
             + $"branch: {row.Branch}  ({distance.Ahead} commit(s) próprios)\n"
