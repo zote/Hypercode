@@ -1,23 +1,20 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Hypercode.Views"
         x:Class="Hypercode.Views.LockWorktreeWindow"
         Title="Travar o worktree"
-        Width="520" SizeToContent="Height"
-        MinWidth="420"
-        CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        Width="520" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Brush.Background.Window}">
 
-  <StackPanel Margin="20" Spacing="12">
-    <TextBlock Name="HeadlineText" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
-
-    <TextBlock Text="Com a trava, o git recusa remover e podar o worktree, e a limpeza de concluídos o ignora."
-               FontSize="11" Opacity="0.6" TextWrapping="Wrap" />
-
+  <!-- Layout de diálogo da HIG (Styles/Dialog.axaml). Return no campo também trava. -->
+  <views:DialogFrame Name="Frame"
+                     Message="Com a trava, o git recusa remover e podar o worktree, e a limpeza de concluídos o ignora.">
     <TextBox Name="ReasonBox" Watermark="Motivo (opcional)" KeyDown="OnReasonKeyDown" />
 
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,4,0,0">
+    <views:DialogFrame.Buttons>
       <Button Content="Cancelar" Click="OnCancel" IsCancel="True" />
       <Button Name="ConfirmButton" Content="Travar" Click="OnConfirm" IsDefault="True" />
-    </StackPanel>
-  </StackPanel>
+    </views:DialogFrame.Buttons>
+  </views:DialogFrame>
 </Window>
