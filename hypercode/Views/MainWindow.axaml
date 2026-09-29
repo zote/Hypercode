@@ -217,7 +217,16 @@
       <TextBox Grid.Column="0" Name="FilterBox"
                Text="{Binding FilterText, Mode=TwoWay}"
                Watermark="Filtrar por worktree, branch ou PR  (⌘F)"
-               KeyDown="OnFilterKeyDown" />
+               KeyDown="OnFilterKeyDown">
+        <TextBox.InnerRightContent>
+          <Button Classes="clear" Click="OnClearFilterClick"
+                  IsVisible="{Binding FilterText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                  AutomationProperties.Name="Limpar o filtro"
+                  ToolTip.Tip="Limpar o filtro (Esc)">
+            <PathIcon Data="{StaticResource Icon.ClearField}" />
+          </Button>
+        </TextBox.InnerRightContent>
+      </TextBox>
       <TextBlock Grid.Column="1" Classes="callout muted" VerticalAlignment="Center" Margin="{DynamicResource Margin.AfterField}"
                  Text="{Binding FilterSummary}" IsVisible="{Binding HasHiddenRows}" />
       <Button Grid.Column="3" Content="Novo worktree…" Click="OnCreateWorktreeClick"

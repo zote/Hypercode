@@ -319,6 +319,16 @@ public partial class MainWindow : Window
         }
     }
 
+    // O X do filtro: limpa e deixa o cursor no campo, como o NSSearchField — mesmo quando o
+    // foco estava na lista, já que o botão não recebe foco.
+    private void OnClearFilterClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } viewModel) return;
+
+        viewModel.FilterText = string.Empty;
+        this.FindControl<TextBox>("FilterBox")?.Focus();
+    }
+
     private void FocusSelectedRow()
     {
         if (this.FindControl<ListBox>("WorktreeList") is not { } list) return;

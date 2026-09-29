@@ -187,6 +187,7 @@ aparece lá continua com o valor do Fluent.
 | `Classes="accent"` | igual ao padrão | destaque sem ser o botão padrão |
 | `Classes="destructive"` | botão comum com o rótulo em vermelho | remover, descartar; vence o `IsDefault` |
 | `Classes="borderless"` | só o conteúdo; fundo discreto sob o mouse | barra de ferramentas, ação dentro de linha |
+| `Classes="clear"` | só o ícone, terciário; escurece sob o mouse; sem foco nem Tab | o X de limpar dentro do campo (`InnerRightContent`), com `Icon.ClearField` |
 
 Em janela fora de foco o botão padrão perde o destaque, como no macOS: o `App` põe a
 classe `inactive` na janela que perde o foco, e `Controls.axaml` a usa.
@@ -301,7 +302,7 @@ Duas famílias, com papéis diferentes:
   que ele. O view-model escolhe a etiqueta pela chave do ícone (`StatusBadge.IconKey`), e
   o `BadgeConverter.ToGeometry` busca o recurso; a cor vem dos `Brush.Badge.*`.
 - **Phosphor** (MIT, peso regular) nos comandos do próprio app (nova aba, fechar, ajuda,
-  configurações, informação, ordenação). É o conjunto aberto mais parecido com o SF
+  configurações, informação, ordenação, limpar o campo). É o conjunto aberto mais parecido com o SF
   Symbols.
 
 **Por que não o SF Symbols:** a licença só permite usá-los em interfaces de apps para
