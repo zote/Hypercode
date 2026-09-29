@@ -30,7 +30,7 @@ public class FluentOverridesTests
             .Select(e => e.Attribute("ResourceKey")!.Value)
             .Distinct();
 
-        Assert.Empty(aliases.Where(a => !tokens.Contains(a)));
+        Assert.All(aliases, alias => Assert.Contains(alias, tokens));
     }
 
     private static Dictionary<string, SortedDictionary<string, string>> AliasesPorVariante()
