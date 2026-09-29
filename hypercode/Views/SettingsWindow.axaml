@@ -116,6 +116,35 @@
     </StackPanel>
 
     <StackPanel Classes="setting">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <TextBlock Grid.Column="0" Classes="label" Text="Pasta dos worktrees" />
+        <TextBlock Grid.Column="1" Classes="overridden" Margin="{DynamicResource Margin.AfterField}" IsVisible="{Binding IsWorktreesRootOverridden}" />
+        <CheckBox Grid.Column="2" Classes="inherit" IsChecked="{Binding WorktreesRootUsesGlobal, Mode=TwoWay}"
+                  IsVisible="{Binding IsRepositoryScope}" />
+      </Grid>
+      <TextBox Text="{Binding WorktreesRoot, Mode=TwoWay}" Watermark="../{repo}.worktrees"
+               FontFamily="{DynamicResource Font.Mono}" IsEnabled="{Binding CanEditWorktreesRoot}" />
+      <TextBlock Classes="help" Text="{Binding WorktreesRootPreview}"
+                 IsVisible="{Binding WorktreesRootPreview, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      <TextBlock Classes="help"
+                 Text="Onde o Novo worktree sugere a pasta: caminho absoluto (/Volumes/dev/repo-worktrees, ~/wt) ou relativo à raiz do repositório (.claude/worktrees); {repo} vira o nome do repositório. Vazio, repo.worktrees ao lado do repositório. Sem nada configurado, a sugestão segue onde a maioria dos worktrees já mora. Dentro do repositório, a pasta precisa estar no .gitignore ou no .git/info/exclude — o diálogo avisa se não estiver." />
+    </StackPanel>
+
+    <StackPanel Classes="setting">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="{DynamicResource Spacing.Related}">
+          <CheckBox IsChecked="{Binding KeepSlashes, Mode=TwoWay}" IsEnabled="{Binding CanEditKeepSlashes}"
+                    Content="Prefixo da branch vira subpasta" />
+          <TextBlock Classes="overridden" IsVisible="{Binding IsKeepSlashesOverridden}" />
+        </StackPanel>
+        <CheckBox Grid.Column="1" Classes="inherit" IsChecked="{Binding KeepSlashesUsesGlobal, Mode=TwoWay}"
+                  IsVisible="{Binding IsRepositoryScope}" />
+      </Grid>
+      <TextBlock Classes="help"
+                 Text="feat/476-anexo fica em feat/476-anexo, uma pasta por prefixo. Desligado, a barra vira hífen: feat-476-anexo, uma pasta só por worktree." />
+    </StackPanel>
+
+    <StackPanel Classes="setting">
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="{DynamicResource Spacing.Label}">
           <!-- IsChecked só de ida: ligar passa pelo aviso no Click, que é quem grava. -->

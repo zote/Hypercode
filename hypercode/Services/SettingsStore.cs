@@ -68,6 +68,15 @@ public sealed class Settings
     public int AutoCleanupGraceMinutes { get; set; } = AutoCleanupTracker.DefaultGraceMinutes;
 
     /// <summary>
+    /// Onde o diálogo de criação sugere os worktrees: absoluta, com ~, ou relativa à raiz do
+    /// repositório, com {repo} para o nome dele. Null ou vazia, &lt;repo&gt;.worktrees ao lado do repositório.
+    /// </summary>
+    public string? WorktreesRoot { get; set; }
+
+    /// <summary>A barra da branch vira subpasta (feat/login) em vez de hífen (feat-login).</summary>
+    public bool WorktreeFolderKeepsSlashes { get; set; }
+
+    /// <summary>
     /// O repositório veio da chave antiga, e não de uma aba: pode ser a pasta de um worktree
     /// qualquer, e precisa ser resolvido para o principal antes de virar aba.
     /// </summary>
@@ -123,6 +132,13 @@ public sealed class RepositorySettings
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? AutoCleanupGraceMinutes { get; set; }
 
+    /// <summary>Vazia (e não null) é o padrão explícito, mesmo com o global configurado.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? WorktreesRoot { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? WorktreeFolderKeepsSlashes { get; set; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SortColumn { get; set; }
 
@@ -132,7 +148,8 @@ public sealed class RepositorySettings
     [JsonIgnore]
     public bool IsEmpty =>
         Command is null && MonitorProfile is null && NotifyPullRequestChanges is null && AssignIssueOnCreate is null
-        && AutoCleanup is null && AutoCleanupGraceMinutes is null && SortColumn is null && SortDescending is null;
+        && AutoCleanup is null && AutoCleanupGraceMinutes is null && WorktreesRoot is null && WorktreeFolderKeepsSlashes is null
+        && SortColumn is null && SortDescending is null;
 }
 
 /// <summary>
@@ -145,7 +162,9 @@ public sealed record EffectiveSettings(
     bool NotifyPullRequestChanges,
     bool AssignIssueOnCreate,
     bool AutoCleanup,
-    int AutoCleanupGraceMinutes)
+    int AutoCleanupGraceMinutes,
+    string? WorktreesRoot,
+    bool WorktreeFolderKeepsSlashes)
 {
     public const string DefaultCommand = "claude";
 
@@ -159,7 +178,9 @@ public sealed record EffectiveSettings(
             overrides?.NotifyPullRequestChanges ?? settings.NotifyPullRequestChanges,
             overrides?.AssignIssueOnCreate ?? settings.AssignIssueOnCreate,
             overrides?.AutoCleanup ?? settings.AutoCleanup,
-            NormalizeGrace(overrides?.AutoCleanupGraceMinutes ?? settings.AutoCleanupGraceMinutes));
+            NormalizeGrace(overrides?.AutoCleanupGraceMinutes ?? settings.AutoCleanupGraceMinutes),
+            NormalizeWorktreesRoot(overrides?.WorktreesRoot ?? settings.WorktreesRoot),
+            overrides?.WorktreeFolderKeepsSlashes ?? settings.WorktreeFolderKeepsSlashes);
     }
 
     public TimeSpan AutoCleanupGrace => TimeSpan.FromMinutes(AutoCleanupGraceMinutes);
@@ -173,6 +194,10 @@ public sealed record EffectiveSettings(
             : MonitorProfile.Balanced;
 
     public static string FormatMonitorProfile(MonitorProfile profile) => profile.ToString().ToLowerInvariant();
+
+    /// <summary>Null é a raiz padrão; o resto vai sem os espaços das pontas.</summary>
+    public static string? NormalizeWorktreesRoot(string? root)
+        => string.IsNullOrWhiteSpace(root) ? null : root.Trim();
 
     public static int NormalizeGrace(int minutes)
         => minutes is >= 1 and <= 1440 ? minutes : AutoCleanupTracker.DefaultGraceMinutes;

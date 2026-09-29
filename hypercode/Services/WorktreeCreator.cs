@@ -9,8 +9,12 @@ public sealed record WorktreeCreationResult(
     int CopiedFiles,
     IReadOnlyList<string> Warnings);
 
+/// <summary>Raiz dos worktrees e se o prefixo da branch vira subpasta; null nas barras é "não se sabe".</summary>
+public sealed record WorktreeLayoutGuess(string Root, bool? KeepsSlashes);
+
 /// <summary>
-/// Cria worktrees em &lt;pai do repo&gt;/&lt;repo&gt;.worktrees/&lt;branch&gt; — uma branch nova a partir
+/// Cria worktrees sob a raiz configurada para o repositório (por padrão
+/// &lt;pai do repo&gt;/&lt;repo&gt;.worktrees/&lt;branch&gt;) — uma branch nova a partir
 /// de uma base (também a de uma issue) ou a branch de um PR — e copia do principal os arquivos não versionados
 /// listados no .worktreeinclude.
 /// </summary>
@@ -20,22 +24,142 @@ public static class WorktreeCreator
 
     private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(90);
 
-    /// <summary>Pasta que agrupa os worktrees: /dev/meu-repo → /dev/meu-repo.worktrees</summary>
-    public static string WorktreesRoot(string mainWorktreePath)
+    /// <summary>A raiz de quem não configurou nada: /dev/meu-repo → /dev/meu-repo.worktrees.</summary>
+    public const string DefaultWorktreesRoot = "../{repo}.worktrees";
+
+    /// <summary>
+    /// Pasta que agrupa os worktrees, pela configuração: absoluta, com ~, ou relativa à raiz do
+    /// repositório (.claude/worktrees). {repo} vira o nome da pasta do repositório — é o que deixa
+    /// um padrão global servir a todos. Vazia, <see cref="DefaultWorktreesRoot"/>.
+    /// </summary>
+    public static string WorktreesRoot(string mainWorktreePath, string? configured = null)
     {
         var trimmed = mainWorktreePath.TrimEnd('/');
-        var parent = Path.GetDirectoryName(trimmed) ?? trimmed;
-        return Path.Combine(parent, Path.GetFileName(trimmed) + ".worktrees");
+        var pattern = string.IsNullOrWhiteSpace(configured) ? DefaultWorktreesRoot : configured.Trim();
+        pattern = ExpandHome(pattern.Replace("{repo}", Path.GetFileName(trimmed), StringComparison.Ordinal));
+
+        return TrimSlash(Path.GetFullPath(Path.Combine(trimmed, pattern)));
     }
 
     /// <summary>
-    /// Pasta sugerida para a branch. A barra vira hífen (feature/login → feature-login)
-    /// para cada worktree ser uma pasta só, e o nome na lista não virar só "login".
+    /// Pasta sugerida para a branch. Por padrão a barra vira hífen (feature/login → feature-login)
+    /// para cada worktree ser uma pasta só, e o nome na lista não virar só "login". Com
+    /// <paramref name="keepSlashes"/>, o prefixo vira subpasta (feature/login), como no supacode.
     /// </summary>
-    public static string SuggestPath(string mainWorktreePath, string branch)
+    public static string SuggestPath(string mainWorktreePath, string branch, string? configuredRoot = null, bool keepSlashes = false)
+        => SuggestPathUnder(WorktreesRoot(mainWorktreePath, configuredRoot), branch, keepSlashes);
+
+    /// <summary>A mesma sugestão, sob uma raiz já resolvida (a detectada, por exemplo).</summary>
+    public static string SuggestPathUnder(string root, string branch, bool keepSlashes)
     {
-        var folder = string.Join('-', branch.Split('/', StringSplitOptions.RemoveEmptyEntries));
-        return folder.Length == 0 ? string.Empty : Path.Combine(WorktreesRoot(mainWorktreePath), folder);
+        var folder = BranchFolder(branch, keepSlashes);
+        return folder.Length == 0 ? string.Empty : Path.Combine(root, folder);
+    }
+
+    private static string BranchFolder(string branch, bool keepSlashes)
+        => string.Join(keepSlashes ? '/' : '-', branch.Split('/', StringSplitOptions.RemoveEmptyEntries));
+
+    /// <summary>
+    /// A raiz e o tratamento das barras que um caminho implica para a branch: /x/feat/login para
+    /// feat/login é a raiz /x com as barras preservadas. Null se o caminho não termina na branch.
+    /// Branch sem barra não diz nada das barras: <see cref="WorktreeLayoutGuess.KeepsSlashes"/> fica null.
+    /// </summary>
+    public static WorktreeLayoutGuess? InferLayout(string path, string branch)
+    {
+        var trimmed = TrimSlash(path.Trim());
+        var hasSlash = branch.Trim('/').Contains('/');
+
+        foreach (var keepSlashes in hasSlash ? new[] { true, false } : new[] { false })
+        {
+            var folder = BranchFolder(branch, keepSlashes);
+            if (folder.Length == 0 || !trimmed.EndsWith("/" + folder, StringComparison.Ordinal)) continue;
+
+            var root = trimmed[..^(folder.Length + 1)];
+            if (root.Length == 0) return null;
+            return new WorktreeLayoutGuess(root, hasSlash ? keepSlashes : null);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Onde os worktrees que já existem moram: a pasta que contém a maioria deles, como pai ou
+    /// avô (o avô cobre quem preserva o prefixo da branch como subpasta). Empate fica com a mais
+    /// funda. Null com menos de dois worktrees ou sem maioria — aí não há convenção a seguir.
+    /// </summary>
+    public static WorktreeLayoutGuess? DetectLayout(IEnumerable<WorktreeInfo> worktrees)
+    {
+        var linked = worktrees.Where(worktree => !worktree.IsMain && !worktree.IsBare).ToList();
+        if (linked.Count < 2) return null;
+
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var worktree in linked)
+        {
+            var parent = Path.GetDirectoryName(TrimSlash(worktree.FullPath));
+            var grandparent = parent is null ? null : Path.GetDirectoryName(parent);
+
+            foreach (var candidate in new[] { parent, grandparent }.OfType<string>().Where(c => c.Length > 1))
+                counts[candidate] = counts.GetValueOrDefault(candidate) + 1;
+        }
+
+        if (counts.Count == 0) return null;
+
+        var (root, count) = counts.OrderByDescending(item => item.Value).ThenByDescending(item => item.Key.Length).First();
+        if (count * 2 <= linked.Count) return null;
+
+        // As barras: vota quem tem barra na branch e mora sob a raiz com um dos dois formatos.
+        int keep = 0, flatten = 0;
+        foreach (var worktree in linked)
+        {
+            if (worktree.Branch is not { } branch || !branch.Trim('/').Contains('/')) continue;
+            if (InferLayout(worktree.FullPath, branch) is not { } guess || guess.Root != root) continue;
+            if (guess.KeepsSlashes == true) keep++;
+            else flatten++;
+        }
+
+        return new WorktreeLayoutGuess(root, keep + flatten == 0 ? null : keep > flatten);
+    }
+
+    /// <summary>
+    /// Como a raiz deve ser gravada na configuração do repositório: relativa quando fica dentro
+    /// dele (.claude/worktrees, que sobrevive a mover o repositório), absoluta quando fora.
+    /// </summary>
+    public static string RootSetting(string mainWorktreePath, string root)
+    {
+        var main = TrimSlash(mainWorktreePath);
+        var trimmed = TrimSlash(root);
+        return IsInside(main, trimmed) ? trimmed[(main.Length + 1)..] : trimmed;
+    }
+
+    /// <summary>O caminho fica dentro da árvore de trabalho do repositório (e não é ela mesma).</summary>
+    public static bool IsInsideRepository(string mainWorktreePath, string path)
+        => IsInside(TrimSlash(mainWorktreePath), TrimSlash(path));
+
+    private static bool IsInside(string directory, string path)
+        => path.StartsWith(directory + "/", StringComparison.Ordinal);
+
+    /// <summary>
+    /// A pasta, dentro do repositório, está ignorada pelo git? Não ignorada, o worktree aparece
+    /// como não rastreado no principal — e um git clean -fd desavisado o apaga.
+    /// </summary>
+    public static async Task<bool> IsIgnoredAsync(string mainWorktreePath, string path, CancellationToken cancellationToken = default)
+    {
+        var relative = Path.GetRelativePath(mainWorktreePath, path);
+        var result = await GitService.RunAsync(
+            mainWorktreePath,
+            new[] { "check-ignore", "--quiet", "--", relative },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return result.Success;
+    }
+
+    private static string TrimSlash(string path) => path.Length > 1 ? path.TrimEnd('/') : path;
+
+    private static string ExpandHome(string path)
+    {
+        if (path != "~" && !path.StartsWith("~/", StringComparison.Ordinal)) return path;
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return path == "~" ? home : Path.Combine(home, path[2..]);
     }
 
     /// <summary>

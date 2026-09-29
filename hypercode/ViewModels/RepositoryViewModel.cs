@@ -1476,6 +1476,19 @@ public sealed class RepositoryViewModel : ObservableObject
     /// <summary>O comando do duplo-clique neste repositório: o override dele ou o global.</summary>
     public string EffectiveCommand => _effective.Command;
 
+    /// <summary>
+    /// "Usar sempre neste repositório", no diálogo de criação: grava a raiz dos worktrees (e as
+    /// barras da branch, quando a branch disse algo delas) no override deste repositório.
+    /// </summary>
+    public void RememberWorktreeLayout(string root, bool? keepSlashes)
+    {
+        var overrides = _hub.Settings.EnsureOverrides(RepositoryPath);
+        overrides.WorktreesRoot = root;
+        if (keepSlashes is { } slashes) overrides.WorktreeFolderKeepsSlashes = slashes;
+        _hub.SaveSettings();
+        RefreshSettings();
+    }
+
     /// <summary>Depois de criado: recarrega, seleciona o novo e, se pedido, abre o terminal nele.</summary>
     public async Task CompleteCreationAsync(WorktreeCreationResult result, bool openTerminal)
     {

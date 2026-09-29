@@ -295,7 +295,15 @@ public partial class MainWindow : Window
 
         var dialog = new CreateWorktreeWindow
         {
-            DataContext = new CreateWorktreeViewModel(mainPath, shell.OpenTerminalAfterCreate, viewModel.EffectiveCommand, viewModel.AssignIssueOnCreate),
+            DataContext = new CreateWorktreeViewModel(
+                mainPath,
+                shell.OpenTerminalAfterCreate,
+                viewModel.EffectiveCommand,
+                viewModel.AssignIssueOnCreate,
+                viewModel.Effective.WorktreesRoot,
+                viewModel.Effective.WorktreeFolderKeepsSlashes,
+                viewModel.Worktrees.Select(row => row.Worktree).ToList(),
+                viewModel.RememberWorktreeLayout),
         };
 
         var result = await dialog.ShowDialog<WorktreeCreationResult?>(this);
