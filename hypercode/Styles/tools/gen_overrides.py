@@ -46,7 +46,7 @@ RULES = [
     (r"TextControlForegroundDisabled$", "Brush.Label.Tertiary"),
     (r"TextControlForeground", "Brush.Label.Primary"),
     (r"TextControlBackground", "Brush.Background.Content"),
-    (r"TextControlBorderBrushFocused$", "Brush.Accent"),
+    (r"TextControlBorderBrushFocused$", "Brush.Border.Control"),
     (r"TextControlBorderBrushDisabled$", "Brush.Separator"),
     (r"TextControlBorderBrush", "Brush.Border.Control"),
     (r"TextControlPlaceholderForegroundDisabled$", "Brush.Label.Tertiary"),
@@ -186,11 +186,16 @@ body = f'''<!--
   <StaticResource x:Key="ControlCornerRadius" ResourceKey="Radius.Control" />
   <StaticResource x:Key="OverlayCornerRadius" ResourceKey="Radius.Group" />
 
-  <!-- Medidas próximas às do macOS: botão e campo com ~24pt de altura, menu com itens de ~22pt -->
+  <!-- Medidas do AppKit no macOS 27 (#97): botão e campo com 24pt de altura e 12pt de padding
+       lateral no botão; menu com 5pt em cima e embaixo, itens de 24pt com o texto a 14pt da
+       borda do menu e separador de 11pt com a linha recuada 16pt (1 de borda + 15) -->
   <Thickness x:Key="ButtonPadding">12,3</Thickness>
   <Thickness x:Key="TextControlThemePadding">6,3</Thickness>
   <Thickness x:Key="MenuFlyoutPresenterThemePadding">0,5</Thickness>
-  <Thickness x:Key="MenuFlyoutItemThemePaddingNarrow">10,3</Thickness>
+  <Thickness x:Key="MenuFlyoutItemThemePaddingNarrow">8,4</Thickness>
+  <Thickness x:Key="MenuFlyoutSeparatorThemePadding">15,5</Thickness>
+  <!-- O campo em foco mantém a borda de 1px e ganha o anel externo (Controls.axaml) -->
+  <Thickness x:Key="TextControlBorderThemeThicknessFocused">1</Thickness>
   <x:Double x:Key="TextControlPlaceholderOpacity">1</x:Double>
   <StaticResource x:Key="ToolTipContentThemeFontSize" ResourceKey="Font.Size.Subheadline" />
   <Thickness x:Key="ToolTipBorderThemePadding">6,3</Thickness>

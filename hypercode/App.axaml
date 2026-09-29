@@ -5,7 +5,7 @@
              RequestedThemeVariant="Default">
 
   <Application.Styles>
-    <!-- Compact aproxima a altura dos controles da do macOS (~22–24pt); a Normal é a do
+    <!-- Compact aproxima a altura dos controles da do macOS (24pt, #97); a Normal é a do
          Windows 11. A cor de destaque vem do sistema: o FluentTheme já lê a do macOS. -->
     <FluentTheme DensityStyle="Compact" />
     <StyleInclude Source="avares://Hypercode/Styles/Typography.axaml" />
