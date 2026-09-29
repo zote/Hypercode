@@ -141,6 +141,15 @@ Grade de 4pt: `Space.XXS` (2), `XS` (4), `S` (8), `M` (12), `L` (16), `XL` (20),
 | `Padding.Box` | 12 | dentro de caixa de aviso ou de detalhe |
 | `Padding.Borderless` | 6,3 | botão sem borda |
 | `Margin.MenuItem` / `Margin.TableRow` | 5,0 / 6,0 | recuo do destaque de item de menu e de linha de lista |
+| `Margin.BeforeColumn` / `Margin.AroundColumn` | 0,0,12,0 / 12,0 | separação entre colunas de uma linha |
+| `Margin.BeforeButton` / `Margin.AfterField` | 0,0,8,0 / 10,0,0,0 | antes de um botão numa barra; texto logo depois de um campo |
+| `Margin.Badge` | 0,0,6,0 | entre uma etiqueta de estado e a seguinte |
+
+Da janela principal (faixa de abas, barras e tabela): `Padding.TabStrip`, `Padding.Tab`,
+`Margin.Tab`, `Size.Tab.MinHeight` e `Radius.Tab` (só os cantos de cima) para as abas;
+`Padding.Bar` para a barra do filtro e o rodapé; `Padding.TableHeader`,
+`Padding.TableCell` e `Size.TableRow.TwoLine` para a tabela. `Padding.TableCell` soma
+com `Margin.TableRow` para o conteúdo da linha cair no mesmo recuo (16) do cabeçalho.
 
 Raios: `Radius.Small` (4, etiqueta, tooltip, item de menu e linha de lista),
 `Radius.Control` (6, botão e campo), `Radius.Group` (10, cartão, grupo e menu),
