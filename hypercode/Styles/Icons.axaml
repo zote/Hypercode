@@ -13,6 +13,8 @@
     Copiados de @phosphor-icons/core 2.1.1, assets/regular/<nome>.svg, e reduzidos de 256
     para 16 pelo Transform (matriz de escala 1/16).
 
+  Licenças e avisos de copyright dos dois conjuntos: THIRD-PARTY-NOTICES.md, na raiz.
+
   "F1" = NonZero, a regra de preenchimento padrão do SVG: o Avalonia assume EvenOdd quando o
   prefixo não vem.
 -->
