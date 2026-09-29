@@ -155,6 +155,41 @@ public sealed class MainWindowTabsTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task XDoFiltroSoApareceComTextoELimpaDeixandoOCursorNoCampo()
+    {
+        var api = _sandbox.CreateRepository("api", "feature");
+        var (window, shell) = await OpenAsync(api);
+        Dispatcher.UIThread.RunJobs();
+        var repository = shell.SelectedRepository!;
+        var clear = Assert.IsType<Button>(FilterBox(window).InnerRightContent);
+
+        Assert.False(clear.IsEffectivelyVisible);
+        Assert.False(clear.Focusable);
+        Assert.False(clear.IsTabStop);
+
+        repository.FilterText = "feature";
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(clear.IsEffectivelyVisible);
+
+        // Com o foco na lista, o clique no X ainda leva o cursor para o campo.
+        var list = WorktreeList(window);
+        list.SelectedIndex = 0;
+        list.ContainerFromIndex(0)!.Focus();
+        Dispatcher.UIThread.RunJobs();
+        AssertSelectedRowFocused(window);
+        var click = clear.TranslatePoint(new Point(clear.Bounds.Width / 2, clear.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(click, MouseButton.Left);
+        window.MouseUp(click, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(string.Empty, repository.FilterText);
+        Assert.False(clear.IsEffectivelyVisible);
+        Assert.Same(FilterBox(window), window.FocusManager?.GetFocusedElement());
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task CmdFContinuaLevandoAoFiltroETrocarDeAbaNaoOTira()
     {
         var api = _sandbox.CreateRepository("api", "feature");

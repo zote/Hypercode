@@ -131,6 +131,8 @@
   <Thickness x:Key="Padding.Box">12</Thickness>
   <!-- Botão sem borda: o fundo só aparece sob o mouse, então o padding é menor -->
   <Thickness x:Key="Padding.Borderless">6,3</Thickness>
+  <!-- Botão de limpar dentro do campo: afasta o X da borda direita do TextBox -->
+  <Thickness x:Key="Padding.ClearButton">4,0,6,0</Thickness>
   <!-- Recuo do item de menu e da linha de lista estilo tabela, para o destaque arredondado
        não encostar nas bordas -->
   <Thickness x:Key="Margin.MenuItem">5,0</Thickness>

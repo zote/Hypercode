@@ -124,6 +124,33 @@
     <Setter Property="BorderBrush" Value="Transparent" />
   </Style>
 
+  <!-- Limpar o campo: o X dentro do TextBox (InnerRightContent), como o do NSSearchField.
+       Só o ícone, em terciário, que escurece sob o mouse. Não recebe foco nem entra no Tab:
+       quem clica continua no campo, pronto para digitar de novo. A cor vai no PathIcon, e
+       não no botão: dentro do InnerRightContent o ícone herda o Foreground do TextBox. -->
+  <Style Selector="Button.clear">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Padding" Value="{DynamicResource Padding.ClearButton}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Cursor" Value="Arrow" />
+  </Style>
+  <Style Selector="Button.clear:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.clear:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.clear PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Tertiary}" />
+  </Style>
+  <Style Selector="Button.clear:pointerover PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
+  </Style>
+  <Style Selector="Button.clear:pressed PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Primary}" />
+  </Style>
+
   <!-- Placeholder do campo: o Fluent o deixa na cor do texto a 50% de opacidade; aqui a
        opacidade é 1 (FluentOverrides) e a cor vem do token, igual em todos os estados. -->
   <Style Selector="TextBox /template/ TextBlock#PART_Watermark">
