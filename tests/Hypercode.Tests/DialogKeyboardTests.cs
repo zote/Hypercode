@@ -83,6 +83,44 @@ public sealed class DialogKeyboardTests
         Assert.Null(await PressAsync<object>(dialog, PhysicalKey.Escape));
     }
 
+    // Return num campo de texto e no da base (AutoCompleteBox) cria o worktree de verdade, no git
+    // da sandbox. Cobre o resultado, não quem o produz: aqui o IsDefault do Criar já basta, com ou
+    // sem o OnFieldKeyDown.
+    [AvaloniaTheory]
+    [InlineData(typeof(TextBox))]
+    [InlineData(typeof(AutoCompleteBox))]
+    public async Task NovoWorktreeReturnNoCampoCria(Type field)
+    {
+        using var sandbox = new GitSandbox();
+        var repository = sandbox.CreateRepository("repo");
+        var dialog = new CreateWorktreeWindow
+        {
+            DataContext = new CreateWorktreeViewModel(repository, openTerminal: false, command: "claude", assignIssue: false)
+            {
+                IsNewBranchMode = true,
+                BranchName = "feat/return",
+                BaseRef = "main",
+            },
+        };
+
+        var owner = new Window();
+        owner.Show();
+        var result = dialog.ShowDialog<WorktreeCreationResult?>(owner);
+        Dispatcher.UIThread.RunJobs();
+
+        var box = dialog.GetLogicalDescendantsOfType<Control>().First(c => c.GetType() == field && c.IsEffectivelyVisible);
+        box.Focus();
+        Dispatcher.UIThread.RunJobs();
+        dialog.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        await UntilAsync(() => result.IsCompleted, $"Return no {field.Name} não criou o worktree");
+        owner.Close();
+
+        var created = await result;
+        Assert.NotNull(created);
+        Assert.Equal("feat/return", created.Branch);
+        Assert.True(Directory.Exists(created.Path));
+    }
+
     [AvaloniaFact]
     public async Task AjudaFechaNoReturnENoEsc()
     {
