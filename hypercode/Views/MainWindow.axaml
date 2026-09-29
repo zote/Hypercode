@@ -235,12 +235,12 @@
     </Grid>
 
     <!-- Cabeçalho da lista: clicar ordena; clicar de novo inverte -->
-    <!-- As larguras de coluna (2.8*, 2.2*, 162, 2.4*) e a calha de 72 dos ícones são o layout
+    <!-- As larguras de coluna (2.8*, 2.2*, 162, 2.4*) e a calha de 94 dos ícones (quatro) são o layout
          desta tabela, repetido nas linhas abaixo; não são tokens. -->
     <Border Grid.Row="1" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Brush.Separator}"
             Padding="{DynamicResource Padding.TableHeader}">
       <Grid ColumnDefinitions="2.8*,2.2*,162,2.4*">
-        <Button Grid.Column="0" Classes="header" Margin="72,0,0,0" Click="OnSortClick" Tag="Name">
+        <Button Grid.Column="0" Classes="header" Margin="94,0,0,0" Click="OnSortClick" Tag="Name">
           <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Space.XS}">
             <TextBlock Text="Worktree" />
             <PathIcon Classes="small" Data="{Binding NameSortIcon, Converter={x:Static views:BadgeConverter.ToGeometry}}"
@@ -282,7 +282,10 @@
            Opening põe a contagem nos rótulos e habilita o que ao menos uma linha suporta. -->
       <ListBox.ContextMenu>
         <ContextMenu Opening="OnListContextMenuOpening">
-          <MenuItem Name="LaunchMenuItem" Click="OnOpenTerminalMenuClick" />
+          <MenuItem Name="FocusTerminalMenuItem" Click="OnFocusTerminalMenuClick"
+                    ToolTip.Tip="Traz para a frente a sessão do iTerm2 ou do Terminal aberta neste worktree — a mais recente, se houver várias. É o que o duplo-clique faz quando há uma." />
+          <MenuItem Name="LaunchMenuItem" Click="OnOpenTerminalMenuClick"
+                    ToolTip.Tip="Abre uma janela nova, mesmo que já haja terminal aberto aqui." />
           <MenuItem Name="ShellMenuItem" Click="OnOpenShellMenuClick"
                     ToolTip.Tip="Abre o terminal na pasta do worktree, sem rodar o comando." />
           <MenuItem Name="ResumeClaudeMenuItem" Click="OnResumeClaudeMenuClick"
@@ -312,7 +315,7 @@
           <Grid ColumnDefinitions="2.8*,2.2*,162,2.4*"
                 Background="Transparent"
                 DoubleTapped="OnRowDoubleTapped">
-            <Grid Grid.Column="0" ColumnDefinitions="72,*">
+            <Grid Grid.Column="0" ColumnDefinitions="94,*">
               <!-- Calha de largura fixa: os ícones ficam colados no nome e os nomes
                    continuam alinhados entre linhas com quantidades diferentes de ícone. -->
               <ItemsControl Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Right"

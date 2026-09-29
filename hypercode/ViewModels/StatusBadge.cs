@@ -24,6 +24,12 @@ public enum BadgeKind
     NeedsRebase,
     PrChanged,
 
+    /// <summary>Sessão de terminal aberta dentro do worktree.</summary>
+    TerminalOpen,
+
+    /// <summary>Processo com a pasta aberta, mas sem terminal (um dotnet watch).</summary>
+    ProcessOpen,
+
     /// <summary>Aba: algum PR do repositório com check falhando. Ponto, não ✕: ao lado do fechar da aba, um ✕ parece outro botão.</summary>
     RepositoryChecksFailing,
 }
@@ -74,6 +80,8 @@ public static class BadgeVisuals
         BadgeKind.ReviewRequired => "Icon.CodeReview",
         BadgeKind.NeedsRebase => "Icon.Alert",
         BadgeKind.PrChanged => "Icon.BellFill",
+        BadgeKind.TerminalOpen => "Icon.Terminal",
+        BadgeKind.ProcessOpen => "Icon.Terminal",
         BadgeKind.RepositoryChecksFailing => "Icon.DotFill",
         _ => "Icon.DotFill",
     };
@@ -101,6 +109,8 @@ public static class BadgeVisuals
         BadgeKind.ReviewRequired => Muted,
         BadgeKind.NeedsRebase => Attention,
         BadgeKind.PrChanged => Accent,
+        BadgeKind.TerminalOpen => Accent,
+        BadgeKind.ProcessOpen => Muted,
         BadgeKind.RepositoryChecksFailing => Danger,
         _ => Muted,
     };

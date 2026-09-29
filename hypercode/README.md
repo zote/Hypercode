@@ -19,6 +19,9 @@ com duplo-clique, abre uma nova janela do **iTerm2** na pasta do worktree rodand
   monitoramento, notificações e limpeza automática rodam nas de trás também. Detalhes em
   [Abas](#abas).
 - **Duplo-clique** (ou `Enter`) em uma linha → nova janela do iTerm2 em `cd <worktree> && claude`.
+  Se o worktree já tem terminal aberto (o ícone de terminal na linha), traz esse terminal para
+  a frente em vez de abrir outro — o mais recente, se houver vários. Detalhes em
+  [Terminal aberto](#terminal-aberto).
 - **Botão direito** → ações do worktree. Detalhes abaixo.
 - O campo **Filtrar** (`⌘F`) mostra só as linhas cujo nome, branch, número ou título do PR
   contém cada palavra digitada — `login 412` casa com a branch `feature/login` do PR `#412`.
@@ -173,11 +176,33 @@ Vêm de `git worktree list --porcelain` e aparecem abaixo do nome:
 | `bare` | Repositório sem árvore de trabalho. |
 | `draft` / `merged` / `closed` | Estado do PR, quando não está simplesmente aberto. |
 
+## Terminal aberto
+
+O ícone de terminal ao lado do nome diz que há processo com a pasta de trabalho dentro do
+worktree — o mesmo `lsof -d cwd` que segura a [limpeza automática](#limpeza-automática), uma
+chamada para todos os worktrees. O `ps` dá o `tty` de cada processo e, subindo pelos pais, de que
+app é a sessão (iTerm2, Terminal.app ou outro), sem AppleScript. O tooltip lista as sessões, da
+mais recente para a mais antiga — no iTerm2, com o nome da sessão —, e os processos que rodam
+fora delas.
+
+- **Azul**: há sessão de terminal. O duplo-clique e o `Enter` vão para ela; para abrir outra, o
+  menu de contexto (**Abrir no iTerm2 rodando o comando** ou **Abrir o terminal**).
+- **Cinza**: só processo sem terminal (um `dotnet watch`). A pasta está em uso, mas não há para
+  onde ir: o duplo-clique abre um terminal novo.
+- Sessão de outro terminal (Ghostty, o do VS Code) acende o ícone azul, mas só o iTerm2 e o
+  Terminal.app sabem receber o foco — nesse caso o duplo-clique abre um novo.
+
+Com worktree aninhado em outro, o processo conta só para o mais fundo. É relido junto com o
+estado das linhas e quando a janela volta para a frente; o duplo-clique confere de novo na hora,
+e se a sessão já fechou abre uma nova. Se o `lsof` falha, a linha fica como estava — não saber
+não é o mesmo que não haver.
+
 ## Menu de contexto
 
 | Ação | O que faz | Habilitada quando |
 |---|---|---|
-| Abrir no iTerm2 rodando o comando | O mesmo que o duplo-clique | a pasta existe |
+| Ir para o terminal aberto | traz para a frente a sessão do iTerm2 ou do Terminal aberta no worktree (a mais recente) | há sessão de um dos dois ali, e uma linha só selecionada |
+| Abrir no iTerm2 rodando o comando | janela nova rodando o **Comando**, mesmo com terminal já aberto — o duplo-clique sem terminal aberto | a pasta existe |
 | Abrir o terminal | `cd` no worktree, sem rodar o **Comando** | a pasta existe |
 | Retomar a sessão do claude | `claude --continue`: volta à última conversa daquele worktree | há sessão em `~/.claude/projects/<caminho>` |
 | Revelar no Finder | `open <pasta>` | sempre |
@@ -467,6 +492,9 @@ qualquer outro valor vira `balanced`. Ela some do arquivo no próximo salvamento
   o app prefere o aberto; depois o merged; depois o fechado.
 - **Terminal**: `osascript` com `tell application id "com.googlecode.iterm2"` → `create window with
   default profile` → `write text "cd '<path>' && claude"`. Sem iTerm2, usa `do script` no `Terminal.app`.
+- **Terminal aberto**: `lsof -n -P -w -d cwd -Fpn` e `ps -A -o pid=,ppid=,tty=,etime=,comm=`; o
+  nome das sessões e o foco (`select` da janela, da aba e da sessão, e `activate`) por `osascript`,
+  procurando a sessão pelo `tty`.
 
 Um app aberto pelo Finder herda um `PATH` mínimo, então o Hypercode reconstrói o `PATH`
 (incluindo `/opt/homebrew/bin` e `/usr/local/bin`) antes de chamar `git` e `gh`.
@@ -496,6 +524,7 @@ hypercode/
     ├── AutoCleanup.cs          carência, pendências e histórico da limpeza automática; lsof
     ├── Notifier.cs             notificação do macOS via osascript
     ├── TerminalLauncher.cs     AppleScript p/ iTerm2 (fallback Terminal.app) + open
+    ├── TerminalSessions.cs     que worktree tem terminal aberto (lsof + ps) e o foco nele
     ├── ClaudeSessions.cs       detecta sessão do Claude Code para o "Retomar"
     ├── ProcessRunner.cs        execução de processos com timeout
     ├── ExecutableLocator.cs    resolução de PATH/binários
