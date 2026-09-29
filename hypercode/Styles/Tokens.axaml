@@ -120,6 +120,26 @@
   <Thickness x:Key="Margin.MenuItem">5,0</Thickness>
   <Thickness x:Key="Margin.TableRow">6,0</Thickness>
 
+  <!-- Janela principal: faixa de abas, barras (filtro, rodapé) e a tabela de worktrees.
+       Padding.TableCell soma com Margin.TableRow (6) para o conteúdo da linha cair no mesmo
+       recuo de 16 do cabeçalho e das barras. -->
+  <Thickness x:Key="Padding.TabStrip">8,8,16,0</Thickness>
+  <Thickness x:Key="Padding.Tab">12,0,6,0</Thickness>
+  <Thickness x:Key="Margin.Tab">0,0,2,0</Thickness>
+  <x:Double x:Key="Size.Tab.MinHeight">34</x:Double>
+  <Thickness x:Key="Padding.Bar">16,10</Thickness>
+  <Thickness x:Key="Padding.TableHeader">16,0,16,6</Thickness>
+  <Thickness x:Key="Padding.TableCell">10,0</Thickness>
+  <x:Double x:Key="Size.TableRow.TwoLine">40</x:Double>
+  <!-- Recuos à direita de um elemento de linha: antes da próxima coluna (12) e antes do
+       botão seguinte numa barra (8); o texto logo depois de um campo (10 à esquerda) -->
+  <Thickness x:Key="Margin.BeforeColumn">0,0,12,0</Thickness>
+  <Thickness x:Key="Margin.AroundColumn">12,0</Thickness>
+  <Thickness x:Key="Margin.BeforeButton">0,0,8,0</Thickness>
+  <Thickness x:Key="Margin.AfterField">10,0,0,0</Thickness>
+  <!-- Entre uma etiqueta de estado e a seguinte -->
+  <Thickness x:Key="Margin.Badge">0,0,6,0</Thickness>
+
   <!-- Diálogo (DialogFrame): do título ao conteúdo, do conteúdo aos botões, e a largura
        mínima de cada botão da barra -->
   <Thickness x:Key="Margin.DialogContent">0,12,0,0</Thickness>
@@ -140,6 +160,8 @@
   <CornerRadius x:Key="Radius.Control">6</CornerRadius>
   <CornerRadius x:Key="Radius.Group">10</CornerRadius>
   <CornerRadius x:Key="Radius.Window">12</CornerRadius>
+  <!-- Aba: só os cantos de cima, para a aba selecionada se encaixar no conteúdo abaixo -->
+  <CornerRadius x:Key="Radius.Tab">6,6,0,0</CornerRadius>
   <!-- Radius.Control + a espessura do anel (3), para o anel acompanhar a curva do controle -->
   <CornerRadius x:Key="Radius.FocusRing">9</CornerRadius>
 

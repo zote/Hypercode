@@ -260,13 +260,15 @@ public sealed class RepositoryViewModel : ObservableObject
         ? $"{VisibleWorktrees.Count} de {Worktrees.Count}"
         : string.Empty;
 
-    public string NameHeader => HeaderLabel("WORKTREE", SortColumn.Name);
-    public string BranchHeader => HeaderLabel("BRANCH", SortColumn.Branch);
-    public string PullRequestHeader => HeaderLabel("PR", SortColumn.PullRequest);
-    public string PathHeader => HeaderLabel("CAMINHO", SortColumn.Path);
+    // Ícone de ordenação de cada coluna: a chave do recurso de Styles/Icons.axaml, ou null na
+    // coluna que não ordena a lista. String para o view-model não depender do Avalonia.
+    public string? NameSortIcon => SortIcon(SortColumn.Name);
+    public string? BranchSortIcon => SortIcon(SortColumn.Branch);
+    public string? PullRequestSortIcon => SortIcon(SortColumn.PullRequest);
+    public string? PathSortIcon => SortIcon(SortColumn.Path);
 
-    private string HeaderLabel(string label, SortColumn column)
-        => column != _sortColumn ? label : label + (_sortDescending ? " ▼" : " ▲");
+    private string? SortIcon(SortColumn column)
+        => column != _sortColumn ? null : _sortDescending ? "Icon.SortDescending" : "Icon.SortAscending";
 
     /// <summary>Clique no cabeçalho: ordena pela coluna; clicar de novo na mesma inverte.</summary>
     public void SortBy(SortColumn column)
@@ -284,10 +286,10 @@ public sealed class RepositoryViewModel : ObservableObject
         overrides.SortDescending = _sortDescending;
         _hub.SaveSettings();
 
-        RaisePropertyChanged(nameof(NameHeader));
-        RaisePropertyChanged(nameof(BranchHeader));
-        RaisePropertyChanged(nameof(PullRequestHeader));
-        RaisePropertyChanged(nameof(PathHeader));
+        RaisePropertyChanged(nameof(NameSortIcon));
+        RaisePropertyChanged(nameof(BranchSortIcon));
+        RaisePropertyChanged(nameof(PullRequestSortIcon));
+        RaisePropertyChanged(nameof(PathSortIcon));
         ApplyView();
     }
 
