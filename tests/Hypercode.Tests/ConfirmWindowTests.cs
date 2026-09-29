@@ -1,9 +1,12 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Hypercode.Views;
 using Xunit;
 
@@ -92,5 +95,45 @@ public sealed class ConfirmWindowTests
         var dialog = ConfirmWindow.Notice("Atualizar", "Não dá para atualizar agora.", "");
 
         Assert.False(dialog.FindControl<Border>("BodyBox")!.IsVisible);
+    }
+
+    /// <summary>O espaço do conteúdo no template do DialogFrame, com a janela já desenhada.</summary>
+    private static ContentPresenter ContentArea(Window window)
+    {
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        return window.GetVisualDescendants().OfType<ContentPresenter>()
+            .Single(p => p.Name == "PART_ContentPresenter" && p.TemplatedParent is DialogFrame);
+    }
+
+    [AvaloniaFact]
+    public void DetalheVazioNaoDeixaAMargemDoConteudoAntesDosBotoes()
+    {
+        var dialog = ConfirmWindow.Notice("Atualizar", "Não dá para atualizar agora.", "");
+
+        Assert.False(ContentArea(dialog).IsVisible);
+        dialog.Close();
+    }
+
+    [AvaloniaFact]
+    public void DetalheAparecePorBaixoDoTituloComAMargemDoConteudo()
+    {
+        var dialog = Confirm();
+        var content = ContentArea(dialog);
+
+        Assert.True(content.IsVisible);
+        Assert.NotEqual(0, content.Margin.Top);
+        dialog.Close();
+    }
+
+    [AvaloniaFact]
+    public void SemTituloOConteudoComecaNaMargemDaJanela()
+    {
+        var dialog = new Window { Content = new DialogFrame { Content = new TextBlock { Text = "formulário" } } };
+        var content = ContentArea(dialog);
+
+        Assert.True(content.IsVisible);
+        Assert.Equal(new Thickness(0), content.Margin);
+        dialog.Close();
     }
 }
