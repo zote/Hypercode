@@ -53,6 +53,8 @@ public partial class CreateWorktreeWindow : Window
         if (field is not null) Dispatcher.UIThread.Post(() => this.FindControl<TextBox>(field)?.Focus());
     }
 
+    private void OnRememberLayoutClick(object? sender, RoutedEventArgs e) => ViewModel?.RememberLayout();
+
     // Enter num campo cria, se já dá para criar; o IsDefault do botão não alcança o AutoCompleteBox.
     private async void OnFieldKeyDown(object? sender, KeyEventArgs e)
     {

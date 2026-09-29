@@ -27,6 +27,9 @@ public sealed class SettingsViewModel : ObservableObject
         nameof(AssignIssueOnCreate), nameof(AssignIssueUsesGlobal), nameof(CanEditAssignIssue), nameof(IsAssignIssueOverridden),
         nameof(AutoCleanup), nameof(AutoCleanupGraceMinutes), nameof(AutoCleanupUsesGlobal), nameof(CanEditAutoCleanup),
         nameof(CanEditAutoCleanupGrace), nameof(IsAutoCleanupOverridden), nameof(AutoCleanupWarning),
+        nameof(WorktreesRoot), nameof(WorktreesRootUsesGlobal), nameof(CanEditWorktreesRoot), nameof(IsWorktreesRootOverridden),
+        nameof(WorktreesRootPreview),
+        nameof(KeepSlashes), nameof(KeepSlashesUsesGlobal), nameof(CanEditKeepSlashes), nameof(IsKeepSlashesOverridden),
     };
 
     private readonly MainViewModel _main;
@@ -187,6 +190,46 @@ public sealed class SettingsViewModel : ObservableObject
 
     /// <summary>O aviso de quando se liga a limpeza, com a carência do escopo.</summary>
     public string AutoCleanupWarning => RepositoryViewModel.BuildAutoCleanupWarning((int)(AutoCleanupGraceMinutes ?? AutoCleanupTracker.DefaultGraceMinutes));
+
+    // ── Pasta dos worktrees (raiz e barras, sobrescritas separadas) ────────
+
+    /// <summary>Vazio é o padrão, &lt;repo&gt;.worktrees ao lado do repositório.</summary>
+    public string WorktreesRoot
+    {
+        get => (Repository is null ? Global.WorktreesRoot : Overrides?.WorktreesRoot ?? Global.WorktreesRoot) ?? string.Empty;
+        set => Write(WorktreesRootUsesGlobal,
+            () => Global.WorktreesRoot = EffectiveSettings.NormalizeWorktreesRoot(value),
+            overrides => overrides.WorktreesRoot = value?.Trim() ?? string.Empty);
+    }
+
+    public bool WorktreesRootUsesGlobal
+    {
+        get => Overrides?.WorktreesRoot is null;
+        set => SetUsesGlobal(overrides => overrides.WorktreesRoot = value ? null : Global.WorktreesRoot ?? string.Empty);
+    }
+
+    public bool IsWorktreesRootOverridden => IsRepositoryScope && !WorktreesRootUsesGlobal;
+    public bool CanEditWorktreesRoot => !IsRepositoryScope || !WorktreesRootUsesGlobal;
+
+    /// <summary>Onde a raiz cai de fato, no escopo de um repositório.</summary>
+    public string? WorktreesRootPreview => Repository is { } repository
+        ? $"Neste repositório: {WorktreeCreator.WorktreesRoot(repository.MainWorktreePath ?? repository.RepositoryPath, Effective.WorktreesRoot)}"
+        : null;
+
+    public bool KeepSlashes
+    {
+        get => Repository is null ? Global.WorktreeFolderKeepsSlashes : Effective.WorktreeFolderKeepsSlashes;
+        set => Write(KeepSlashesUsesGlobal, () => Global.WorktreeFolderKeepsSlashes = value, overrides => overrides.WorktreeFolderKeepsSlashes = value);
+    }
+
+    public bool KeepSlashesUsesGlobal
+    {
+        get => Overrides?.WorktreeFolderKeepsSlashes is null;
+        set => SetUsesGlobal(overrides => overrides.WorktreeFolderKeepsSlashes = value ? null : Global.WorktreeFolderKeepsSlashes);
+    }
+
+    public bool IsKeepSlashesOverridden => IsRepositoryScope && !KeepSlashesUsesGlobal;
+    public bool CanEditKeepSlashes => !IsRepositoryScope || !KeepSlashesUsesGlobal;
 
     // ── Gravação ────────────────────────────────────────────────────────────
 

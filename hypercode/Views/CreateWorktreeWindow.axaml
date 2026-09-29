@@ -118,6 +118,15 @@
                      Watermark="{Binding WorktreesRoot}"
                      FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Font.Size.Callout}"
                      KeyDown="OnFieldKeyDown" />
+            <TextBlock Classes="hint" Foreground="{DynamicResource Brush.Text.Warning}"
+                       Text="{Binding WorktreePathWarning}"
+                       IsVisible="{Binding WorktreePathWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <!-- A convenção do repositório, descoberta na hora em que ela importa: quando a pasta sugerida está errada. -->
+            <Button HorizontalAlignment="Left" Content="{Binding RememberLayoutLabel}" Click="OnRememberLayoutClick"
+                    IsVisible="{Binding CanRememberLayout}"
+                    ToolTip.Tip="Grava a pasta dos worktrees (e as barras da branch) nas configurações deste repositório" />
+            <TextBlock Classes="hint" Text="{Binding LayoutHint}"
+                       IsVisible="{Binding LayoutHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             <TextBlock Classes="hint" Text="{Binding IncludeSummary}" />
           </StackPanel>
         </Grid>
