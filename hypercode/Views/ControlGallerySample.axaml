@@ -1,0 +1,88 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Hypercode.Views.ControlGallerySample"
+             Background="{DynamicResource Brush.Background.Window}">
+
+  <!-- Cada controle do design system em cada estado que dá para mostrar parado. Hover e
+       pressionado só aparecem com o mouse; o anel de foco, com Tab. -->
+  <StackPanel Margin="{DynamicResource Margin.Window}" Spacing="{DynamicResource Spacing.Group}">
+
+    <StackPanel Spacing="{DynamicResource Spacing.Label}">
+      <TextBlock Classes="headline" Text="Botões" />
+      <WrapPanel ItemSpacing="{DynamicResource Spacing.Related}" LineSpacing="{DynamicResource Spacing.Related}">
+        <Button Content="Comum" />
+        <Button Content="Padrão" IsDefault="True" />
+        <Button Classes="accent" Content="accent" />
+        <Button Classes="destructive" Content="Remover" />
+        <Button Classes="borderless" Content="Sem borda" />
+      </WrapPanel>
+      <WrapPanel ItemSpacing="{DynamicResource Spacing.Related}" LineSpacing="{DynamicResource Spacing.Related}">
+        <Button Content="Comum" IsEnabled="False" />
+        <Button Content="Padrão" IsDefault="True" IsEnabled="False" />
+        <Button Classes="destructive" Content="Remover" IsEnabled="False" />
+        <Button Classes="borderless" Content="Sem borda" IsEnabled="False" />
+      </WrapPanel>
+    </StackPanel>
+
+    <StackPanel Spacing="{DynamicResource Spacing.Label}">
+      <TextBlock Classes="headline" Text="Campos" />
+      <TextBox Watermark="Filtrar por worktree, branch ou PR" />
+      <TextBox Text="claude/issue-66-controles" />
+      <TextBox Text="Desabilitado" IsEnabled="False" />
+      <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Spacing.Related}">
+        <NumericUpDown Value="7" Minimum="0" Maximum="90" Width="120" />
+        <ComboBox SelectedIndex="0" Width="160">
+          <ComboBoxItem Content="origin/main" />
+          <ComboBoxItem Content="origin/develop" />
+        </ComboBox>
+        <ComboBox SelectedIndex="0" Width="120" IsEnabled="False">
+          <ComboBoxItem Content="Desabilitado" />
+        </ComboBox>
+      </StackPanel>
+    </StackPanel>
+
+    <StackPanel Spacing="{DynamicResource Spacing.Label}">
+      <TextBlock Classes="headline" Text="Seleção" />
+      <WrapPanel ItemSpacing="{DynamicResource Spacing.Group}" LineSpacing="{DynamicResource Spacing.Related}">
+        <CheckBox Content="Desmarcado" />
+        <CheckBox Content="Marcado" IsChecked="True" />
+        <CheckBox Content="Misto" IsThreeState="True" IsChecked="{x:Null}" />
+        <CheckBox Content="Desabilitado" IsChecked="True" IsEnabled="False" />
+      </WrapPanel>
+      <WrapPanel ItemSpacing="{DynamicResource Spacing.Group}">
+        <RadioButton Content="Branch nova" IsChecked="True" />
+        <RadioButton Content="A partir de um PR" />
+        <RadioButton Content="Desabilitado" IsEnabled="False" />
+      </WrapPanel>
+    </StackPanel>
+
+    <StackPanel Spacing="{DynamicResource Spacing.Label}">
+      <TextBlock Classes="headline" Text="Lista (Classes=&quot;table&quot;)" />
+      <TextBlock Classes="subheadline" Foreground="{DynamicResource Brush.Label.Secondary}"
+                 Text="Seleção na accent com a lista em foco; cinza sem foco." />
+      <ListBox Name="Table" Classes="table" SelectedIndex="1" Height="84"
+               CornerRadius="{DynamicResource Radius.Control}">
+        <ListBoxItem Content="main" />
+        <ListBoxItem Content="issue-66-controles" />
+        <ListBoxItem Content="issue-67-icones" />
+      </ListBox>
+    </StackPanel>
+
+    <StackPanel Spacing="{DynamicResource Spacing.Label}">
+      <TextBlock Classes="headline" Text="Menu e tooltip" />
+      <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Spacing.Group}">
+        <!-- O menu fica fixo na página para dar para ver (sem foco, senão ele o rouba da lista
+             ao ativar a janela); o tooltip abre sob o mouse. -->
+        <MenuFlyoutPresenter Focusable="False" HorizontalAlignment="Left" VerticalAlignment="Top">
+          <MenuItem Header="Abrir no iTerm2" Focusable="False" />
+          <MenuItem Header="Atualizar a partir da base…" Focusable="False" />
+          <Separator />
+          <MenuItem Header="Travar worktree" IsEnabled="False" Focusable="False" />
+        </MenuFlyoutPresenter>
+        <Button Name="TipButton" Content="Passe o mouse" VerticalAlignment="Top"
+                ToolTip.Tip="Travado pelo supacode há 2 dias" />
+      </StackPanel>
+    </StackPanel>
+
+  </StackPanel>
+</UserControl>

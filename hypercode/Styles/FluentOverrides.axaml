@@ -1,0 +1,420 @@
+<!--
+  Liga as chaves de recurso do FluentTheme 11.3 aos tokens de Styles/Tokens.axaml, para os
+  controles do Fluent (botão, campo, checkbox, radio, combo, menu, tooltip) usarem as cores,
+  a fonte e os raios do design system sem reescrever os templates. Estados e variantes que o
+  Fluent não tem (lista estilo macOS, botão destrutivo, anel de foco…) ficam em
+  Styles/Controls.axaml. Uso: Styles/README.md.
+
+  As duas variantes têm exatamente os mesmos aliases: um StaticResource num dicionário de tema
+  só enxerga os tokens da mesma variante, por isso a lista se repete (o teste
+  FluentOverridesTests garante que Light e Dark não divergem). Chave do Fluent que não
+  aparece aqui continua com o valor dele.
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Tamanho do texto dos controles: Body do macOS (o Fluent usa 14) -->
+  <StaticResource x:Key="ControlContentThemeFontSize" ResourceKey="Font.Size.Body" />
+  <StaticResource x:Key="ControlCornerRadius" ResourceKey="Radius.Control" />
+  <StaticResource x:Key="OverlayCornerRadius" ResourceKey="Radius.Group" />
+
+  <!-- Medidas próximas às do macOS: botão e campo com ~24pt de altura, menu com itens de ~22pt -->
+  <Thickness x:Key="ButtonPadding">12,3</Thickness>
+  <Thickness x:Key="TextControlThemePadding">6,3</Thickness>
+  <Thickness x:Key="MenuFlyoutPresenterThemePadding">0,5</Thickness>
+  <Thickness x:Key="MenuFlyoutItemThemePaddingNarrow">10,3</Thickness>
+  <x:Double x:Key="TextControlPlaceholderOpacity">1</x:Double>
+  <StaticResource x:Key="ToolTipContentThemeFontSize" ResourceKey="Font.Size.Subheadline" />
+  <Thickness x:Key="ToolTipBorderThemePadding">6,3</Thickness>
+
+  <ResourceDictionary.ThemeDictionaries>
+
+    <ResourceDictionary x:Key="Light">
+      <!-- Botão de destaque (Classes="accent" e botão padrão) -->
+      <StaticResource x:Key="AccentButtonBackground" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="AccentButtonBackgroundPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="AccentButtonBackgroundPressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="AccentButtonBackgroundDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="AccentButtonForeground" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="AccentButtonForegroundPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="AccentButtonForegroundPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="AccentButtonForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="AccentButtonBorderBrush" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="AccentButtonBorderBrushPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="AccentButtonBorderBrushPressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="AccentButtonBorderBrushDisabled" ResourceKey="Brush.Border.Control" />
+
+      <!-- Botão comum -->
+      <StaticResource x:Key="ButtonBackground" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="Brush.Background.ControlPressed" />
+      <StaticResource x:Key="ButtonBackgroundDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="ButtonForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ButtonForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="ButtonBorderBrush" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="ButtonBorderBrushDisabled" ResourceKey="Brush.Separator" />
+
+      <!-- Setas do NumericUpDown -->
+      <StaticResource x:Key="RepeatButtonBackground" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RepeatButtonBackgroundPointerOver" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RepeatButtonBackgroundPressed" ResourceKey="Brush.Background.ControlPressed" />
+      <StaticResource x:Key="RepeatButtonBackgroundDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RepeatButtonForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="RepeatButtonForegroundPointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="RepeatButtonForegroundPressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="RepeatButtonForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="RepeatButtonBorderBrush" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="RepeatButtonBorderBrushPointerOver" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="RepeatButtonBorderBrushPressed" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="RepeatButtonBorderBrushDisabled" ResourceKey="Brush.Separator" />
+
+      <!-- Campo de texto (TextBox, NumericUpDown) -->
+      <StaticResource x:Key="TextControlForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="TextControlForegroundPointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="TextControlForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="TextControlBackground" ResourceKey="Brush.Background.Content" />
+      <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="Brush.Background.Content" />
+      <StaticResource x:Key="TextControlBackgroundDisabled" ResourceKey="Brush.Background.Content" />
+      <StaticResource x:Key="TextControlBorderBrushFocused" ResourceKey="Brush.Accent" />
+      <StaticResource x:Key="TextControlBorderBrushDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="TextControlPlaceholderForeground" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="TextControlPlaceholderForegroundPointerOver" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="TextControlPlaceholderForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="TextControlBackgroundFocused" ResourceKey="Brush.Background.Content" />
+      <StaticResource x:Key="TextControlBorderBrush" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="TextControlForegroundFocused" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="TextControlPlaceholderForegroundFocused" ResourceKey="Brush.Label.Secondary" />
+
+      <!-- Checkbox -->
+      <StaticResource x:Key="CheckBoxForegroundUnchecked" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundUncheckedPointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundUncheckedPressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundUncheckedDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="CheckBoxForegroundChecked" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundCheckedPointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundCheckedPressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundCheckedDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="CheckBoxForegroundIndeterminate" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundIndeterminatePointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundIndeterminatePressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundIndeterminateDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUnchecked" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUncheckedPointerOver" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUncheckedPressed" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUncheckedDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeCheckedPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeCheckedPressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeCheckedDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeIndeterminate" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeIndeterminatePointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeIndeterminatePressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeIndeterminateDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillUnchecked" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillUncheckedPointerOver" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillUncheckedPressed" ResourceKey="Brush.Background.ControlPressed" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillUncheckedDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillChecked" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedPressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillIndeterminate" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillIndeterminatePointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillIndeterminatePressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillIndeterminateDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundChecked" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundIndeterminate" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundIndeterminatePointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundIndeterminatePressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundIndeterminateDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeChecked" ResourceKey="Brush.Selection.Active" />
+
+      <!-- Radio -->
+      <StaticResource x:Key="RadioButtonForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="RadioButtonForegroundPointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="RadioButtonForegroundPressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="RadioButtonForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="RadioButtonOuterEllipseStroke" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="RadioButtonOuterEllipseStrokePointerOver" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="RadioButtonOuterEllipseStrokePressed" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="RadioButtonOuterEllipseStrokeDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="RadioButtonOuterEllipseFill" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RadioButtonOuterEllipseFillPointerOver" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RadioButtonOuterEllipseFillPressed" ResourceKey="Brush.Background.ControlPressed" />
+      <StaticResource x:Key="RadioButtonOuterEllipseFillDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedStroke" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedStrokePointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedStrokePressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedStrokeDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedFill" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedFillPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedFillPressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedFillDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RadioButtonCheckGlyphFill" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="RadioButtonCheckGlyphFillPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="RadioButtonCheckGlyphFillPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="RadioButtonCheckGlyphFillDisabled" ResourceKey="Brush.Label.Tertiary" />
+
+      <!-- Combo e a lista dele -->
+      <StaticResource x:Key="ComboBoxItemForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ComboBoxItemForegroundPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="ComboBoxItemForegroundPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="ComboBoxItemForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="ComboBoxItemForegroundSelected" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ComboBoxItemForegroundSelectedPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="ComboBoxItemForegroundSelectedPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="ComboBoxItemForegroundSelectedDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="ComboBoxItemBackgroundPressed" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="ComboBoxItemBackgroundPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="ComboBoxItemBackgroundSelected" ResourceKey="Brush.Selection.Inactive" />
+      <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="ComboBoxBackground" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="ComboBoxBackgroundPressed" ResourceKey="Brush.Background.ControlPressed" />
+      <StaticResource x:Key="ComboBoxBackgroundDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="ComboBoxForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ComboBoxForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="ComboBoxForegroundFocused" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ComboBoxForegroundFocusedPressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ComboBoxPlaceHolderForeground" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="ComboBoxPlaceHolderForegroundFocusedPressed" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="ComboBoxBorderBrush" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="ComboBoxBorderBrushPointerOver" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="ComboBoxBorderBrushPressed" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="ComboBoxBorderBrushDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="ComboBoxDropDownGlyphForeground" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="ComboBoxDropDownGlyphForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="ComboBoxDropDownGlyphForegroundFocused" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="ComboBoxDropDownGlyphForegroundFocusedPressed" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="ComboBoxDropDownBackground" ResourceKey="Brush.Background.Overlay" />
+      <StaticResource x:Key="ComboBoxDropDownBorderBrush" ResourceKey="Brush.Border.Overlay" />
+
+      <!-- Menu de contexto e flyout -->
+      <StaticResource x:Key="MenuFlyoutItemBackgroundPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="MenuFlyoutItemBackgroundPressed" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="MenuFlyoutItemForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="MenuFlyoutItemForegroundPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutItemForegroundPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutItemForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="MenuFlyoutSubItemChevron" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="MenuFlyoutSubItemChevronPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutSubItemChevronPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutSubItemChevronSubMenuOpened" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutSubItemChevronDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="MenuFlyoutItemKeyboardAcceleratorTextForeground" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="MenuFlyoutPresenterBackground" ResourceKey="Brush.Background.Overlay" />
+      <StaticResource x:Key="MenuFlyoutPresenterBorderBrush" ResourceKey="Brush.Border.Overlay" />
+
+      <!-- Tooltip -->
+      <StaticResource x:Key="ToolTipForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ToolTipBackground" ResourceKey="Brush.Background.Overlay" />
+      <StaticResource x:Key="ToolTipBorderBrush" ResourceKey="Brush.Border.Overlay" />
+    </ResourceDictionary>
+
+    <ResourceDictionary x:Key="Dark">
+      <!-- Botão de destaque (Classes="accent" e botão padrão) -->
+      <StaticResource x:Key="AccentButtonBackground" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="AccentButtonBackgroundPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="AccentButtonBackgroundPressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="AccentButtonBackgroundDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="AccentButtonForeground" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="AccentButtonForegroundPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="AccentButtonForegroundPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="AccentButtonForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="AccentButtonBorderBrush" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="AccentButtonBorderBrushPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="AccentButtonBorderBrushPressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="AccentButtonBorderBrushDisabled" ResourceKey="Brush.Border.Control" />
+
+      <!-- Botão comum -->
+      <StaticResource x:Key="ButtonBackground" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="Brush.Background.ControlPressed" />
+      <StaticResource x:Key="ButtonBackgroundDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="ButtonForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ButtonForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="ButtonBorderBrush" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="ButtonBorderBrushDisabled" ResourceKey="Brush.Separator" />
+
+      <!-- Setas do NumericUpDown -->
+      <StaticResource x:Key="RepeatButtonBackground" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RepeatButtonBackgroundPointerOver" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RepeatButtonBackgroundPressed" ResourceKey="Brush.Background.ControlPressed" />
+      <StaticResource x:Key="RepeatButtonBackgroundDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RepeatButtonForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="RepeatButtonForegroundPointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="RepeatButtonForegroundPressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="RepeatButtonForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="RepeatButtonBorderBrush" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="RepeatButtonBorderBrushPointerOver" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="RepeatButtonBorderBrushPressed" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="RepeatButtonBorderBrushDisabled" ResourceKey="Brush.Separator" />
+
+      <!-- Campo de texto (TextBox, NumericUpDown) -->
+      <StaticResource x:Key="TextControlForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="TextControlForegroundPointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="TextControlForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="TextControlBackground" ResourceKey="Brush.Background.Content" />
+      <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="Brush.Background.Content" />
+      <StaticResource x:Key="TextControlBackgroundDisabled" ResourceKey="Brush.Background.Content" />
+      <StaticResource x:Key="TextControlBorderBrushFocused" ResourceKey="Brush.Accent" />
+      <StaticResource x:Key="TextControlBorderBrushDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="TextControlPlaceholderForeground" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="TextControlPlaceholderForegroundPointerOver" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="TextControlPlaceholderForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="TextControlBackgroundFocused" ResourceKey="Brush.Background.Content" />
+      <StaticResource x:Key="TextControlBorderBrush" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="TextControlForegroundFocused" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="TextControlPlaceholderForegroundFocused" ResourceKey="Brush.Label.Secondary" />
+
+      <!-- Checkbox -->
+      <StaticResource x:Key="CheckBoxForegroundUnchecked" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundUncheckedPointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundUncheckedPressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundUncheckedDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="CheckBoxForegroundChecked" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundCheckedPointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundCheckedPressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundCheckedDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="CheckBoxForegroundIndeterminate" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundIndeterminatePointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundIndeterminatePressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="CheckBoxForegroundIndeterminateDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUnchecked" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUncheckedPointerOver" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUncheckedPressed" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUncheckedDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeCheckedPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeCheckedPressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeCheckedDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeIndeterminate" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeIndeterminatePointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeIndeterminatePressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeIndeterminateDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillUnchecked" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillUncheckedPointerOver" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillUncheckedPressed" ResourceKey="Brush.Background.ControlPressed" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillUncheckedDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillChecked" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedPressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillIndeterminate" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillIndeterminatePointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillIndeterminatePressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundFillIndeterminateDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundChecked" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundIndeterminate" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundIndeterminatePointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundIndeterminatePressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="CheckBoxCheckGlyphForegroundIndeterminateDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="CheckBoxCheckBackgroundStrokeChecked" ResourceKey="Brush.Selection.Active" />
+
+      <!-- Radio -->
+      <StaticResource x:Key="RadioButtonForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="RadioButtonForegroundPointerOver" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="RadioButtonForegroundPressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="RadioButtonForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="RadioButtonOuterEllipseStroke" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="RadioButtonOuterEllipseStrokePointerOver" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="RadioButtonOuterEllipseStrokePressed" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="RadioButtonOuterEllipseStrokeDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="RadioButtonOuterEllipseFill" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RadioButtonOuterEllipseFillPointerOver" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RadioButtonOuterEllipseFillPressed" ResourceKey="Brush.Background.ControlPressed" />
+      <StaticResource x:Key="RadioButtonOuterEllipseFillDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedStroke" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedStrokePointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedStrokePressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedStrokeDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedFill" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedFillPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedFillPressed" ResourceKey="Brush.Accent.Pressed" />
+      <StaticResource x:Key="RadioButtonOuterEllipseCheckedFillDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="RadioButtonCheckGlyphFill" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="RadioButtonCheckGlyphFillPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="RadioButtonCheckGlyphFillPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="RadioButtonCheckGlyphFillDisabled" ResourceKey="Brush.Label.Tertiary" />
+
+      <!-- Combo e a lista dele -->
+      <StaticResource x:Key="ComboBoxItemForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ComboBoxItemForegroundPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="ComboBoxItemForegroundPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="ComboBoxItemForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="ComboBoxItemForegroundSelected" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ComboBoxItemForegroundSelectedPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="ComboBoxItemForegroundSelectedPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="ComboBoxItemForegroundSelectedDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="ComboBoxItemBackgroundPressed" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="ComboBoxItemBackgroundPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="ComboBoxItemBackgroundSelected" ResourceKey="Brush.Selection.Inactive" />
+      <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="ComboBoxBackground" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="ComboBoxBackgroundPressed" ResourceKey="Brush.Background.ControlPressed" />
+      <StaticResource x:Key="ComboBoxBackgroundDisabled" ResourceKey="Brush.Background.Control" />
+      <StaticResource x:Key="ComboBoxForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ComboBoxForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="ComboBoxForegroundFocused" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ComboBoxForegroundFocusedPressed" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ComboBoxPlaceHolderForeground" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="ComboBoxPlaceHolderForegroundFocusedPressed" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="ComboBoxBorderBrush" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="ComboBoxBorderBrushPointerOver" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="ComboBoxBorderBrushPressed" ResourceKey="Brush.Border.Control" />
+      <StaticResource x:Key="ComboBoxBorderBrushDisabled" ResourceKey="Brush.Separator" />
+      <StaticResource x:Key="ComboBoxDropDownGlyphForeground" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="ComboBoxDropDownGlyphForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="ComboBoxDropDownGlyphForegroundFocused" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="ComboBoxDropDownGlyphForegroundFocusedPressed" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="ComboBoxDropDownBackground" ResourceKey="Brush.Background.Overlay" />
+      <StaticResource x:Key="ComboBoxDropDownBorderBrush" ResourceKey="Brush.Border.Overlay" />
+
+      <!-- Menu de contexto e flyout -->
+      <StaticResource x:Key="MenuFlyoutItemBackgroundPointerOver" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="MenuFlyoutItemBackgroundPressed" ResourceKey="Brush.Selection.Active" />
+      <StaticResource x:Key="MenuFlyoutItemForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="MenuFlyoutItemForegroundPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutItemForegroundPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutItemForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="MenuFlyoutSubItemChevron" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="MenuFlyoutSubItemChevronPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutSubItemChevronPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutSubItemChevronSubMenuOpened" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutSubItemChevronDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="MenuFlyoutItemKeyboardAcceleratorTextForeground" ResourceKey="Brush.Label.Secondary" />
+      <StaticResource x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPointerOver" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPressed" ResourceKey="Brush.Text.OnAccent" />
+      <StaticResource x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundDisabled" ResourceKey="Brush.Label.Tertiary" />
+      <StaticResource x:Key="MenuFlyoutPresenterBackground" ResourceKey="Brush.Background.Overlay" />
+      <StaticResource x:Key="MenuFlyoutPresenterBorderBrush" ResourceKey="Brush.Border.Overlay" />
+
+      <!-- Tooltip -->
+      <StaticResource x:Key="ToolTipForeground" ResourceKey="Brush.Label.Primary" />
+      <StaticResource x:Key="ToolTipBackground" ResourceKey="Brush.Background.Overlay" />
+      <StaticResource x:Key="ToolTipBorderBrush" ResourceKey="Brush.Border.Overlay" />
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+
+</ResourceDictionary>

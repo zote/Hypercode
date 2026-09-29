@@ -1,0 +1,18 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Hypercode.Views"
+        x:Class="Hypercode.Views.ControlGalleryWindow"
+        Title="Hypercode — Galeria de controles"
+        SizeToContent="WidthAndHeight" CanResize="False">
+
+  <!-- Amostra do design system em claro e escuro lado a lado, para conferir os estilos de
+       Styles/ sem depender do tema do sistema. Abre com o argumento galeria (ver App). -->
+  <StackPanel Orientation="Horizontal">
+    <ThemeVariantScope RequestedThemeVariant="Light" Width="460">
+      <views:ControlGallerySample Name="LightSample" />
+    </ThemeVariantScope>
+    <ThemeVariantScope RequestedThemeVariant="Dark" Width="460">
+      <views:ControlGallerySample Name="DarkSample" />
+    </ThemeVariantScope>
+  </StackPanel>
+</Window>
