@@ -168,7 +168,7 @@
   <!-- Menu: itens recuados das bordas, com o destaque arredondado do macOS. -->
   <Style Selector="MenuItem">
     <Setter Property="Margin" Value="{DynamicResource Margin.MenuItem}" />
-    <Setter Property="CornerRadius" Value="{DynamicResource Radius.Small}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Radius.MenuItem}" />
   </Style>
   <Style Selector="Menu > MenuItem">
     <Setter Property="Margin" Value="0" />

@@ -188,11 +188,15 @@
   <x:Double x:Key="Size.Icon.Medium">14</x:Double>
   <x:Double x:Key="Size.Icon.Large">18</x:Double>
 
-  <!-- Raios de canto -->
+  <!-- Raios de canto, medidos nos controles do AppKit no macOS 27 (#97): botão, campo e
+       pop-up 6; NSBox e menu 12; destaque do item de menu 7; janela e sheet 16 -->
   <CornerRadius x:Key="Radius.Small">4</CornerRadius>
   <CornerRadius x:Key="Radius.Control">6</CornerRadius>
-  <CornerRadius x:Key="Radius.Group">10</CornerRadius>
-  <CornerRadius x:Key="Radius.Window">12</CornerRadius>
+  <CornerRadius x:Key="Radius.Group">12</CornerRadius>
+  <CornerRadius x:Key="Radius.Window">16</CornerRadius>
+  <!-- Radius.Group menos o recuo do item (Margin.MenuItem, 5): o destaque fica concêntrico
+       ao menu -->
+  <CornerRadius x:Key="Radius.MenuItem">7</CornerRadius>
   <!-- Aba: só os cantos de cima, para a aba selecionada se encaixar no conteúdo abaixo -->
   <CornerRadius x:Key="Radius.Tab">6,6,0,0</CornerRadius>
   <!-- Radius.Control + a espessura do anel (3), para o anel acompanhar a curva do controle -->

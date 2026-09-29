@@ -169,10 +169,22 @@ Da janela principal (faixa de abas, barras e tabela): `Padding.TabStrip`, `Paddi
 `Padding.TableCell` e `Size.TableRow.TwoLine` para a tabela. `Padding.TableCell` soma
 com `Margin.TableRow` para o conteúdo da linha cair no mesmo recuo (16) do cabeçalho.
 
-Raios: `Radius.Small` (4, etiqueta, tooltip, item de menu e linha de lista),
-`Radius.Control` (6, botão e campo), `Radius.Group` (10, cartão, grupo e menu),
-`Radius.Window` (12, sheet e popover) e `Radius.FocusRing` (9, o anel de foco em volta de
-um controle).
+Raios: `Radius.Small` (4, etiqueta, tooltip e linha de lista), `Radius.Control` (6, botão
+e campo), `Radius.Group` (12, cartão, grupo e menu), `Radius.MenuItem` (7, destaque do item
+de menu), `Radius.Window` (16, sheet) e `Radius.FocusRing` (9, o anel de foco em volta de
+um controle). `Radius.FocusRing` é `Radius.Control` + 3 (a espessura do anel) e
+`Radius.MenuItem` é `Radius.Group` − 5 (o recuo do item), para as curvas ficarem
+concêntricas; o `RadiusTests` confere as duas contas.
+
+### De onde vêm as medidas
+
+Raios, alturas e recuos foram medidos nos controles do próprio AppKit no macOS 27 (#97),
+instanciados num script Swift e renderizados em bitmap 2x — não no UI Kit do Figma. Do
+AppKit: botão, campo, pop-up e segmentado com 24pt de altura e raio 6; botão com 12pt de
+padding lateral; `NSBox` e menu com raio 12; menu com 5pt em cima e embaixo, itens de 24pt,
+texto a 14pt da borda e separador de 11pt com a linha recuada 16pt; destaque do item recuado
+5pt, raio 7; janela e sheet com raio 16; anel de foco de 3pt na accent a 50%. Do lado do
+Avalonia, a galeria renderizada sem tela (Skia, com a Inter) dá as mesmas medidas.
 
 ## Controles
 

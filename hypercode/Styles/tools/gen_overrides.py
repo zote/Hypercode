@@ -186,11 +186,14 @@ body = f'''<!--
   <StaticResource x:Key="ControlCornerRadius" ResourceKey="Radius.Control" />
   <StaticResource x:Key="OverlayCornerRadius" ResourceKey="Radius.Group" />
 
-  <!-- Medidas próximas às do macOS: botão e campo com ~24pt de altura, menu com itens de ~22pt -->
+  <!-- Medidas do AppKit no macOS 27 (#97): botão e campo com 24pt de altura e 12pt de padding
+       lateral no botão; menu com 5pt em cima e embaixo, itens de 24pt com o texto a 14pt da
+       borda do menu e separador de 11pt com a linha recuada 16pt (1 de borda + 15) -->
   <Thickness x:Key="ButtonPadding">12,3</Thickness>
   <Thickness x:Key="TextControlThemePadding">6,3</Thickness>
   <Thickness x:Key="MenuFlyoutPresenterThemePadding">0,5</Thickness>
-  <Thickness x:Key="MenuFlyoutItemThemePaddingNarrow">10,3</Thickness>
+  <Thickness x:Key="MenuFlyoutItemThemePaddingNarrow">8,4</Thickness>
+  <Thickness x:Key="MenuFlyoutSeparatorThemePadding">15,5</Thickness>
   <x:Double x:Key="TextControlPlaceholderOpacity">1</x:Double>
   <StaticResource x:Key="ToolTipContentThemeFontSize" ResourceKey="Font.Size.Subheadline" />
   <Thickness x:Key="ToolTipBorderThemePadding">6,3</Thickness>
