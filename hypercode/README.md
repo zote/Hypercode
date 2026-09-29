@@ -106,9 +106,12 @@ cp -R dist/Hypercode.app /Applications/   # opcional
 
 O bundle é autocontido: quem for usar não precisa ter o .NET instalado.
 
-O ícone vem de `Assets/icon.icns`, que é gerado a partir de `Assets/icon.svg`. Depois de
-editar o SVG, rode `Assets/make-icon.sh` e commite os dois arquivos — o script só usa o que
-já vem com o macOS (`swift`, `sips` e `iconutil`).
+O ícone é `Assets/Hypercode.icon`, em camadas, feito no Icon Composer (Xcode → Open
+Developer Tool → Icon Composer): fundo em gradiente, o painel da janela em vidro e, na
+frente, o prompt e o grafo de branches, com variantes clara, escura, tinted e clear. Depois
+de editar, rode `Assets/make-icon.sh` e commite o que ele gera — `Assets.car` (macOS 26+),
+`icon.icns` (macOS anteriores) e `icon.png` (janela Sobre). O script precisa do Xcode 26 ou
+mais novo; o `build-app.sh` só copia os arquivos e não precisa do Xcode.
 
 ## Permissão de automação
 
