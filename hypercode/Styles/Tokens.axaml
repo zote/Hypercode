@@ -90,7 +90,7 @@
   <SolidColorBrush x:Key="Brush.Accent" Color="{DynamicResource SystemAccentColor}" />
   <SolidColorBrush x:Key="Brush.Selection.Active" Color="{DynamicResource SystemAccentColorDark1}" />
   <SolidColorBrush x:Key="Brush.Accent.Pressed" Color="{DynamicResource SystemAccentColorDark2}" />
-  <!-- Anel de foco do teclado: a accent a 50%, por fora do controle -->
+  <!-- Anel de foco (Tab, e clique no campo de texto): a accent a 50%, por fora do controle -->
   <SolidColorBrush x:Key="Brush.Focus" Color="{DynamicResource SystemAccentColor}" Opacity="0.5" />
   <SolidColorBrush x:Key="Brush.Text.OnAccent" Color="#FFFFFF" />
 

@@ -46,7 +46,7 @@ RULES = [
     (r"TextControlForegroundDisabled$", "Brush.Label.Tertiary"),
     (r"TextControlForeground", "Brush.Label.Primary"),
     (r"TextControlBackground", "Brush.Background.Content"),
-    (r"TextControlBorderBrushFocused$", "Brush.Accent"),
+    (r"TextControlBorderBrushFocused$", "Brush.Border.Control"),
     (r"TextControlBorderBrushDisabled$", "Brush.Separator"),
     (r"TextControlBorderBrush", "Brush.Border.Control"),
     (r"TextControlPlaceholderForegroundDisabled$", "Brush.Label.Tertiary"),
@@ -194,6 +194,8 @@ body = f'''<!--
   <Thickness x:Key="MenuFlyoutPresenterThemePadding">0,5</Thickness>
   <Thickness x:Key="MenuFlyoutItemThemePaddingNarrow">8,4</Thickness>
   <Thickness x:Key="MenuFlyoutSeparatorThemePadding">15,5</Thickness>
+  <!-- O campo em foco mantém a borda de 1px e ganha o anel externo (Controls.axaml) -->
+  <Thickness x:Key="TextControlBorderThemeThicknessFocused">1</Thickness>
   <x:Double x:Key="TextControlPlaceholderOpacity">1</x:Double>
   <StaticResource x:Key="ToolTipContentThemeFontSize" ResourceKey="Font.Size.Subheadline" />
   <Thickness x:Key="ToolTipBorderThemePadding">6,3</Thickness>

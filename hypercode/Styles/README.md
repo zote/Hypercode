@@ -84,9 +84,9 @@ texto passa em WCAG AA (4,5:1) sobre os fundos.
 |---|---|
 | `Brush.Status.Danger` / `Warning` / `Success` | ícone, ponto e borda de status — **não para texto** |
 | `Brush.Badge.Success` / `Danger` / `Done` / `Attention` / `Accent` / `Muted` | ícone das etiquetas de estado de worktree, PR, checks e review — **não para texto** |
-| `Brush.Accent` | destaque: borda do campo em foco, ícone ativo |
+| `Brush.Accent` | a cor de destaque do sistema |
 | `Brush.Accent.Pressed` | botão de destaque e checkbox marcado, pressionados |
-| `Brush.Focus` | anel de foco do teclado (a accent a 50%) |
+| `Brush.Focus` | anel de foco — Tab, e clique no campo de texto (a accent a 50%) |
 
 `Brush.Accent`, `Brush.Accent.Pressed`, `Brush.Focus` e `Brush.Selection.Active` seguem
 a accent color escolhida em Ajustes do Sistema (o `FluentTheme` lê do macOS e expõe como `SystemAccentColor`). Por isso não têm
@@ -212,8 +212,11 @@ com o destaque arredondado, sem destaque sob o mouse, seleção na accent com a 
 foco e cinza quando o foco está em outro lugar ou a janela está inativa. É opcional porque
 o `ListBox` também serve de barra de abas (`MainWindow`), que não deve ganhar esse visual.
 
-**Foco** — Tab mostra um anel na accent a 50% por fora do controle. O campo de texto em
-foco troca a borda pela accent (o Fluent não mostra anel nele).
+**Foco** — Tab mostra um anel na accent a 50% por fora do controle. O campo de texto mostra
+o mesmo anel também no foco por clique, como o `NSTextField`, e mantém a borda de repouso
+(decisão de #97: o Fluent trocava a borda pela accent em 2px e não mostrava anel). No
+`NumericUpDown` o anel envolve só a parte de texto, não as setas — como o campo e o
+`NSStepper` separados do macOS.
 
 ### Como mexer em `FluentOverrides.axaml`
 
