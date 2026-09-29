@@ -1,45 +1,42 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Hypercode.Views"
         x:Class="Hypercode.Views.UpdateFromBaseWindow"
         Title="Atualizar a partir da base"
-        Width="620" Height="400"
-        MinWidth="460" MinHeight="320"
-        WindowStartupLocation="CenterOwner">
+        Width="620" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Brush.Background.Window}">
 
-  <Window.Styles>
-    <Style Selector="TextBlock.option">
-      <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Margin" Value="0,0,0,2" />
-    </Style>
-    <Style Selector="TextBlock.p">
-      <Setter Property="TextWrapping" Value="Wrap" />
-      <Setter Property="Opacity" Value="0.75" />
-      <Setter Property="Margin" Value="0,0,0,12" />
-    </Style>
-  </Window.Styles>
+  <!-- Layout de diálogo da HIG (Styles/Dialog.axaml). Merge é o padrão: não reescreve nada
+       já pushado. Rebase é a alternativa, e por isso fica à esquerda do Cancelar. -->
+  <views:DialogFrame Name="Frame">
+    <StackPanel Spacing="{DynamicResource Spacing.Related}">
+      <Border BorderThickness="1"
+              BorderBrush="{DynamicResource Brush.Separator}"
+              Background="{DynamicResource Brush.Background.Content}"
+              CornerRadius="{DynamicResource Radius.Control}"
+              Padding="{DynamicResource Padding.Box}">
+        <TextBlock Name="DetailText" Classes="callout mono" TextWrapping="Wrap"
+                   Foreground="{DynamicResource Brush.Label.Primary}" />
+      </Border>
 
-  <Grid RowDefinitions="Auto,*,Auto" Margin="20">
-    <TextBlock Grid.Row="0" Name="HeadlineText" FontSize="15" FontWeight="SemiBold"
-               TextWrapping="Wrap" Margin="0,0,0,12" />
+      <StackPanel Spacing="{DynamicResource Space.XXS}">
+        <TextBlock Classes="body emphasized" Text="Merge" />
+        <TextBlock Name="MergeText" Classes="body" TextWrapping="Wrap"
+                   Foreground="{DynamicResource Brush.Label.Secondary}" />
+      </StackPanel>
 
-    <Border Grid.Row="1" BorderThickness="1" BorderBrush="#33808080" CornerRadius="6" Padding="12">
-      <ScrollViewer>
-        <StackPanel>
-          <TextBlock Name="DetailText" Classes="p" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
-
-          <TextBlock Classes="option" Text="Merge" />
-          <TextBlock Name="MergeText" Classes="p" />
-
-          <TextBlock Classes="option" Text="Rebase" />
-          <TextBlock Name="RebaseText" Classes="p" />
-        </StackPanel>
-      </ScrollViewer>
-    </Border>
-
-    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
-      <Button Content="Cancelar" Click="OnCancel" IsCancel="True" />
-      <Button Content="Rebase" Click="OnRebase" />
-      <Button Content="Merge" Click="OnMerge" IsDefault="True" />
+      <StackPanel Spacing="{DynamicResource Space.XXS}">
+        <TextBlock Classes="body emphasized" Text="Rebase" />
+        <TextBlock Name="RebaseText" Classes="body" TextWrapping="Wrap"
+                   Foreground="{DynamicResource Brush.Label.Secondary}" />
+      </StackPanel>
     </StackPanel>
-  </Grid>
+
+    <views:DialogFrame.Buttons>
+      <Button Content="Rebase" Click="OnRebase" />
+      <Button Content="Cancelar" Click="OnCancel" IsCancel="True" />
+      <Button Content="Merge" Click="OnMerge" IsDefault="True" />
+    </views:DialogFrame.Buttons>
+  </views:DialogFrame>
 </Window>

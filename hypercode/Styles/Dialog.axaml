@@ -15,7 +15,8 @@
           <StackPanel DockPanel.Dock="Top" Spacing="{DynamicResource Spacing.Label}">
             <TextBlock Classes="headline" TextWrapping="Wrap"
                        Foreground="{DynamicResource Brush.Label.Primary}"
-                       Text="{TemplateBinding Headline}" />
+                       Text="{TemplateBinding Headline}"
+                       IsVisible="{Binding Headline, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             <TextBlock Classes="body" TextWrapping="Wrap"
                        Foreground="{DynamicResource Brush.Label.Secondary}"
                        Text="{TemplateBinding Message}"

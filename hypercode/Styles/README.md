@@ -237,6 +237,17 @@ Para confirmar uma ação, use o `ConfirmWindow`, que já segue essas regras:
 | … `, ConfirmStyle.Destructive)` | **Cancelar**, rótulo em vermelho | cancela |
 | `ConfirmWindow.Notice(título, afirmação, detalhe)` | **Entendi** | fecha |
 
+**Janela sem escolha a fazer** não é diálogo e não tem barra de botões:
+
+- **Ajustes** (`SettingsWindow`): cada campo vale na hora, como nos Ajustes do macOS; não
+  há Salvar, Cancelar nem Fechar. Fecha pelo botão da janela, ⌘W ou Esc.
+- **Sobre** (`AboutWindow`): o painel Sobre do macOS, com ícone, nome, versão e créditos
+  centralizados, sem botão; Esc fecha.
+
+Formulário dentro do diálogo (`CreateWorktreeWindow`): rótulo à esquerda numa coluna de
+largura fixa, campo à direita e a dica embaixo do campo, em `subheadline` secundário. Com
+dica embaixo, o rótulo alinha ao topo com `Margin.FieldLabel`.
+
 O detalhe aparece numa caixa em `Font.Mono` que rola a partir de `Size.DialogDetail.MaxHeight`;
 detalhe vazio esconde a caixa.
 
