@@ -119,8 +119,12 @@ contraste delas (#103). O papel de cada etiqueta fica em `BadgeVisuals.Tone`, qu
 a chave do token, e o `BadgeBrushConverter` busca o pincel na variante de tema do controle.
 
 Como etiqueta é ícone, o mínimo é 3:1 (WCAG 1.4.11), não o 4,5:1 de texto. Todas passam
-sobre os fundos de janela, conteúdo, linha alternada e overlay. Sobre
-`Brush.Selection.Inactive`, o `Danger` escuro dá 2,8:1 — pendência na #108.
+sobre os fundos de janela, conteúdo, linha alternada e overlay. Na linha selecionada da
+tabela, não: sobre `Brush.Selection.Active` nenhum tom passa (de 1,0 a 2,5:1 nas accents
+do macOS) e sobre `Brush.Selection.Inactive` o `Danger` escuro dá 2,8:1. Por isso, ali, a
+etiqueta toma a cor do texto da seleção, como os ícones do Finder: `Brush.Text.OnAccent`
+com a lista em foco e `Brush.Label.Primary` sem foco (#108). O estado continua no ícone e
+no tooltip.
 
 ## Tipografia
 

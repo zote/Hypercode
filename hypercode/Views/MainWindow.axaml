@@ -52,6 +52,26 @@
       <Setter Property="MinHeight" Value="{DynamicResource Size.TableRow.TwoLine}" />
     </Style>
 
+    <!-- Cor da etiqueta de estado (BadgeTemplate). Fica em estilo, e não no PathIcon, para a
+         linha selecionada poder trocá-la: valor local venceria qualquer estilo. -->
+    <Style Selector="PathIcon.badge">
+      <Setter Property="Foreground">
+        <MultiBinding Converter="{x:Static views:BadgeBrushConverter.Instance}">
+          <Binding Path="BrushKey" />
+          <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource Self}" />
+        </MultiBinding>
+      </Setter>
+    </Style>
+    <!-- Na linha selecionada a etiqueta toma a cor do texto da seleção, como os ícones do
+         Finder: sobre a accent nenhum tom do Primer passa em 3:1, e sobre o cinza da seleção
+         inativa o Danger escuro dá 2,8:1 (#108). O tooltip continua dizendo o estado. -->
+    <Style Selector="ListBox.table ListBoxItem:selected PathIcon.badge">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Primary}" />
+    </Style>
+    <Style Selector="ListBox.table:focus-within ListBoxItem:selected PathIcon.badge">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Text.OnAccent}" />
+    </Style>
+
     <!-- Abas: a selecionada tem o fundo do conteúdo e se encaixa nele; as outras ficam no
          fundo da janela, com um realce discreto sob o mouse. -->
     <Style Selector="ListBox.tabs">
@@ -100,14 +120,7 @@
       <!-- O Border transparente faz o tooltip responder na caixa toda, não só no traço do
            ícone. O PathIcon desenha no quadro 16x16 do Octicon (Styles/Controls.axaml). -->
       <Border Margin="{DynamicResource Margin.Badge}" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
-        <PathIcon Data="{Binding IconKey, Converter={x:Static views:BadgeConverter.ToGeometry}}">
-          <PathIcon.Foreground>
-            <MultiBinding Converter="{x:Static views:BadgeBrushConverter.Instance}">
-              <Binding Path="BrushKey" />
-              <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource Self}" />
-            </MultiBinding>
-          </PathIcon.Foreground>
-        </PathIcon>
+        <PathIcon Classes="badge" Data="{Binding IconKey, Converter={x:Static views:BadgeConverter.ToGeometry}}" />
       </Border>
     </DataTemplate>
 
