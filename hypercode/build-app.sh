@@ -42,6 +42,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key>     <string>$APP_NAME</string>
   <key>CFBundleIdentifier</key>      <string>$BUNDLE_ID</string>
   <key>CFBundleExecutable</key>      <string>$APP_NAME</string>
+  <key>CFBundleIconName</key>        <string>Hypercode</string>
   <key>CFBundleIconFile</key>        <string>icon</string>
   <key>CFBundlePackageType</key>     <string>APPL</string>
   <key>CFBundleShortVersionString</key> <string>$VERSION</string>
@@ -57,7 +58,10 @@ PLIST
 
 chmod +x "$APP/Contents/MacOS/$APP_NAME"
 
-# Gerado a partir de Assets/icon.svg por Assets/make-icon.sh.
+# Gerados a partir de Assets/Hypercode.icon por Assets/make-icon.sh. O macOS 26+ usa o
+# Assets.car (CFBundleIconName), com as variantes claro, escuro e tinted; os anteriores, o
+# .icns (CFBundleIconFile).
+cp Assets/Assets.car "$APP/Contents/Resources/Assets.car"
 cp Assets/icon.icns "$APP/Contents/Resources/icon.icns"
 
 # Licença do app e avisos dos ícones de terceiros (MIT pede que acompanhem as cópias).
