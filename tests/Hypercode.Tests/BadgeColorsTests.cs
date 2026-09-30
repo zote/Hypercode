@@ -52,6 +52,7 @@ public sealed class BadgeColorsTests
         [BadgeKind.PrChanged] = "Accent",
         [BadgeKind.TerminalOpen] = "Accent",
         [BadgeKind.ProcessOpen] = "Muted",
+        [BadgeKind.MultiplexerSession] = "Muted",
         [BadgeKind.RepositoryChecksFailing] = "Danger",
     };
 

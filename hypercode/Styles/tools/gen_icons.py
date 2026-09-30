@@ -35,6 +35,7 @@ OCTICONS = [
     ("Icon.CloudOffline", "cloud-offline"),
     ("Icon.BellFill", "bell-fill"),
     ("Icon.Terminal", "terminal"),
+    ("Icon.Columns", "columns"),
     ("Icon.Trash", "trash"),
     ("Icon.GitPullRequest", "git-pull-request"),
     ("Icon.GitPullRequestDraft", "git-pull-request-draft"),

@@ -1,26 +1,35 @@
+using System.Text.RegularExpressions;
+
 namespace Hypercode.Services;
 
-/// <summary>O app dono de uma sessão de terminal — só o iTerm2 e o Terminal.app sabem dar foco nela.</summary>
+/// <summary>
+/// O app dono de uma sessão de terminal — só o iTerm2 e o Terminal.app sabem dar foco nela.
+/// <see cref="Multiplexer"/> é sessão de zmx, tmux, screen ou zellij: tem <c>tty</c>, mas não
+/// é janela nenhuma — pode estar desanexada, ou dentro de outro app (o zmx do supacode).
+/// </summary>
 public enum TerminalApp
 {
     ITerm2,
     Terminal,
+    Multiplexer,
     Other,
 }
 
 /// <summary>
 /// Uma sessão de terminal com processo dentro de um worktree: o <c>tty</c>, o app dono, há
 /// quanto tempo a sessão existe (o processo mais antigo daquele <c>tty</c>) e, no iTerm2, o
-/// nome da sessão — o título que ele mostra na aba.
+/// nome da sessão — o título que ele mostra na aba. Numa sessão de multiplexador,
+/// <paramref name="Multiplexer"/> diz qual: <c>tmux</c>, ou <c>supacode (zmx)</c>.
 /// </summary>
-public sealed record TerminalSession(string Tty, TerminalApp App, TimeSpan Age, string? Name)
+public sealed record TerminalSession(string Tty, TerminalApp App, TimeSpan Age, string? Name, string? Multiplexer = null)
 {
-    public bool CanFocus => App is not TerminalApp.Other;
+    public bool CanFocus => App is TerminalApp.ITerm2 or TerminalApp.Terminal;
 
     public string AppName => App switch
     {
         TerminalApp.ITerm2 => "iTerm2",
         TerminalApp.Terminal => "Terminal",
+        TerminalApp.Multiplexer => Multiplexer ?? "multiplexador",
         _ => "outro terminal",
     };
 }
@@ -232,13 +241,13 @@ public static class TerminalSessions
         // A sessão tem a idade do processo mais antigo do tty (o login ou o shell), e o app vem de
         // qualquer processo dele: shell órfão, com o pai já morto, não diz de quem é.
         var sessionAge = new Dictionary<string, TimeSpan>(StringComparer.Ordinal);
-        var sessionApp = new Dictionary<string, TerminalApp>(StringComparer.Ordinal);
+        var sessionApp = new Dictionary<string, (TerminalApp App, string? Multiplexer)>(StringComparer.Ordinal);
         foreach (var process in processes)
         {
             if (process.Tty is not { } tty) continue;
             if (!sessionAge.TryGetValue(tty, out var age) || process.Age > age) sessionAge[tty] = process.Age;
-            if (sessionApp.GetValueOrDefault(tty, TerminalApp.Other) is TerminalApp.Other)
-                sessionApp[tty] = AppOf(process, byPid);
+            if (!sessionApp.TryGetValue(tty, out var known) || known.App is TerminalApp.Other)
+                sessionApp[tty] = (AppOf(process, byPid, out var multiplexer), multiplexer);
         }
 
         var owned = new Dictionary<string, List<ProcessEntry>>(StringComparer.Ordinal);
@@ -256,43 +265,83 @@ public static class TerminalSessions
             list.Add(process);
         }
 
-        return owned.ToDictionary(
-            item => item.Key,
-            item => new TerminalPresence(
-                item.Value
-                    .Select(process => process.Tty)
-                    .OfType<string>()
-                    .Distinct(StringComparer.Ordinal)
-                    .Select(tty => new TerminalSession(tty, sessionApp.GetValueOrDefault(tty, TerminalApp.Other), sessionAge[tty], null))
-                    .OrderBy(session => session.Age)
-                    .ThenBy(session => session.Tty, StringComparer.Ordinal)
-                    .ToList(),
-                item.Value
-                    .Where(process => process.Tty is null)
+        TerminalPresence PresenceOf(List<ProcessEntry> owned)
+        {
+            var sessions = owned
+                .Select(process => process.Tty)
+                .OfType<string>()
+                .Distinct(StringComparer.Ordinal)
+                .Select(tty => sessionApp.TryGetValue(tty, out var app)
+                    ? new TerminalSession(tty, app.App, sessionAge[tty], null, app.Multiplexer)
+                    : new TerminalSession(tty, TerminalApp.Other, sessionAge[tty], null))
+                .OrderBy(session => session.Age)
+                .ThenBy(session => session.Tty, StringComparer.Ordinal)
+                .ToList();
+
+            // O servidor do multiplexador não tem tty, mas é a própria sessão, já listada: seria ruído.
+            var hasMultiplexer = sessions.Any(session => session.App is TerminalApp.Multiplexer);
+
+            return new TerminalPresence(
+                sessions,
+                owned
+                    .Where(process => process.Tty is null && !(hasMultiplexer && MultiplexerOf(process.Command) is not null))
                     .Select(process => ProcessName(process.Command))
                     .Distinct(StringComparer.Ordinal)
                     .Order(StringComparer.Ordinal)
-                    .ToList()),
-            StringComparer.Ordinal);
+                    .ToList());
+        }
+
+        return owned.ToDictionary(item => item.Key, item => PresenceOf(item.Value), StringComparer.Ordinal);
     }
+
+    internal static TerminalApp AppOf(ProcessEntry process, IReadOnlyDictionary<int, ProcessEntry> byPid)
+        => AppOf(process, byPid, out _);
 
     /// <summary>
     /// Sobe pelos pais até achar o app: no iTerm2 o shell é filho do login, que é filho do
     /// iTermServer (em ~/Library/Application Support/iTerm2), que é filho do iTerm2; no
-    /// Terminal.app o login é filho direto dele.
+    /// Terminal.app o login é filho direto dele. Um multiplexador no caminho encerra a busca:
+    /// o servidor dele é filho do launchd, então o shell de dentro não diz em que janela está
+    /// (se estiver em alguma). <paramref name="multiplexer"/> diz qual foi.
     /// </summary>
-    internal static TerminalApp AppOf(ProcessEntry process, IReadOnlyDictionary<int, ProcessEntry> byPid)
+    internal static TerminalApp AppOf(ProcessEntry process, IReadOnlyDictionary<int, ProcessEntry> byPid, out string? multiplexer)
     {
+        multiplexer = null;
         var current = process;
         for (var step = 0; step < 64 && current is not null; step++)
         {
             if (current.Command.Contains("/iTerm", StringComparison.Ordinal)) return TerminalApp.ITerm2;
             if (current.Command.Contains("/Terminal.app/", StringComparison.Ordinal)) return TerminalApp.Terminal;
+            if (MultiplexerOf(current.Command) is { } name)
+            {
+                multiplexer = name;
+                return TerminalApp.Multiplexer;
+            }
             if (current.ParentPid <= 1) break;
             current = byPid.GetValueOrDefault(current.ParentPid);
         }
 
         return TerminalApp.Other;
+    }
+
+    // O executável é o zmx, o tmux, o screen ou o zellij. O comm do ps traz só o caminho, que
+    // pode ter espaço; a linha completa traz os argumentos, e o servidor do tmux se chama
+    // "tmux: server". Com diferença de maiúsculas: "Screen Time.app" não é o screen.
+    private static readonly Regex MultiplexerCommand = new(
+        @"^(?:[^ ]*/)?(?<name>zmx|tmux|screen|zellij)(?::| |$)|^/.*/(?<name>zmx|tmux|screen|zellij)$",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// O multiplexador do comando, se for um: <c>tmux</c>, ou <c>supacode (zmx)</c> para o zmx
+    /// que vem dentro do supacode.
+    /// </summary>
+    internal static string? MultiplexerOf(string command)
+    {
+        var match = MultiplexerCommand.Match(command);
+        if (!match.Success) return null;
+
+        var name = match.Groups["name"].Value;
+        return command.Contains("/supacode.app/", StringComparison.OrdinalIgnoreCase) ? $"supacode ({name})" : name;
     }
 
     /// <summary>O nome curto do comando: <c>/usr/bin/login</c> vira <c>login</c>, e o <c>-zsh</c> de login vira <c>zsh</c>.</summary>

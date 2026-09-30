@@ -323,16 +323,36 @@ public sealed class WorktreeRow : ObservableObject
     }
 
     /// <summary>
-    /// Terminal aberto na pasta: o que é, e que o duplo-clique vai para ele. Processo sem
-    /// terminal (um dotnet watch) também acende o ícone, apagado: a pasta está em uso, mas não
-    /// há sessão para onde ir.
+    /// Terminal aberto na pasta: o que é, e que o duplo-clique vai para ele. Só uma etiqueta
+    /// por linha, nesta ordem: terminal, sessão de multiplexador, processo. A de multiplexador
+    /// (o zmx do supacode, um tmux) sai apagada e com outro ícone: tem tty, mas não há janela
+    /// para onde ir. Processo sem terminal (um dotnet watch) também acende o ícone, apagado: a
+    /// pasta está em uso, mas não há sessão para onde ir.
     /// </summary>
     private StatusBadge? TerminalBadge()
     {
         if (_terminal.IsEmpty) return null;
 
         var processes = string.Join(", ", _terminal.Processes);
-        if (_terminal.Sessions.Count == 0)
+        var terminals = _terminal.Sessions.Where(session => session.App is not TerminalApp.Multiplexer).ToList();
+        var multiplexers = _terminal.Sessions.Where(session => session.App is TerminalApp.Multiplexer).ToList();
+
+        if (terminals.Count == 0 && multiplexers.Count > 0)
+        {
+            var multiplexerLines = new List<string>
+            {
+                multiplexers.Count == 1
+                    ? $"Sessão do {multiplexers[0].AppName} aberta aqui {Age(multiplexers[0])}."
+                    : $"{multiplexers.Count} sessões de multiplexador abertas aqui:\n• "
+                      + string.Join("\n• ", multiplexers.Select(session => $"{session.AppName}, {Age(session)}")),
+                "Não é uma janela de terminal: está desanexada, ou dentro de outro app, e daqui não dá para ir até ela. O duplo-clique abre um terminal novo.",
+            };
+            if (_terminal.Processes.Count > 0) multiplexerLines.Add($"Fora dela, com a pasta aberta: {processes}.");
+
+            return new StatusBadge(BadgeKind.MultiplexerSession, string.Join("\n\n", multiplexerLines));
+        }
+
+        if (terminals.Count == 0)
             return new StatusBadge(
                 BadgeKind.ProcessOpen,
                 $"Há processo com esta pasta aberta, mas nenhuma sessão de terminal: {processes}. O duplo-clique abre um terminal novo.");
@@ -340,19 +360,22 @@ public sealed class WorktreeRow : ObservableObject
         static string Describe(TerminalSession session)
             => session.Name is { Length: > 0 } name ? $"{session.AppName} — {name}" : $"{session.AppName} ({session.Tty})";
 
-        var sessions = _terminal.Sessions;
+        static string Age(TerminalSession session) => LockRecord.Relative(session.Age) ?? "agora há pouco";
+
         var lines = new List<string>
         {
-            sessions.Count == 1
-                ? $"Terminal aberto neste worktree: {Describe(sessions[0])}."
-                : $"{sessions.Count} sessões de terminal abertas neste worktree, da mais recente para a mais antiga:\n• "
-                  + string.Join("\n• ", sessions.Select(Describe)),
+            terminals.Count == 1
+                ? $"Terminal aberto neste worktree: {Describe(terminals[0])}."
+                : $"{terminals.Count} sessões de terminal abertas neste worktree, da mais recente para a mais antiga:\n• "
+                  + string.Join("\n• ", terminals.Select(Describe)),
         };
 
         lines.Add(_terminal.Focusable is { } target
-            ? (sessions.Count == 1 ? "Duplo-clique vai para ele" : $"Duplo-clique vai para a mais recente ({Describe(target)})")
+            ? (terminals.Count == 1 ? "Duplo-clique vai para ele" : $"Duplo-clique vai para a mais recente ({Describe(target)})")
               + "; para abrir outro, botão direito → Abrir o terminal."
             : "Não dá para trazê-lo para a frente daqui: só o iTerm2 e o Terminal sabem. O duplo-clique abre um novo.");
+        if (multiplexers.Count > 0)
+            lines.Add("Há também sessão de multiplexador, sem janela: " + string.Join(", ", multiplexers.Select(session => session.AppName)) + ".");
         if (_terminal.Processes.Count > 0) lines.Add($"Fora do terminal, com a pasta aberta: {processes}.");
 
         return new StatusBadge(BadgeKind.TerminalOpen, string.Join("\n\n", lines));
