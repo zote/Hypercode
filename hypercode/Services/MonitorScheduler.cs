@@ -53,6 +53,18 @@ public sealed class MonitorScheduler
     /// <summary>Cadência do `git fetch`, que não gasta cota mas custa rede e disco.</summary>
     public static readonly TimeSpan FetchCadence = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// Sondagem dos terminais: só o <c>ps -A -o tty=</c>, para apagar o ícone de quem fechou.
+    /// Leitura da tabela de processos, sem descritores nem AppleScript.
+    /// </summary>
+    public static readonly TimeSpan TerminalProbeCadence = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Varredura completa dos terminais — <c>lsof -d cwd</c> e <c>ps</c> —, a única que enxerga um
+    /// terminal novo aberto por fora do app. ~0,23 s por chamada, todos os worktrees de uma vez (#94).
+    /// </summary>
+    public static readonly TimeSpan TerminalScanCadence = TimeSpan.FromSeconds(15);
+
     /// <summary>Janela em segundo plano: tudo fica mais espaçado.</summary>
     public const double BackgroundFactor = 3;
 
@@ -67,6 +79,8 @@ public sealed class MonitorScheduler
 
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
     private DateTimeOffset _lastFetch = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastTerminalProbe = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastTerminalScan = DateTimeOffset.MinValue;
 
     public MonitorProfile Profile { get; set; } = MonitorProfile.Balanced;
 
@@ -226,6 +240,30 @@ public sealed class MonitorScheduler
 
     public void MarkFetched(DateTimeOffset now) => _lastFetch = now;
 
+    /// <summary>
+    /// A leitura de terminal que venceu. Segue a janela — minimizada, nada; em segundo plano,
+    /// mais espaçado —, mas não o perfil nem a cota: é leitura local, e um ícone que mente
+    /// engana o duplo-clique.
+    /// </summary>
+    public TerminalCheck TerminalCheckDue(DateTimeOffset now)
+    {
+        if (IsWindowMinimized) return TerminalCheck.None;
+
+        var factor = IsWindowActive ? 1 : BackgroundFactor;
+        if (now - _lastTerminalScan >= TerminalScanCadence * factor) return TerminalCheck.Scan;
+        if (now - _lastTerminalProbe >= TerminalProbeCadence * factor) return TerminalCheck.Probe;
+        return TerminalCheck.None;
+    }
+
+    /// <summary>A varredura completa vale também como sondagem: ela relê os tty junto.</summary>
+    public void MarkTerminalsScanned(DateTimeOffset now)
+    {
+        _lastTerminalScan = now;
+        _lastTerminalProbe = now;
+    }
+
+    public void MarkTerminalsProbed(DateTimeOffset now) => _lastTerminalProbe = now;
+
     /// <summary>Repositório trocado: nada do histórico anterior vale.</summary>
     public void Reset()
     {
@@ -250,6 +288,9 @@ public sealed class MonitorScheduler
         public DateTimeOffset PromotedUntil { get; set; } = DateTimeOffset.MinValue;
     }
 }
+
+/// <summary>Que leitura de terminal venceu: nenhuma, só a sondagem dos <c>tty</c> ou a varredura completa.</summary>
+public enum TerminalCheck { None, Probe, Scan }
 
 /// <summary>Uma branch de worktree como o agendador a enxerga.</summary>
 public readonly record struct ScheduledBranch(string Branch, CadenceTier Tier, bool HasPullRequest);
