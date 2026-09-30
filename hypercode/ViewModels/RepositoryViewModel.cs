@@ -43,6 +43,12 @@ public sealed class RepositoryViewModel : ObservableObject
     /// </summary>
     private static readonly TimeSpan MonitorTick = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// O mesmo, para os terminais: a sondagem mais curta é de 3 s, então o tique de 10 s não
+    /// serve. De novo, o custo está no que vence (<see cref="MonitorScheduler.TerminalCheckDue"/>).
+    /// </summary>
+    private static readonly TimeSpan TerminalTick = TimeSpan.FromSeconds(1);
+
     /// <summary>Quanto se espera o FSEvents subir antes de seguir sem watcher.</summary>
     private static readonly TimeSpan WatcherStartTimeout = TimeSpan.FromSeconds(15);
 
@@ -979,6 +985,7 @@ public sealed class RepositoryViewModel : ObservableObject
 
         _monitorCancellation = new CancellationTokenSource();
         _ = MonitorLoopAsync(_monitorCancellation.Token);
+        _ = TerminalLoopAsync(_monitorCancellation.Token);
     }
 
     private void StopMonitoring()
@@ -1002,6 +1009,32 @@ public sealed class RepositoryViewModel : ObservableObject
                 RefreshWithoutWatcher();
                 await CheckRemoteAsync().ConfigureAwait(true);
                 await AutoCleanupAsync().ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Monitoramento parado.
+        }
+    }
+
+    /// <summary>
+    /// A releitura periódica dos terminais (#126): fechar ou abrir um terminal não mexe no git
+    /// dir, e com a janela já na frente nada mais avisaria. O agendador diz o que venceu — a
+    /// sondagem barata dos tty ou a varredura completa —, com a mesma regra de janela do resto.
+    /// Uma leitura de cada vez: com outra em andamento, o tique passa.
+    /// </summary>
+    private async Task TerminalLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TerminalTick);
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(true))
+            {
+                if (_isRefreshingTerminals) continue;
+
+                var check = _scheduler.TerminalCheckDue(DateTimeOffset.UtcNow);
+                if (check is not TerminalCheck.None) await RefreshTerminalsAsync(check, withNames: false).ConfigureAwait(true);
             }
         }
         catch (OperationCanceledException)
@@ -1490,32 +1523,76 @@ public sealed class RepositoryViewModel : ObservableObject
     }
 
     private bool _isRefreshingTerminals;
+    private bool _isTerminalScanPending;
 
     /// <summary>
     /// Relê que linha tem terminal ou processo aberto dentro. Nada avisa quando um terminal abre
-    /// ou fecha: vai junto com o estado das linhas e com a janela voltando para a frente. Uma
-    /// leitura de cada vez — o lsof e o AppleScript dos nomes somam meio segundo. Se falhar,
-    /// as linhas ficam como estavam.
+    /// ou fecha: vai junto com o estado das linhas, com a janela voltando para a frente e com o
+    /// tique dos terminais (<see cref="TerminalLoopAsync"/>). Uma leitura de cada vez — o lsof e
+    /// o AppleScript dos nomes somam meio segundo. Um pedido com nomes que chega no meio de outra
+    /// leitura roda logo depois dela, uma vez só; o do tique, não: o próximo tique cobre. Se
+    /// falhar, as linhas ficam como estavam.
     /// </summary>
-    private async Task RefreshTerminalsAsync()
+    private async Task RefreshTerminalsAsync(TerminalCheck check = TerminalCheck.Scan, bool withNames = true)
     {
-        if (_isRefreshingTerminals) return;
+        if (_isRefreshingTerminals)
+        {
+            _isTerminalScanPending |= withNames;
+            return;
+        }
+
         _isRefreshingTerminals = true;
 
         try
         {
             var rows = Worktrees.Where(row => row.CanLaunch).ToList();
-            var found = await TerminalSessions.DetectAsync(rows.Select(row => row.FullPath).ToList(), withNames: true)
-                .ConfigureAwait(true);
-            if (found is null) return;
-
-            foreach (var row in rows)
-                row.Terminal = found.GetValueOrDefault(row.FullPath) ?? TerminalPresence.None;
+            if (check is TerminalCheck.Probe) await ProbeTerminalsAsync(rows).ConfigureAwait(true);
+            else if (check is TerminalCheck.Scan) await ScanTerminalsAsync(rows, withNames).ConfigureAwait(true);
         }
         finally
         {
             _isRefreshingTerminals = false;
         }
+
+        if (_isTerminalScanPending)
+        {
+            _isTerminalScanPending = false;
+            await RefreshTerminalsAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Só o <c>ps -A -o tty=</c>: a sessão cujo tty não tem mais processo fechou, e sai da linha
+    /// na hora. Não enxerga terminal novo — isso é da varredura.
+    /// </summary>
+    private async Task ProbeTerminalsAsync(IReadOnlyList<WorktreeRow> rows)
+    {
+        // Marca antes de ler: um ps que falha não é repetido a cada tique.
+        _scheduler.MarkTerminalsProbed(DateTimeOffset.UtcNow);
+
+        var live = await TerminalSessions.ListLiveTtysAsync().ConfigureAwait(true);
+        if (live is null) return;
+
+        foreach (var row in rows) row.Terminal = TerminalSessions.Prune(row.Terminal, live);
+    }
+
+    /// <summary>
+    /// O <c>lsof -d cwd</c> e o <c>ps</c>. Sem <paramref name="withNames"/>, os nomes das sessões
+    /// do iTerm2 vêm da leitura anterior, e o AppleScript só roda se apareceu sessão nova.
+    /// </summary>
+    private async Task ScanTerminalsAsync(IReadOnlyList<WorktreeRow> rows, bool withNames)
+    {
+        _scheduler.MarkTerminalsScanned(DateTimeOffset.UtcNow);
+
+        var found = await TerminalSessions.DetectAsync(rows.Select(row => row.FullPath).ToList(), withNames: false)
+            .ConfigureAwait(true);
+        if (found is null) return;
+
+        var carried = TerminalSessions.CarryNames(found, rows.SelectMany(row => row.Terminal.Sessions), out var hasNewSession);
+        if (withNames || hasNewSession) carried = await TerminalSessions.NameITerm2SessionsAsync(carried).ConfigureAwait(true);
+
+        foreach (var row in rows)
+            row.Terminal = carried.GetValueOrDefault(row.FullPath) ?? TerminalPresence.None;
     }
 
     /// <summary>
@@ -1544,6 +1621,17 @@ public sealed class RepositoryViewModel : ObservableObject
         try
         {
             var found = await TerminalSessions.DetectAsync(new[] { row.FullPath }, withNames: false).ConfigureAwait(true);
+
+            // Sessão que a leitura de agora não achou fechou: sai da linha já, sem esperar a
+            // varredura do finally. Só tira — a leitura de um caminho só não sabe dos aninhados.
+            if (found is not null)
+            {
+                var alive = (found.GetValueOrDefault(row.FullPath)?.Sessions ?? Array.Empty<TerminalSession>())
+                    .Select(item => item.Tty)
+                    .ToHashSet(StringComparer.Ordinal);
+                row.Terminal = TerminalSessions.Prune(row.Terminal, alive);
+            }
+
             if (found?.GetValueOrDefault(row.FullPath)?.Focusable is not { } session) return false;
             if (!await TerminalSessions.FocusAsync(session).ConfigureAwait(true)) return false;
 

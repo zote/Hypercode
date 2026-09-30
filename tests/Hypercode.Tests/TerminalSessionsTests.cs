@@ -116,6 +116,90 @@ public sealed class TerminalSessionsTests
         => Assert.Null(Assign((600, "/dev/outro"))["/dev/outro"].Focusable);
 
     [Fact]
+    public void LeOsTtysVivosDoPs()
+        => Assert.Equal(
+            new HashSet<string> { "/dev/ttys001", "/dev/ttys003" },
+            TerminalSessions.ParseTtys("??\n  ttys001\nttys001\n??\nttys003 \n-\n"));
+
+    [Fact]
+    public async Task SondagemLeOPsDeVerdade()
+    {
+        // Sempre há processo sem terminal (o launchd, no mínimo): null aqui seria o ps falhando.
+        var live = await TerminalSessions.ListLiveTtysAsync();
+
+        Assert.NotNull(live);
+        Assert.All(live!, tty => Assert.StartsWith("/dev/", tty));
+    }
+
+    [Fact]
+    public void TtySumidoApagaASessao()
+    {
+        var presence = Assign((202, "/dev/repo"), (301, "/dev/repo/src"), (500, "/dev/repo"))["/dev/repo"];
+
+        var pruned = TerminalSessions.Prune(presence, new HashSet<string> { "/dev/ttys001" });
+
+        Assert.Equal(new[] { "/dev/ttys001" }, pruned.Sessions.Select(session => session.Tty));
+        // O ps de tty não diz nada de quem não tem terminal: o dotnet fica.
+        Assert.Equal(new[] { "dotnet" }, pruned.Processes);
+    }
+
+    [Fact]
+    public void UltimaSessaoFechadaApagaOIcone()
+    {
+        var presence = Assign((202, "/dev/repo"))["/dev/repo"];
+
+        Assert.True(TerminalSessions.Prune(presence, new HashSet<string> { "/dev/ttys009" }).IsEmpty);
+    }
+
+    [Fact]
+    public void TodoTtyVivoDevolveAMesmaPresenca()
+    {
+        var presence = Assign((202, "/dev/repo"))["/dev/repo"];
+
+        Assert.Same(presence, TerminalSessions.Prune(presence, new HashSet<string> { "/dev/ttys001", "/dev/ttys002" }));
+    }
+
+    [Fact]
+    public void ANovaLeituraHerdaONomeDaMesmaSessao()
+    {
+        var before = new TerminalSession("/dev/ttys001", TerminalApp.ITerm2, TimeSpan.FromMinutes(29), "✳ Resolver (claude)");
+
+        var carried = TerminalSessions.CarryNames(Assign((202, "/dev/repo")), new[] { before }, out var hasNew);
+
+        Assert.Equal("✳ Resolver (claude)", carried["/dev/repo"].Sessions.Single().Name);
+        Assert.False(hasNew);
+    }
+
+    [Fact]
+    public void SessaoNovaDoITerm2PedeONome()
+    {
+        var carried = TerminalSessions.CarryNames(Assign((202, "/dev/repo")), Array.Empty<TerminalSession>(), out var hasNew);
+
+        Assert.Null(carried["/dev/repo"].Sessions.Single().Name);
+        Assert.True(hasNew);
+    }
+
+    [Fact]
+    public void TtyReaproveitadoPorSessaoNovaNaoHerdaONome()
+    {
+        // A sessão de antes já tinha uma hora; a do ttys001 de agora tem 30 min: é outra.
+        var before = new TerminalSession("/dev/ttys001", TerminalApp.ITerm2, TimeSpan.FromHours(1), "velha");
+
+        var carried = TerminalSessions.CarryNames(Assign((202, "/dev/repo")), new[] { before }, out var hasNew);
+
+        Assert.Null(carried["/dev/repo"].Sessions.Single().Name);
+        Assert.True(hasNew);
+    }
+
+    [Fact]
+    public void SessaoNovaForaDoITerm2NaoPedeNome()
+    {
+        TerminalSessions.CarryNames(Assign((402, "/dev/outro")), Array.Empty<TerminalSession>(), out var hasNew);
+
+        Assert.False(hasNew);
+    }
+
+    [Fact]
     public void LeOsNomesDasSessoesDoITerm2()
     {
         var names = TerminalSessions.ParseSessionNames("/dev/ttys003\t✳ Resolver bagunça da branch (claude)\n/dev/ttys004\t\nlixo\n");

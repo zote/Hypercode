@@ -79,11 +79,96 @@ public static class TerminalSessions
         if (directoriesTask.Result is not { } directories || processesTask.Result is not { } processes) return null;
 
         var presence = Assign(worktreePaths, directories, processes, Environment.ProcessId);
-        if (!withNames || !presence.Values.Any(item => item.Sessions.Any(session => session.App is TerminalApp.ITerm2)))
-            return presence;
+        return withNames ? await NameITerm2SessionsAsync(presence, cancellationToken).ConfigureAwait(false) : presence;
+    }
+
+    /// <summary>
+    /// Pergunta ao iTerm2 o nome das sessões dele — o pedaço mais caro da detecção, por isso
+    /// separado: o tique periódico só chama quando aparece sessão que ainda não tem nome.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<string, TerminalPresence>> NameITerm2SessionsAsync(
+        IReadOnlyDictionary<string, TerminalPresence> presence,
+        CancellationToken cancellationToken = default)
+    {
+        if (!presence.Values.Any(item => item.Sessions.Any(session => session.App is TerminalApp.ITerm2))) return presence;
 
         // O nome é enfeite do tooltip: sem ele, a detecção continua valendo.
         var names = await ListITerm2NamesAsync(cancellationToken).ConfigureAwait(false);
+        return ApplyNames(presence, names);
+    }
+
+    /// <summary>
+    /// Os <c>tty</c> com algum processo vivo agora, pelo <c>ps -A -o tty=</c>. Null se o ps
+    /// falhou: é "não sei", e nenhuma sessão deve ser dada por fechada.
+    /// </summary>
+    public static async Task<IReadOnlySet<string>?> ListLiveTtysAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await ProcessRunner.RunAsync(
+                "/bin/ps",
+                new[] { "-A", "-o", "tty=" },
+                timeout: TimeSpan.FromSeconds(10),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            return result.Success && result.StandardOutput.Length > 0 ? ParseTtys(result.StandardOutput) : null;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Tira da presença as sessões cujo <c>tty</c> não tem mais processo nenhum: o terminal
+    /// fechou. Os processos sem terminal ficam — o ps de tty não diz nada sobre eles. Sem
+    /// nada a tirar, devolve a mesma instância.
+    /// </summary>
+    public static TerminalPresence Prune(TerminalPresence presence, IReadOnlySet<string> liveTtys)
+    {
+        if (presence.Sessions.All(session => liveTtys.Contains(session.Tty))) return presence;
+
+        return presence with { Sessions = presence.Sessions.Where(session => liveTtys.Contains(session.Tty)).ToList() };
+    }
+
+    /// <summary>
+    /// Leva para a leitura nova os nomes da anterior, sessão a sessão, sem perguntar ao iTerm2.
+    /// A mesma sessão tem o mesmo <c>tty</c> e app, e a idade dela só cresce; um <c>tty</c>
+    /// reaproveitado por sessão nova vem mais novo e fica sem nome. <paramref name="hasNewITerm2Session"/>
+    /// diz se sobrou sessão do iTerm2 que a leitura anterior não conhecia — só aí vale o AppleScript.
+    /// </summary>
+    public static IReadOnlyDictionary<string, TerminalPresence> CarryNames(
+        IReadOnlyDictionary<string, TerminalPresence> presence,
+        IEnumerable<TerminalSession> previous,
+        out bool hasNewITerm2Session)
+    {
+        var known = new Dictionary<string, TerminalSession>(StringComparer.Ordinal);
+        foreach (var session in previous) known.TryAdd(session.Tty, session);
+
+        var isNew = false;
+        TerminalSession Carry(TerminalSession session)
+        {
+            if (known.TryGetValue(session.Tty, out var before) && before.App == session.App && session.Age >= before.Age)
+                return before.Name is null ? session : session with { Name = before.Name };
+
+            if (session.App is TerminalApp.ITerm2) isNew = true;
+            return session;
+        }
+
+        var carried = presence.ToDictionary(
+            item => item.Key,
+            item => item.Value with { Sessions = item.Value.Sessions.Select(Carry).ToList() },
+            StringComparer.Ordinal);
+
+        hasNewITerm2Session = isNew;
+        return carried;
+    }
+
+    /// <summary>Dá a cada sessão o nome do <c>tty</c> dela, quando há; as demais ficam como estão.</summary>
+    private static IReadOnlyDictionary<string, TerminalPresence> ApplyNames(
+        IReadOnlyDictionary<string, TerminalPresence> presence,
+        IReadOnlyDictionary<string, string> names)
+    {
         if (names.Count == 0) return presence;
 
         return presence.ToDictionary(
@@ -251,6 +336,16 @@ public static class TerminalSessions
         }
 
         return entries;
+    }
+
+    /// <summary>Saída do <c>ps -o tty=</c>: um <c>tty</c> por processo, <c>??</c> para quem não tem.</summary>
+    internal static HashSet<string> ParseTtys(string output)
+    {
+        var ttys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            if (line.Trim() is { Length: > 0 } tty and not "??" and not "-") ttys.Add($"/dev/{tty}");
+
+        return ttys;
     }
 
     /// <summary>O <c>etime</c> do ps: <c>[[dd-]hh:]mm:ss</c>.</summary>
