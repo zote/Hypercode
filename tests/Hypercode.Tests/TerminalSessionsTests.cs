@@ -21,6 +21,9 @@ public sealed class TerminalSessionsTests
           402   401 ttys003     10:00 -zsh
           500     1 ??          02:00 dotnet watch
           600     1 ttys009     01:00 /Applications/Ghostty.app/Contents/MacOS/zsh
+          700     1 ??       1-19:14:00 /Applications/supacode.app/Contents/Resources/zmx/zmx
+          701   700 ttys010  1-19:14:00 /usr/bin/login
+          702   701 ttys010  1-19:14:00 -zsh
           900     1 ??          01:00 /Applications/Hypercode.app/Contents/MacOS/Hypercode
           901   900 ??          00:00 /usr/sbin/lsof
         """);
@@ -114,6 +117,50 @@ public sealed class TerminalSessionsTests
     [Fact]
     public void TerminalDesconhecidoNaoRecebeFoco()
         => Assert.Null(Assign((600, "/dev/outro"))["/dev/outro"].Focusable);
+
+    [Fact]
+    public void SessaoDoZmxEhDeMultiplexadorESemFoco()
+    {
+        // O zmx também tem a pasta de trabalho no worktree, sem tty.
+        var presence = Assign((700, "/dev/outro"), (702, "/dev/outro"))["/dev/outro"];
+
+        var session = presence.Sessions.Single();
+        Assert.Equal(TerminalApp.Multiplexer, session.App);
+        Assert.Equal("supacode (zmx)", session.AppName);
+        Assert.Null(presence.Focusable);
+        // O servidor do zmx é a própria sessão: não entra como processo à parte.
+        Assert.Empty(presence.Processes);
+    }
+
+    /// <summary>A árvore da issue #128, com a linha de comando inteira do zmx e o tmux com o nome do servidor.</summary>
+    [Theory]
+    [InlineData("/Applications/supacode.app/Contents/Resources/zmx/zmx attach supa-10c5a4a6 /usr/bin/login -flp zote /bin/bash --noprofile --norc -c exec -l /bin/zsh", "supacode (zmx)")]
+    [InlineData("/Applications/supacode.app/Contents/Resources/zmx/zmx", "supacode (zmx)")]
+    [InlineData("tmux: server", "tmux")]
+    [InlineData("/opt/homebrew/bin/tmux", "tmux")]
+    [InlineData("screen", "screen")]
+    [InlineData("zellij --server /tmp/zellij", "zellij")]
+    public void MultiplexadorNaAscendenciaViraMultiplexer(string command, string expected)
+    {
+        var processes = TerminalSessions.ParsePs($"""
+              83942     1 ??       1-19:14:00 {command}
+              83943 83942 ttys009  1-19:14:00 /usr/bin/login -flp zote /bin/bash --noprofile --norc -c exec -l /bin/zsh
+              83954 83943 ttys009  1-19:14:00 -/bin/zsh
+            """);
+        var byPid = processes.ToDictionary(process => process.Pid);
+
+        Assert.Equal(TerminalApp.Multiplexer, TerminalSessions.AppOf(byPid[83954], byPid, out var multiplexer));
+        Assert.Equal(expected, multiplexer);
+    }
+
+    [Theory]
+    [InlineData("/Applications/Ghostty.app/Contents/MacOS/zsh")]
+    [InlineData("/System/Library/CoreServices/Screen Time.app/Contents/MacOS/ScreenTimeAgent")]
+    [InlineData("/usr/local/bin/tmuxinator")]
+    [InlineData("vim /tmp/tmux")]
+    [InlineData("-zsh")]
+    public void TerminalQualquerNaoViraMultiplexador(string command)
+        => Assert.Null(TerminalSessions.MultiplexerOf(command));
 
     [Fact]
     public void LeOsTtysVivosDoPs()
@@ -252,4 +299,45 @@ public sealed class TerminalSessionsTests
         Assert.Equal(BadgeKind.ProcessOpen, row.GitBadges.First().Kind);
         Assert.False(row.CanFocusTerminal);
     }
+
+    private static WorktreeRow RowWith(params TerminalSession[] sessions)
+        => new(new WorktreeInfo { FullPath = "/dev/repo", Branch = "main" })
+        {
+            Terminal = new TerminalPresence(sessions, new[] { "dotnet" }),
+        };
+
+    private static readonly TerminalSession ITerm2Session = new("/dev/ttys001", TerminalApp.ITerm2, TimeSpan.FromMinutes(5), null);
+    private static readonly TerminalSession ZmxSession = new("/dev/ttys009", TerminalApp.Multiplexer, TimeSpan.FromHours(43), null, "supacode (zmx)");
+    private static readonly TerminalSession GhosttySession = new("/dev/ttys004", TerminalApp.Other, TimeSpan.FromMinutes(1), null);
+
+    [Fact]
+    public void TerminalGanhaDoMultiplexadorQueGanhaDoProcesso()
+    {
+        // Os três na mesma lista: terminal focável, sessão do zmx e o dotnet.
+        var row = RowWith(ZmxSession, ITerm2Session);
+
+        var badge = row.GitBadges.Single(badge => badge.Kind is BadgeKind.TerminalOpen or BadgeKind.MultiplexerSession or BadgeKind.ProcessOpen);
+        Assert.Equal(BadgeKind.TerminalOpen, badge.Kind);
+        Assert.Contains("Duplo-clique vai para ele", badge.Tooltip);
+        Assert.Contains("Há também sessão de multiplexador, sem janela: supacode (zmx).", badge.Tooltip);
+        Assert.True(row.CanFocusTerminal);
+    }
+
+    [Fact]
+    public void SoMultiplexadorGanhaOIconeProprioApagado()
+    {
+        var row = RowWith(ZmxSession);
+
+        var badge = row.GitBadges.First();
+        Assert.Equal(BadgeKind.MultiplexerSession, badge.Kind);
+        Assert.Equal(BadgeVisuals.Muted, badge.BrushKey);
+        Assert.Contains("Sessão do supacode (zmx) aberta aqui há 1 dia.", badge.Tooltip);
+        Assert.Contains("desanexada", badge.Tooltip);
+        Assert.Contains("O duplo-clique abre um terminal novo.", badge.Tooltip);
+        Assert.False(row.CanFocusTerminal);
+    }
+
+    [Fact]
+    public void TerminalDesconhecidoContinuaComOIconeDeTerminal()
+        => Assert.Equal(BadgeKind.TerminalOpen, RowWith(ZmxSession, GhosttySession).GitBadges.First().Kind);
 }

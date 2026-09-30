@@ -84,6 +84,7 @@
         <PathIcon Data="{StaticResource Icon.CloudOffline}" ToolTip.Tip="Icon.CloudOffline" />
         <PathIcon Data="{StaticResource Icon.BellFill}" ToolTip.Tip="Icon.BellFill" />
         <PathIcon Data="{StaticResource Icon.Terminal}" ToolTip.Tip="Icon.Terminal" />
+        <PathIcon Data="{StaticResource Icon.Columns}" ToolTip.Tip="Icon.Columns" />
         <PathIcon Data="{StaticResource Icon.Trash}" ToolTip.Tip="Icon.Trash" />
         <PathIcon Data="{StaticResource Icon.GitPullRequest}" ToolTip.Tip="Icon.GitPullRequest" />
         <PathIcon Data="{StaticResource Icon.GitPullRequestDraft}" ToolTip.Tip="Icon.GitPullRequestDraft" />

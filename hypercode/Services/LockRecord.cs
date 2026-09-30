@@ -55,7 +55,8 @@ public static class LockRecord
         return Relative(now - moment) is { } ago ? $"{date} ({ago})" : date;
     }
 
-    private static string? Relative(TimeSpan elapsed)
+    /// <summary>"há 3 dias", "há 1 hora"; null para intervalo negativo.</summary>
+    internal static string? Relative(TimeSpan elapsed)
     {
         if (elapsed < TimeSpan.Zero) return null;
         if (elapsed.TotalMinutes < 1) return "agora há pouco";
