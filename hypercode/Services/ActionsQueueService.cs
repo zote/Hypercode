@@ -6,8 +6,9 @@ namespace Hypercode.Services;
 /// <summary>
 /// Uma resposta da API REST pelo <c>gh api -i</c>: o status HTTP, o corpo e a cota lida dos
 /// cabeçalhos. Status 0 é falha antes de chegar ao GitHub (sem gh, sem rede, sem login).
+/// <see cref="Scopes"/> é o <c>X-OAuth-Scopes</c>: null quando o token não o manda (fine-grained).
 /// </summary>
-public sealed record ApiResponse(int Status, string Body, ApiBudget? Budget, string? Error)
+public sealed record ApiResponse(int Status, string Body, ApiBudget? Budget, string? Error, string? Scopes = null)
 {
     public bool Success => Status is >= 200 and < 300;
 
@@ -36,7 +37,12 @@ public sealed record ApiResponse(int Status, string Body, ApiBudget? Budget, str
             if (colon > 0) headers[line[..colon].Trim()] = line[(colon + 1)..].Trim();
         }
 
-        return new ApiResponse(status, body, ParseBudget(headers), status is >= 200 and < 300 ? null : error);
+        return new ApiResponse(
+            status,
+            body,
+            ParseBudget(headers),
+            status is >= 200 and < 300 ? null : error,
+            headers.TryGetValue("X-OAuth-Scopes", out var scopes) ? scopes : null);
     }
 
     private static ApiBudget? ParseBudget(IReadOnlyDictionary<string, string> headers)
@@ -68,14 +74,21 @@ public static class ActionsQueueService
     /// Um GET pelo <c>gh api -i</c>. Nunca lança por HTTP: 403 e 404 voltam como status, que
     /// é o que separa sem permissão de não é organização.
     /// </summary>
-    public static async Task<ApiResponse> GetAsync(string path, CancellationToken cancellationToken)
+    public static Task<ApiResponse> GetAsync(string path, CancellationToken cancellationToken)
+        => SendAsync(new[] { "api", "-i", path }, cancellationToken);
+
+    /// <summary>Um POST sem corpo pelo <c>gh api -i</c> — cancelar um run é só isso. Também não lança por HTTP.</summary>
+    public static Task<ApiResponse> PostAsync(string path, CancellationToken cancellationToken)
+        => SendAsync(new[] { "api", "-i", "-X", "POST", path }, cancellationToken);
+
+    private static async Task<ApiResponse> SendAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {
         if (ExecutableLocator.Find("gh") is not { } gh)
             return new ApiResponse(0, string.Empty, null, "GitHub CLI (gh) não encontrado. Instale com: brew install gh");
 
         try
         {
-            var result = await ProcessRunner.RunAsync(gh, new[] { "api", "-i", path }, null, TimeSpan.FromSeconds(30), cancellationToken)
+            var result = await ProcessRunner.RunAsync(gh, arguments, null, TimeSpan.FromSeconds(30), cancellationToken)
                 .ConfigureAwait(false);
             return ApiResponse.Parse(result.StandardOutput, result.FirstErrorLine);
         }
@@ -129,6 +142,7 @@ public static class ActionsQueueService
             runnerResults.SelectMany(result => result.Runners).ToList(),
             queueResults.SelectMany(result => result.Jobs).ToList(),
             queueResults.SelectMany(result => result.Waiting).ToList(),
+            queueResults.SelectMany(result => result.Runs).ToList(),
             runnerResults.Select(result => result.Problem).OfType<string>().ToList(),
             queueResults.Select(result => result.Problem).OfType<string>().ToList(),
             latest,
@@ -137,7 +151,7 @@ public static class ActionsQueueService
 
     private static string Owner(string repository) => repository.Split('/')[0];
 
-    private sealed record RepositoryResult(IReadOnlyList<ActionsJob> Jobs, IReadOnlyList<ActionsWaitingRun> Waiting, string? Problem);
+    private sealed record RepositoryResult(IReadOnlyList<ActionsJob> Jobs, IReadOnlyList<ActionsWaitingRun> Waiting, IReadOnlyList<ActionsRun> Runs, string? Problem);
 
     private sealed record RunnerResult(IReadOnlyList<ActionsRunner> Runners, string? Problem);
 
@@ -148,7 +162,7 @@ public static class ActionsQueueService
             get($"repos/{repository}/actions/runs?status=in_progress&per_page=100")).ConfigureAwait(false);
 
         if (responses.FirstOrDefault(response => !response.Success) is { } failed)
-            return new RepositoryResult(Array.Empty<ActionsJob>(), Array.Empty<ActionsWaitingRun>(), $"{repository}: {Describe(failed)}");
+            return new RepositoryResult(Array.Empty<ActionsJob>(), Array.Empty<ActionsWaitingRun>(), Array.Empty<ActionsRun>(), $"{repository}: {Describe(failed)}");
 
         var runs = new List<ActionsQueue.RunInfo>();
         foreach (var response in responses)
@@ -174,7 +188,7 @@ public static class ActionsQueueService
             .Select(item => new ActionsWaitingRun(item.Run.Id, repository, item.Run.Workflow, item.Run.Branch, item.Run.PullRequest, item.Run.CreatedAt, item.Run.Url))
             .ToList();
 
-        return new RepositoryResult(jobs, waiting, null);
+        return new RepositoryResult(jobs, waiting, runs.Select(run => run.ToRun(repository)).ToList(), null);
     }
 
     /// <summary>
@@ -234,6 +248,41 @@ public static class ActionsQueueService
             perGroup.SelectMany(item => item.Runners).ToList(),
             perGroup.Select(item => item.Problem).OfType<string>().FirstOrDefault());
     }
+
+    /// <summary>
+    /// Se a conta e o token podem cancelar runs, por repositório. Fica de fora o repositório cuja
+    /// leitura falhou: sem saber, não se bloqueia nada — o clique diz o que houver, e o próximo
+    /// ciclo pergunta de novo.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<string, WriteAccess>> LoadAccessAsync(
+        IEnumerable<string> repositories,
+        Func<string, CancellationToken, Task<ApiResponse>> get,
+        CancellationToken cancellationToken = default)
+    {
+        var results = await Task.WhenAll(repositories.Select(async repository =>
+        {
+            var response = await get($"repos/{repository}", cancellationToken).ConfigureAwait(false);
+            if (!response.Success || TryParse(response.Body) is not { } document) return (Repository: repository, Access: (WriteAccess?)null);
+            using (document) return (Repository: repository, Access: ActionsQueue.ParseWriteAccess(document.RootElement, repository, response.Scopes));
+        })).ConfigureAwait(false);
+
+        return results
+            .Where(result => result.Access is not null)
+            .ToDictionary(result => result.Repository, result => result.Access!, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// O que dizer de um pedido de cancelamento; null é que o GitHub aceitou (202). O 409 é o
+    /// caso do run que terminou entre a leitura e o clique: o GitHub recusa cancelar run concluído.
+    /// </summary>
+    public static string? DescribeCancel(ApiResponse response, string repository) => response.Status switch
+    {
+        >= 200 and < 300 => null,
+        409 => "O run já terminou — não há mais o que cancelar.",
+        401 or 403 => $"Sem permissão para cancelar runs de {repository}: precisa de escrita no repositório, e o token do gh, do escopo repo (gh auth refresh -s repo).",
+        404 => "O GitHub não achou o run: ele pode ter sido apagado, ou o token do gh não enxerga o repositório.",
+        _ => $"O GitHub recusou o cancelamento: {Describe(response)}.",
+    };
 
     private static string Describe(ApiResponse response) => response.Status switch
     {

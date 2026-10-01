@@ -6,7 +6,40 @@ namespace Hypercode.ViewModels;
 /// <summary>Estado de um runner, do mais ao menos interessante — é a ordem da lista.</summary>
 public enum RunnerState { Busy, Idle, Offline }
 
-public sealed record RunnerItem(string Name, string Detail, RunnerState State, string? Job, string? JobOrigin)
+/// <summary>
+/// O run sobre o qual um item do painel age (#133). O GitHub só cancela run inteiro — não há
+/// cancelar job —, então job na fila e runner ocupado apontam para o run deles. Os motivos de
+/// bloqueio dizem por que o item do menu sai desabilitado; null é que dá.
+/// </summary>
+public sealed record RunTarget(
+    string Repository,
+    long Id,
+    string Workflow,
+    string Title,
+    int? Number,
+    string? Branch,
+    int? PullRequest,
+    string? Url,
+    string? CancelBlocked,
+    string? ForceCancelBlocked)
+{
+    public bool CanCancel => CancelBlocked is null;
+
+    public bool CanForceCancel => ForceCancelBlocked is null;
+
+    /// <summary>O cancelamento já foi pedido e o GitHub ainda não parou o run.</summary>
+    public bool IsCancelRequested { get; init; }
+
+    /// <summary>CI #482: o workflow e o número do run nele.</summary>
+    public string Name => Number is { } number ? $"{Workflow} #{number}" : Workflow;
+
+    /// <summary>PR #12 (feat/x), ou a branch sem PR.</summary>
+    public string? Ref => PullRequest is { } number
+        ? Branch is null ? $"PR #{number}" : $"PR #{number} ({Branch})"
+        : Branch;
+}
+
+public sealed record RunnerItem(string Name, string Detail, RunnerState State, string? Job, string? JobOrigin, RunTarget? Run = null)
 {
     public string StateLabel => State switch
     {
@@ -19,15 +52,23 @@ public sealed record RunnerItem(string Name, string Detail, RunnerState State, s
     public bool IsIdle => State == RunnerState.Idle;
     public bool IsOffline => State == RunnerState.Offline;
     public bool HasJob => Job is not null;
+
+    public bool IsCancelRequested => Run?.IsCancelRequested == true;
 }
 
 public sealed record RunnerGroupItem(string Name, string Summary, IReadOnlyList<RunnerItem> Runners);
 
-public sealed record QueuedJobItem(string Position, string Title, string Origin, string Wait);
+public sealed record QueuedJobItem(string Position, string Title, string Origin, string Wait, RunTarget? Run = null)
+{
+    public bool IsCancelRequested => Run?.IsCancelRequested == true;
+}
 
 public sealed record LaneItem(string Labels, string Summary, IReadOnlyList<QueuedJobItem> Jobs);
 
-public sealed record WaitingRunItem(string Title, string Origin, string Wait);
+public sealed record WaitingRunItem(string Title, string Origin, string Wait, RunTarget? Run = null)
+{
+    public bool IsCancelRequested => Run?.IsCancelRequested == true;
+}
 
 /// <summary>
 /// A fila do GitHub Actions (#130): os runners e o que espera por eles, nos repositórios
@@ -46,7 +87,9 @@ public sealed class ActionsQueueViewModel : ObservableObject
     private readonly Settings _settings;
     private readonly Action _save;
     private readonly Func<string, CancellationToken, Task<ApiResponse>> _get;
+    private readonly Func<string, CancellationToken, Task<ApiResponse>> _post;
     private readonly Func<DateTimeOffset> _clock;
+    private readonly Func<Task> _settle;
     private readonly MonitorScheduler _scheduler = new();
 
     private CancellationTokenSource? _loop;
@@ -54,6 +97,15 @@ public sealed class ActionsQueueViewModel : ObservableObject
     private ActionsSnapshot? _snapshot;
     private bool _isLoading;
     private string? _loadProblem;
+
+    /// <summary>Pedido de releitura que chegou com uma leitura em curso: ela já pode estar velha.</summary>
+    private bool _rereadPending;
+
+    /// <summary>Se dá para cancelar, por repositório. Lido uma vez; sai daqui quando o GitHub recusa por permissão.</summary>
+    private readonly Dictionary<string, WriteAccess> _access = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Runs com cancelamento pedido que ainda aparecem na leitura: o GitHub leva uns segundos para pará-los.</summary>
+    private readonly HashSet<(string Repository, long Id)> _cancelRequested = new(RunKeyComparer.Instance);
 
     private bool _mainActive = true;
     private bool _mainMinimized;
@@ -64,12 +116,16 @@ public sealed class ActionsQueueViewModel : ObservableObject
         Settings settings,
         Action save,
         Func<string, CancellationToken, Task<ApiResponse>>? get = null,
-        Func<DateTimeOffset>? clock = null)
+        Func<DateTimeOffset>? clock = null,
+        Func<string, CancellationToken, Task<ApiResponse>>? post = null,
+        Func<Task>? settle = null)
     {
         _settings = settings;
         _save = save;
         _get = get ?? ActionsQueueService.GetAsync;
+        _post = post ?? ActionsQueueService.PostAsync;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
+        _settle = settle ?? (() => Task.Delay(ActionSettleDelay));
         _scheduler.Profile = EffectiveSettings.Resolve(settings, null).MonitorProfile;
         UpdateSchedulerActivity();
     }
@@ -281,9 +337,18 @@ public sealed class ActionsQueueViewModel : ObservableObject
         }
     }
 
-    /// <summary>Atualizar do painel: lê agora, seja qual for a cadência.</summary>
+    /// <summary>
+    /// Atualizar do painel: lê agora, seja qual for a cadência. Com uma leitura em curso, ela
+    /// termina e outra começa logo depois — a em curso pode ter saído antes do que mudou.
+    /// </summary>
     public Task RefreshNowAsync()
     {
+        if (IsLoading)
+        {
+            _rereadPending = true;
+            return Task.CompletedTask;
+        }
+
         _scheduler.ExpireActions();
         return CheckAsync();
     }
@@ -298,12 +363,13 @@ public sealed class ActionsQueueViewModel : ObservableObject
 
         if (!IsShown || !HasRepositories || IsLoading || !_scheduler.IsActionsDue(now))
         {
-            Rebuild(now);
+            if (!IsMenuOpen) Rebuild(now);
             return;
         }
 
         _scheduler.MarkActionsChecked(now);
         var repositories = _settings.ActionsRepositories.ToList();
+        var unknownAccess = repositories.Where(repository => !_access.ContainsKey(repository)).ToList();
 
         _load?.Cancel();
         var load = new CancellationTokenSource();
@@ -312,8 +378,14 @@ public sealed class ActionsQueueViewModel : ObservableObject
 
         try
         {
+            var accessTask = unknownAccess.Count == 0
+                ? Task.FromResult<IReadOnlyDictionary<string, WriteAccess>>(new Dictionary<string, WriteAccess>())
+                : ActionsQueueService.LoadAccessAsync(unknownAccess, _get, load.Token);
             var snapshot = await ActionsQueueService.LoadAsync(repositories, _get, now, load.Token).ConfigureAwait(true);
+            var access = await accessTask.ConfigureAwait(true);
             if (load.IsCancellationRequested) return;
+
+            foreach (var (repository, value) in access) _access[repository] = value;
 
             _scheduler.RecordBudget(snapshot.Budget);
             _loadProblem = null;
@@ -335,12 +407,143 @@ public sealed class ActionsQueueViewModel : ObservableObject
             load.Dispose();
             IsLoading = false;
         }
+
+        if (_rereadPending)
+        {
+            _rereadPending = false;
+            _scheduler.ExpireActions();
+            await CheckAsync().ConfigureAwait(true);
+        }
     }
 
     private void Apply(ActionsSnapshot? snapshot)
     {
         _snapshot = snapshot;
+
+        // Run que saiu da leitura parou: o pedido de cancelamento dele está cumprido.
+        if (snapshot is not null)
+        {
+            var present = snapshot.Runs.Select(run => (run.Repository, run.Id)).ToHashSet(RunKeyComparer.Instance);
+            _cancelRequested.RemoveWhere(key => !present.Contains(key));
+        }
+
         Rebuild(_clock());
+    }
+
+    // ── Agir sobre um run (#133) ────────────────────────────────────────────
+
+    /// <summary>
+    /// Quanto esperar entre o pedido e a releitura: o GitHub responde 202 na hora, mas o run
+    /// leva uns segundos para sair de <c>in_progress</c>.
+    /// </summary>
+    private static readonly TimeSpan ActionSettleDelay = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Um menu de run está aberto: o passo que só refaz os tempos de espera fica para depois —
+    /// refazer as listas tira da tela o item em que o menu está, e o menu fecha na mão de quem
+    /// ia clicar. Leitura nova do GitHub entra mesmo assim.
+    /// </summary>
+    public bool IsMenuOpen { get; set; }
+
+    /// <summary>A releitura que veio depois da última ação. Só os testes esperam por ela.</summary>
+    internal Task Reread { get; private set; } = Task.CompletedTask;
+
+    /// <summary>
+    /// Cancela o run — inteiro: a API não cancela um job sozinho. <paramref name="force"/> usa o
+    /// <c>force-cancel</c>, que pula as condições <c>if: always()</c>. Devolve o que mostrar ao
+    /// usuário quando o GitHub recusa, ou null. Dê certo ou não, o painel relê logo em seguida:
+    /// num 409 o run já terminou e deve sumir da lista; num 403 a permissão é lida de novo.
+    /// </summary>
+    public async Task<string?> CancelRunAsync(RunTarget run, bool force)
+    {
+        var path = $"repos/{run.Repository}/actions/runs/{run.Id}/{(force ? "force-cancel" : "cancel")}";
+
+        string? problem;
+        try
+        {
+            var response = await _post(path, CancellationToken.None).ConfigureAwait(true);
+            problem = ActionsQueueService.DescribeCancel(response, run.Repository);
+            if (response.Status is 401 or 403) _access.Remove(run.Repository);
+        }
+        catch (Exception exception)
+        {
+            problem = exception.Message;
+        }
+
+        if (problem is null)
+        {
+            _cancelRequested.Add((run.Repository, run.Id));
+            Rebuild(_clock());
+        }
+
+        Reread = RereadAfterActionAsync();
+        return problem;
+    }
+
+    private async Task RereadAfterActionAsync()
+    {
+        await _settle().ConfigureAwait(true);
+        await RefreshNowAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// O texto da confirmação: nomeia o run, o workflow, o repositório e a branch ou o PR, e diz
+    /// que o run vai inteiro. O forçado diz também o que ele pula.
+    /// </summary>
+    internal static (string Title, string Headline, string Body, string Confirm) CancelConfirmation(RunTarget run, bool force)
+    {
+        var what = string.Join("\n", new[] { run.Title, $"{run.Name} · {run.Repository}", run.Ref }.OfType<string>());
+
+        if (!force)
+            return (
+                "Cancelar run",
+                $"Cancelar o run {run.Name}?",
+                what + "\n\nCancela o run inteiro: todos os jobs dele, os que rodam e os que esperam — o GitHub não cancela um job "
+                + "sozinho. Os passos com if: always() ainda rodam, como no Cancel workflow do GitHub. O runner fica livre e o "
+                + "próximo da fila entra.",
+                "Cancelar o run");
+
+        return (
+            "Forçar cancelamento",
+            $"Forçar o cancelamento do run {run.Name}?",
+            what + "\n\nPara o run inteiro sem rodar os passos com if: always() nem a limpeza que o workflow faria ao ser "
+            + "cancelado: cache, artefato, lock ou ambiente que ele deixaria em ordem pode ficar pela metade.\n\nÉ para o run "
+            + "que não para com o cancelamento comum. Se ainda não tentou, tente primeiro o Cancelar o run.",
+            "Forçar cancelamento");
+    }
+
+    /// <summary>O alvo de cada run da leitura, com o que bloqueia agir sobre ele.</summary>
+    private Func<string, long, RunTarget?> Targets(ActionsSnapshot snapshot)
+    {
+        var runs = new Dictionary<(string Repository, long Id), ActionsRun>(RunKeyComparer.Instance);
+        foreach (var run in snapshot.Runs) runs.TryAdd((run.Repository, run.Id), run);
+
+        return (repository, id) =>
+        {
+            if (!runs.TryGetValue((repository, id), out var run)) return null;
+
+            var denied = _access.TryGetValue(repository, out var access) ? access.Reason : null;
+            var requested = _cancelRequested.Contains((repository, id));
+            return new RunTarget(
+                run.Repository, run.Id, run.Workflow, run.Title, run.Number, run.Branch, run.PullRequest, run.Url,
+                denied ?? (requested ? "Cancelamento já pedido: o GitHub ainda está parando o run." : null),
+                denied)
+            {
+                IsCancelRequested = requested,
+            };
+        };
+    }
+
+    /// <summary>(repositório, id) sem caixa no repositório: owner/repo vem da configuração, digitado à mão.</summary>
+    private sealed class RunKeyComparer : IEqualityComparer<(string Repository, long Id)>
+    {
+        public static readonly RunKeyComparer Instance = new();
+
+        public bool Equals((string Repository, long Id) x, (string Repository, long Id) y)
+            => x.Id == y.Id && string.Equals(x.Repository, y.Repository, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string Repository, long Id) key)
+            => HashCode.Combine(key.Id, StringComparer.OrdinalIgnoreCase.GetHashCode(key.Repository));
     }
 
     /// <summary>Refaz as listas a partir da última leitura. Runner que sumiu entre dois ciclos só sai da lista.</summary>
@@ -352,10 +555,12 @@ public sealed class ActionsQueueViewModel : ObservableObject
 
         if (_snapshot is { } snapshot)
         {
-            foreach (var group in BuildRunnerGroups(snapshot, now)) RunnerGroups.Add(group);
-            foreach (var lane in BuildLanes(snapshot, now)) Lanes.Add(lane);
+            var targets = Targets(snapshot);
+            foreach (var group in BuildRunnerGroups(snapshot, now, targets)) RunnerGroups.Add(group);
+            foreach (var lane in BuildLanes(snapshot, now, targets)) Lanes.Add(lane);
             foreach (var run in snapshot.WaitingRuns.OrderBy(run => run.CreatedAt))
-                WaitingRuns.Add(new WaitingRunItem(run.Workflow, Origin(run.Repository, run.Branch, run.PullRequest), Waiting(now - run.CreatedAt)));
+                WaitingRuns.Add(new WaitingRunItem(
+                    run.Workflow, Origin(run.Repository, run.Branch, run.PullRequest), Waiting(now - run.CreatedAt), targets(run.Repository, run.Id)));
         }
 
         RaisePropertyChanged(nameof(HasSnapshot));
@@ -369,7 +574,10 @@ public sealed class ActionsQueueViewModel : ObservableObject
         RaisePropertyChanged(nameof(StatusLine));
     }
 
-    internal static IReadOnlyList<RunnerGroupItem> BuildRunnerGroups(ActionsSnapshot snapshot, DateTimeOffset now)
+    internal static IReadOnlyList<RunnerGroupItem> BuildRunnerGroups(
+        ActionsSnapshot snapshot,
+        DateTimeOffset now,
+        Func<string, long, RunTarget?>? targets = null)
     {
         var jobs = ActionsQueue.JobsByRunner(snapshot.Runners, snapshot.Jobs);
 
@@ -389,7 +597,8 @@ public sealed class ActionsQueueViewModel : ObservableObject
                             detail,
                             state,
                             job is null ? null : $"{job.Workflow} › {job.Name}",
-                            job is null ? null : $"{Origin(job.Repository, job.Branch, job.PullRequest)} · {Running(now - (job.StartedAt ?? job.CreatedAt))}");
+                            job is null ? null : $"{Origin(job.Repository, job.Branch, job.PullRequest)} · {Running(now - (job.StartedAt ?? job.CreatedAt))}",
+                            job is null ? null : targets?.Invoke(job.Repository, job.RunId));
                     })
                     .OrderBy(runner => runner.State)
                     .ThenBy(runner => runner.Name, StringComparer.OrdinalIgnoreCase)
@@ -404,7 +613,10 @@ public sealed class ActionsQueueViewModel : ObservableObject
             .ToList();
     }
 
-    internal static IReadOnlyList<LaneItem> BuildLanes(ActionsSnapshot snapshot, DateTimeOffset now)
+    internal static IReadOnlyList<LaneItem> BuildLanes(
+        ActionsSnapshot snapshot,
+        DateTimeOffset now,
+        Func<string, long, RunTarget?>? targets = null)
         => ActionsQueue.BuildLanes(snapshot.Jobs)
             .Select(lane => new LaneItem(
                 lane.Labels.Count == 0 ? "sem labels" : string.Join(", ", lane.Labels),
@@ -413,7 +625,8 @@ public sealed class ActionsQueueViewModel : ObservableObject
                         $"{index + 1}º",
                         $"{job.Workflow} › {job.Name}",
                         Origin(job.Repository, job.Branch, job.PullRequest),
-                        Waiting(now - job.CreatedAt)))
+                        Waiting(now - job.CreatedAt),
+                        targets?.Invoke(job.Repository, job.RunId)))
                     .ToList()))
             .ToList();
 
