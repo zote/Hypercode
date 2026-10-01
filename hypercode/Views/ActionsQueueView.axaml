@@ -5,7 +5,10 @@
 
   <!-- A fila do GitHub Actions (#130). DataContext é o ActionsQueueViewModel, o mesmo no painel
        da janela principal e na janela própria: uma view só, em dois lugares. O que é do lugar
-       (destacar, recolher) fica com quem hospeda. -->
+       (destacar, recolher) fica com quem hospeda.
+       Clique direito num runner ocupado, num job da fila ou num run sem job abre o menu do run
+       (#133): cancelar e forçar cancelamento. Reordenar a fila não existe — a API não tem o
+       conceito —, e o menu não finge que tem. -->
   <UserControl.Styles>
     <Style Selector="TextBlock.section">
       <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
@@ -86,7 +89,8 @@
                   <ItemsControl ItemsSource="{Binding Runners}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
-                        <StackPanel Margin="{DynamicResource Margin.TableRow}" ToolTip.Tip="{Binding Detail}">
+                        <StackPanel Margin="{DynamicResource Margin.TableRow}" ToolTip.Tip="{Binding Detail}"
+                                    Background="Transparent" ContextRequested="OnRunContextRequested">
                           <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Grid.Column="0" Classes="callout" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="1" Classes="state" Margin="{DynamicResource Margin.AfterField}"
@@ -95,6 +99,7 @@
                           </Grid>
                           <TextBlock Classes="meta" Text="{Binding Job}" IsVisible="{Binding HasJob}" />
                           <TextBlock Classes="meta" Text="{Binding JobOrigin}" IsVisible="{Binding HasJob}" />
+                          <TextBlock Classes="state busy" Text="cancelamento pedido…" IsVisible="{Binding IsCancelRequested}" />
                         </StackPanel>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -125,12 +130,14 @@
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
                         <!-- 28: largura da posição (até 99º), para os títulos alinharem. -->
-                        <Grid ColumnDefinitions="28,*" Margin="{DynamicResource Margin.TableRow}">
+                        <Grid ColumnDefinitions="28,*" Margin="{DynamicResource Margin.TableRow}"
+                              Background="Transparent" ContextRequested="OnRunContextRequested">
                           <TextBlock Grid.Column="0" Classes="position" Text="{Binding Position}" />
                           <StackPanel Grid.Column="1">
                             <TextBlock Classes="callout" Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
                             <TextBlock Classes="meta" Text="{Binding Origin}" />
                             <TextBlock Classes="meta" Text="{Binding Wait}" />
+                            <TextBlock Classes="state busy" Text="cancelamento pedido…" IsVisible="{Binding IsCancelRequested}" />
                           </StackPanel>
                         </Grid>
                       </DataTemplate>
@@ -150,10 +157,12 @@
           <ItemsControl ItemsSource="{Binding WaitingRuns}">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
-                <StackPanel Margin="{DynamicResource Margin.TableRow}">
+                <StackPanel Margin="{DynamicResource Margin.TableRow}"
+                            Background="Transparent" ContextRequested="OnRunContextRequested">
                   <TextBlock Classes="callout" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                   <TextBlock Classes="meta" Text="{Binding Origin}" />
                   <TextBlock Classes="meta" Text="{Binding Wait}" />
+                  <TextBlock Classes="state busy" Text="cancelamento pedido…" IsVisible="{Binding IsCancelRequested}" />
                 </StackPanel>
               </DataTemplate>
             </ItemsControl.ItemTemplate>

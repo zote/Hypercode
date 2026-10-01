@@ -21,6 +21,7 @@ public sealed record ActionsRunner(
 /// </summary>
 public sealed record ActionsJob(
     long Id,
+    long RunId,
     string Repository,
     string Name,
     string Workflow,
@@ -54,6 +55,30 @@ public sealed record ActionsWaitingRun(
     string? Url);
 
 /// <summary>
+/// Um run como o painel o nomeia ao agir sobre ele (#133): o título é o que o GitHub mostra na
+/// lista de runs (o <c>display_title</c>, quase sempre o título do PR ou do commit); o número é
+/// o <c>#</c> do run dentro do workflow.
+/// </summary>
+public sealed record ActionsRun(
+    long Id,
+    string Repository,
+    string Workflow,
+    string Title,
+    int? Number,
+    string? Branch,
+    int? PullRequest,
+    string? Url);
+
+/// <summary>
+/// Se dá para cancelar runs de um repositório: null em <see cref="Reason"/> é que dá. Quem não
+/// pode vê os itens desabilitados com o motivo, em vez de descobrir no clique.
+/// </summary>
+public sealed record WriteAccess(string? Reason)
+{
+    public bool CanWrite => Reason is null;
+}
+
+/// <summary>
 /// Uma fila: os jobs que esperam o mesmo conjunto de labels. Um job pedindo <c>mac-studio</c>
 /// não disputa com um pedindo <c>ARM64</c>, então cada conjunto é uma fila separada.
 /// </summary>
@@ -64,6 +89,7 @@ public sealed record ActionsSnapshot(
     IReadOnlyList<ActionsRunner> Runners,
     IReadOnlyList<ActionsJob> Jobs,
     IReadOnlyList<ActionsWaitingRun> WaitingRuns,
+    IReadOnlyList<ActionsRun> Runs,
     IReadOnlyList<string> RunnerProblems,
     IReadOnlyList<string> QueueProblems,
     ApiBudget? Budget,
@@ -183,7 +209,15 @@ public static partial class ActionsQueue
     }
 
     /// <summary>Um run como o <c>/actions/runs</c> o devolve: o que os jobs dele herdam.</summary>
-    internal sealed record RunInfo(long Id, string Workflow, string Status, string? Branch, int? PullRequest, DateTimeOffset CreatedAt, string? Url);
+    internal sealed record RunInfo(long Id, string Workflow, string Status, string? Branch, int? PullRequest, DateTimeOffset CreatedAt, string? Url)
+    {
+        public string? Title { get; init; }
+
+        public int? Number { get; init; }
+
+        public ActionsRun ToRun(string repository)
+            => new(Id, repository, Workflow, string.IsNullOrWhiteSpace(Title) ? Workflow : Title, Number, Branch, PullRequest, Url);
+    }
 
     internal static IReadOnlyList<RunInfo> ParseRuns(JsonElement root)
     {
@@ -199,7 +233,11 @@ public static partial class ActionsQueue
                 String(run, "head_branch"),
                 FirstPullRequest(run),
                 Date(run, "created_at") ?? DateTimeOffset.MinValue,
-                String(run, "html_url")))
+                String(run, "html_url"))
+            {
+                Title = String(run, "display_title"),
+                Number = Int64(run, "run_number") is { } number and <= int.MaxValue ? (int)number : null,
+            })
             .ToList();
     }
 
@@ -213,6 +251,7 @@ public static partial class ActionsQueue
             .Where(job => job.ValueKind == JsonValueKind.Object && Int64(job, "id") is not null)
             .Select(job => new ActionsJob(
                 Int64(job, "id")!.Value,
+                run.Id,
                 repository,
                 String(job, "name") ?? "job",
                 String(job, "workflow_name") ?? run.Workflow,
@@ -226,6 +265,32 @@ public static partial class ActionsQueue
                 run.PullRequest,
                 String(job, "html_url")))
             .ToList();
+    }
+
+    /// <summary>
+    /// Se a conta e o token do gh podem cancelar runs de um repositório, pela resposta do
+    /// <c>GET /repos/{owner}/{repo}</c>. Duas travas: a conta precisa de escrita no repositório
+    /// (<c>permissions.push</c>) e, em token OAuth ou clássico — os que trazem o cabeçalho
+    /// <c>X-OAuth-Scopes</c> —, do escopo <c>repo</c> (<c>public_repo</c> basta em repositório
+    /// público). Token fine-grained não traz o cabeçalho, e aí fica só a primeira trava: a
+    /// permissão de Actions dele só aparece no clique.
+    /// </summary>
+    internal static WriteAccess ParseWriteAccess(JsonElement repo, string repository, string? scopes)
+    {
+        if (repo.TryGetProperty("permissions", out var permissions) && permissions.ValueKind == JsonValueKind.Object
+            && !new[] { "admin", "maintain", "push" }.Any(name => permissions.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True))
+            return new WriteAccess($"Sua conta só lê {repository}: cancelar um run pede permissão de escrita no repositório.");
+
+        if (scopes is null) return new WriteAccess(null);
+
+        var granted = scopes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var isPrivate = !repo.TryGetProperty("private", out var flag) || flag.ValueKind != JsonValueKind.False;
+        var enough = granted.Contains("repo", StringComparer.Ordinal)
+                     || (!isPrivate && granted.Contains("public_repo", StringComparer.Ordinal));
+
+        return enough
+            ? new WriteAccess(null)
+            : new WriteAccess("O token do gh não tem o escopo repo, que cancelar um run pede: gh auth refresh -s repo.");
     }
 
     private static int? FirstPullRequest(JsonElement run)

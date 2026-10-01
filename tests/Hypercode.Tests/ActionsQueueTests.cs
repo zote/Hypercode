@@ -16,7 +16,7 @@ public sealed class ActionsQueueTests
         string status,
         DateTimeOffset createdAt,
         params string[] labels)
-        => new(id, repository, $"job {id}", "CI", status, labels, createdAt, null, null, null, "main", null, null);
+        => new(id, id, repository, $"job {id}", "CI", status, labels, createdAt, null, null, null, "main", null, null);
 
     // ── Filas ───────────────────────────────────────────────────────────────
 
@@ -394,6 +394,7 @@ public sealed class ActionsQueueTests
             (runners ?? Array.Empty<ActionsRunner>()).ToList(),
             (jobs ?? Array.Empty<ActionsJob>()).ToList(),
             Array.Empty<ActionsWaitingRun>(),
+            Array.Empty<ActionsRun>(),
             Array.Empty<string>(),
             Array.Empty<string>(),
             null,
@@ -442,7 +443,8 @@ public sealed class ActionsQueueTests
         var first = api.Calls.Count;
         await viewModel.CheckAsync();
 
-        Assert.Equal(3, first);
+        // Fila queued e in_progress, grupos de runner e — só no primeiro ciclo — a permissão de escrita (#133).
+        Assert.Equal(4, first);
         Assert.Equal(first, api.Calls.Count);
         Assert.True(viewModel.HasNoQueue);
     }
