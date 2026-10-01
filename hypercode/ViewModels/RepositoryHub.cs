@@ -39,7 +39,7 @@ public sealed class RepositoryHub
     public void SaveSettings() => _saveSettings();
 
     /// <summary>A cota GraphQL é da conta: o que um repositório leu vale para os outros.</summary>
-    public void ShareBudget(RepositoryViewModel source, GraphQLBudget? budget)
+    public void ShareBudget(RepositoryViewModel source, ApiBudget? budget)
     {
         if (budget is null) return;
 

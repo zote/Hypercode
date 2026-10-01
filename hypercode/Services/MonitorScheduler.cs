@@ -25,8 +25,11 @@ public enum CadenceTier
     Dormant,
 }
 
-/// <summary>O que a consulta GraphQL devolve em rateLimit — a cota da conta, não só do app.</summary>
-public sealed record GraphQLBudget(int Limit, int Used, int Cost, DateTimeOffset ResetAt)
+/// <summary>
+/// Cota de uma API do GitHub — da conta, não só do app. A do GraphQL vem no rateLimit da
+/// consulta; a da REST, nos cabeçalhos X-RateLimit-*. São cotas separadas.
+/// </summary>
+public sealed record ApiBudget(int Limit, int Used, int Cost, DateTimeOffset ResetAt)
 {
     public double UsedFraction => Limit <= 0 ? 0 : (double)Used / Limit;
 }
@@ -89,7 +92,7 @@ public sealed class MonitorScheduler
     public bool IsWindowMinimized { get; set; }
 
     /// <summary>Última cota lida; null antes da primeira consulta GraphQL.</summary>
-    public GraphQLBudget? Budget { get; private set; }
+    public ApiBudget? Budget { get; private set; }
 
     public bool IsPaused => Profile == MonitorProfile.Off || IsWindowMinimized;
 
@@ -158,7 +161,7 @@ public sealed class MonitorScheduler
 
     public bool IsBackingOff(DateTimeOffset now) => BudgetFactor(now) > 1;
 
-    public void RecordBudget(GraphQLBudget? budget)
+    public void RecordBudget(ApiBudget? budget)
     {
         if (budget is not null) Budget = budget;
     }
