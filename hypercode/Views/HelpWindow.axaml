@@ -106,8 +106,8 @@
         <TextBlock Classes="p" Text="Reordenar a fila não existe: a API do GitHub não tem prioridade nem posição. O único jeito de alguém entrar antes é cancelar o que está na frente." />
 
         <TextBlock Classes="h2" Text="Abrir no terminal" />
-        <TextBlock Classes="p" Text="Duplo-clique ou Enter abre uma janela nova do iTerm2 na pasta do worktree e roda o Comando das configurações, ⌘, (por padrão claude). Sem iTerm2 instalado, usa o Terminal.app. Na primeira vez o macOS pede permissão de automação." />
-        <TextBlock Classes="p" Text="Se o worktree já tem terminal aberto — o ícone de terminal na linha —, o duplo-clique e o Enter trazem esse terminal para a frente em vez de abrir outro; havendo vários, o mais recente. Funciona com o iTerm2 e com o Terminal.app. Para abrir outro de propósito, use Abrir no iTerm2 rodando o comando ou Abrir o terminal, no menu de contexto; Ir para o terminal aberto faz só o foco." />
+        <TextBlock Classes="p" Text="Duplo-clique ou Enter abre uma janela nova do terminal na pasta do worktree e roda o Comando das configurações, ⌘, (por padrão claude). O terminal também se escolhe lá: iTerm2, Terminal.app, Ghostty, WezTerm, Alacritty ou kitty, entre os instalados. No padrão do sistema, o iTerm2 se instalado e, senão, o Terminal.app. Na primeira vez o macOS pede permissão de automação; com o worktree num disco externo, o terminal escolhido também precisa da de Volumes removíveis." />
+        <TextBlock Classes="p" Text="Se o worktree já tem terminal aberto — o ícone de terminal na linha —, o duplo-clique e o Enter trazem esse terminal para a frente em vez de abrir outro; havendo vários, o mais recente. Funciona com o iTerm2 e com o Terminal.app; os demais terminais não expõem as janelas, e com eles o duplo-clique sempre abre uma nova. Para abrir outro de propósito, use Abrir no terminal rodando o comando ou Abrir o terminal, no menu de contexto; Ir para o terminal aberto faz só o foco." />
 
       </StackPanel>
     </ScrollViewer>

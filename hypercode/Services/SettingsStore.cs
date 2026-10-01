@@ -33,6 +33,15 @@ public sealed class Settings
     public string SortColumn { get; set; } = "name";
     public bool SortDescending { get; set; }
 
+    /// <summary>
+    /// O aplicativo de terminal: o id de um de <see cref="TerminalLauncher.Known"/>, ou null para
+    /// o padrão do sistema (iTerm2 se instalado, senão Terminal.app). Só global: o terminal é da
+    /// máquina, não do repositório. Um id que deixou de estar instalado continua aqui — o app usa
+    /// o padrão e avisa, e reinstalar o terminal o traz de volta.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Terminal { get; set; }
+
     /// <summary>Marca, no diálogo de criação, o checkbox de abrir o terminal no worktree novo.</summary>
     public bool OpenTerminalAfterCreate { get; set; } = true;
 

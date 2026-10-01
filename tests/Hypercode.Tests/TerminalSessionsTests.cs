@@ -63,7 +63,7 @@ public sealed class TerminalSessionsTests
 
         Assert.Equal(TerminalApp.ITerm2, presence["/dev/repo"].Sessions.Single().App);
         Assert.Equal(
-            new[] { TerminalApp.Other, TerminalApp.Terminal },
+            new[] { TerminalApp.Ghostty, TerminalApp.Terminal },
             presence["/dev/outro"].Sessions.Select(session => session.App));
     }
 
@@ -115,8 +115,34 @@ public sealed class TerminalSessionsTests
     }
 
     [Fact]
-    public void TerminalDesconhecidoNaoRecebeFoco()
+    public void TerminalSemFocoPorTtyNaoRecebeFoco()
         => Assert.Null(Assign((600, "/dev/outro"))["/dev/outro"].Focusable);
+
+    /// <summary>
+    /// As árvores dos terminais novos (#142): o Ghostty põe o login como filho dele, como o
+    /// Terminal.app; o kitty, o Alacritty e o WezTerm põem o shell direto.
+    /// </summary>
+    [Theory]
+    [InlineData("/Applications/Ghostty.app/Contents/MacOS/ghostty", "/usr/bin/login -flp voce /bin/bash --noprofile --norc -c exec -l /bin/zsh", TerminalApp.Ghostty, "Ghostty")]
+    [InlineData("/Applications/kitty.app/Contents/MacOS/kitty", "/bin/zsh --login", TerminalApp.Kitty, "kitty")]
+    [InlineData("/Applications/Alacritty.app/Contents/MacOS/alacritty", "/bin/zsh -l", TerminalApp.Alacritty, "Alacritty")]
+    [InlineData("/Applications/WezTerm.app/Contents/MacOS/wezterm-gui", "-zsh", TerminalApp.WezTerm, "WezTerm")]
+    public void TerminalNovoEhReconhecidoPelaAscendencia(string app, string child, TerminalApp expected, string name)
+    {
+        var processes = TerminalSessions.ParsePs($"""
+              5000     1 ??          2:00:00 {app}
+              5001  5000 ttys020       10:00 {child}
+              5002  5001 ttys020       09:59 -zsh
+              5003  5002 ttys020       09:00 claude
+            """);
+        var byPid = processes.ToDictionary(process => process.Pid);
+
+        Assert.Equal(expected, TerminalSessions.AppOf(byPid[5003], byPid));
+
+        var session = TerminalSessions.Assign(new[] { "/dev/repo" }, new[] { (5003, "/dev/repo") }, processes, selfPid: 1)["/dev/repo"].Sessions.Single();
+        Assert.Equal(name, session.AppName);
+        Assert.False(session.CanFocus);
+    }
 
     [Fact]
     public void SessaoDoZmxEhDeMultiplexadorESemFoco()
@@ -308,7 +334,7 @@ public sealed class TerminalSessionsTests
 
     private static readonly TerminalSession ITerm2Session = new("/dev/ttys001", TerminalApp.ITerm2, TimeSpan.FromMinutes(5), null);
     private static readonly TerminalSession ZmxSession = new("/dev/ttys009", TerminalApp.Multiplexer, TimeSpan.FromHours(43), null, "supacode (zmx)");
-    private static readonly TerminalSession GhosttySession = new("/dev/ttys004", TerminalApp.Other, TimeSpan.FromMinutes(1), null);
+    private static readonly TerminalSession GhosttySession = new("/dev/ttys004", TerminalApp.Ghostty, TimeSpan.FromMinutes(1), null);
 
     [Fact]
     public void TerminalGanhaDoMultiplexadorQueGanhaDoProcesso()
@@ -340,4 +366,13 @@ public sealed class TerminalSessionsTests
     [Fact]
     public void TerminalDesconhecidoContinuaComOIconeDeTerminal()
         => Assert.Equal(BadgeKind.TerminalOpen, RowWith(ZmxSession, GhosttySession).GitBadges.First().Kind);
+
+    [Fact]
+    public void IrParaOTerminalDizPorQueEstaDesabilitado()
+    {
+        Assert.Null(RowWith(ITerm2Session).FocusTerminalUnavailableReason);
+        Assert.Equal("Nenhum terminal aberto neste worktree.", RowWith().FocusTerminalUnavailableReason);
+        Assert.Equal("Só há sessão do supacode (zmx), sem janela para onde ir.", RowWith(ZmxSession).FocusTerminalUnavailableReason);
+        Assert.StartsWith("A sessão aberta aqui é do Ghostty, supacode (zmx), que não expõe", RowWith(GhosttySession, ZmxSession).FocusTerminalUnavailableReason);
+    }
 }

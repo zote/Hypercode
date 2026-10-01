@@ -65,7 +65,18 @@
       <TextBox Name="CommandBox" Text="{Binding Command, Mode=TwoWay}" Watermark="claude"
                IsEnabled="{Binding CanEditCommand}" />
       <TextBlock Classes="help"
-                 Text="Duplo-clique (ou Enter) abre uma janela nova do iTerm2 no worktree e roda o comando. Vazio volta a ser claude." />
+                 Text="O que o duplo-clique (ou Enter) roda na janela nova do terminal, dentro do worktree. Vazio volta a ser claude." />
+    </StackPanel>
+
+    <!-- Só no global: o terminal é da máquina, não do repositório. -->
+    <StackPanel Classes="setting" IsVisible="{Binding !IsRepositoryScope}">
+      <TextBlock Classes="label" Text="Terminal" />
+      <ComboBox HorizontalAlignment="Stretch"
+                ItemsSource="{Binding TerminalOptions}" SelectedItem="{Binding SelectedTerminal, Mode=TwoWay}" />
+      <TextBlock Classes="help" Foreground="{DynamicResource Brush.Text.Warning}"
+                 Text="{Binding TerminalNotice}"
+                 IsVisible="{Binding TerminalNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      <TextBlock Classes="help" Text="{Binding TerminalHint}" />
     </StackPanel>
 
     <StackPanel Classes="setting">

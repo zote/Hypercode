@@ -127,6 +127,9 @@ public sealed class RepositoryViewModel : ObservableObject
     /// </summary>
     public void RefreshSettings()
     {
+        // O terminal é global e fica fora do EffectiveSettings: o rótulo muda mesmo sem o resto mudar.
+        RaisePropertyChanged(nameof(OpenTerminalLabel));
+
         var previous = _effective;
         _effective = EffectiveSettings.Resolve(_hub.Settings, RepositoryPath);
         if (previous == _effective) return;
@@ -1611,7 +1614,9 @@ public sealed class RepositoryViewModel : ObservableObject
     {
         if (row is null) return;
         if (!await TryFocusTerminalAsync(row).ConfigureAwait(true))
-            StatusMessage = $"Nenhum terminal do iTerm2 ou do Terminal aberto em {row.Name}";
+            StatusMessage = row.FocusTerminalUnavailableReason is { } reason
+                ? $"{row.Name}: {reason}"
+                : $"Nenhum terminal do iTerm2 ou do Terminal aberto em {row.Name}";
     }
 
     private async Task<bool> TryFocusTerminalAsync(WorktreeRow row)
@@ -1654,6 +1659,9 @@ public sealed class RepositoryViewModel : ObservableObject
         Worktrees.FirstOrDefault(row => row.Worktree.IsMain && !row.Worktree.IsBare)?.FullPath;
 
     public bool CanCreateWorktree => MainWorktreePath is not null;
+
+    /// <summary>O botão do rodapé, com o nome do terminal escolhido.</summary>
+    public string OpenTerminalLabel => $"Abrir no {TerminalLauncher.TerminalName}";
 
     /// <summary>O comando do duplo-clique neste repositório: o override dele ou o global.</summary>
     public string EffectiveCommand => _effective.Command;
@@ -1706,9 +1714,10 @@ public sealed class RepositoryViewModel : ObservableObject
         try
         {
             await TerminalLauncher.LaunchAsync(row.FullPath, command, TerminalTitle(row)).ConfigureAwait(true);
-            StatusMessage = command is null
+            var opened = command is null
                 ? $"{TerminalLauncher.TerminalName} aberto em {row.Name}"
                 : $"{TerminalLauncher.TerminalName} aberto em {row.Name} · {command}";
+            StatusMessage = TerminalLauncher.Current.Notice is { } notice ? $"{opened} · {notice}" : opened;
         }
         catch (Exception exception)
         {
@@ -2064,7 +2073,7 @@ public sealed class RepositoryViewModel : ObservableObject
     private const int BatchConcurrency = 8;
 
     public Task<BatchOutcome> LaunchManyAsync(IReadOnlyList<WorktreeRow> rows)
-        => LaunchManyAsync("Abrir no iTerm2", rows, row => row.CanLaunch, EffectiveCommand);
+        => LaunchManyAsync($"Abrir no {TerminalLauncher.TerminalName}", rows, row => row.CanLaunch, EffectiveCommand);
 
     public Task<BatchOutcome> OpenShellManyAsync(IReadOnlyList<WorktreeRow> rows)
         => LaunchManyAsync("Abrir o terminal", rows, row => row.CanLaunch, command: null);

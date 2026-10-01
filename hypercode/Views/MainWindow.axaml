@@ -302,8 +302,8 @@
            Opening põe a contagem nos rótulos e habilita o que ao menos uma linha suporta. -->
       <ListBox.ContextMenu>
         <ContextMenu Opening="OnListContextMenuOpening">
-          <MenuItem Name="FocusTerminalMenuItem" Click="OnFocusTerminalMenuClick"
-                    ToolTip.Tip="Traz para a frente a sessão do iTerm2 ou do Terminal aberta neste worktree — a mais recente, se houver várias. É o que o duplo-clique faz quando há uma." />
+          <!-- O tooltip vem do Opening: o que o item faz ou, desabilitado, por quê. -->
+          <MenuItem Name="FocusTerminalMenuItem" Click="OnFocusTerminalMenuClick" ToolTip.ShowOnDisabled="True" />
           <MenuItem Name="LaunchMenuItem" Click="OnOpenTerminalMenuClick"
                     ToolTip.Tip="Abre uma janela nova, mesmo que já haja terminal aberto aqui." />
           <MenuItem Name="ShellMenuItem" Click="OnOpenShellMenuClick"
@@ -390,7 +390,7 @@
         <Button Grid.Column="4" Content="{Binding CleanupButtonLabel}" Margin="{DynamicResource Margin.BeforeButton}"
                 Click="OnCleanupClick" IsEnabled="{Binding CanCleanupManually}"
                 ToolTip.Tip="{Binding CleanupToolTip}" ToolTip.ShowOnDisabled="True" />
-        <Button Grid.Column="5" Content="Abrir no iTerm2" Click="OnOpenTerminalClick"
+        <Button Grid.Column="5" Content="{Binding OpenTerminalLabel}" Click="OnOpenTerminalClick"
                 IsEnabled="{Binding SelectedWorktree, Converter={x:Static ObjectConverters.IsNotNull}}" />
       </Grid>
     </Border>

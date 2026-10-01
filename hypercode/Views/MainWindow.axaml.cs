@@ -575,7 +575,13 @@ public partial class MainWindow : Window
         // Ir para o terminal é de uma linha só: com várias, qual traria para a frente?
         FocusTerminalMenuItem.Header = "Ir para o terminal aberto";
         FocusTerminalMenuItem.IsEnabled = rows is [{ CanFocusTerminal: true }];
-        Configure(LaunchMenuItem, "Abrir no iTerm2 rodando o comando", rows, row => row.CanLaunch);
+        ToolTip.SetTip(FocusTerminalMenuItem, rows switch
+        {
+            [{ FocusTerminalUnavailableReason: { } reason }] => reason,
+            [_] => "Traz para a frente a sessão do iTerm2 ou do Terminal aberta neste worktree — a mais recente, se houver várias. É o que o duplo-clique faz quando há uma.",
+            _ => "Vale para uma linha só: com várias selecionadas, qual traria para a frente?",
+        });
+        Configure(LaunchMenuItem, $"Abrir no {TerminalLauncher.TerminalName} rodando o comando", rows, row => row.CanLaunch);
         Configure(ShellMenuItem, "Abrir o terminal", rows, row => row.CanLaunch);
         Configure(ResumeClaudeMenuItem, "Retomar a sessão do claude", rows, row => row.HasClaudeSession);
         Configure(RevealMenuItem, "Revelar no Finder", rows, _ => true);
@@ -653,7 +659,7 @@ public partial class MainWindow : Window
 
         var rows = MenuTargets();
         if (rows.Count == 1) await viewModel.LaunchAsync(rows[0]);
-        else await OpenManyAsync("Abrir no iTerm2", rows, row => row.CanLaunch, viewModel.LaunchManyAsync);
+        else await OpenManyAsync($"Abrir no {TerminalLauncher.TerminalName}", rows, row => row.CanLaunch, viewModel.LaunchManyAsync);
     }
 
     private async void OnFocusTerminalMenuClick(object? sender, RoutedEventArgs e)
