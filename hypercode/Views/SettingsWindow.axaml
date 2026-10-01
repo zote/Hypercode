@@ -172,5 +172,21 @@
                  Text="Sem confirmação: o monitor remove os concluídos passada a carência, e o botão do rodapé vira Limpeza automática, com o histórico no tooltip. Roda em todas as abas em que estiver ligada, inclusive as de trás. Pula os travados, os que têm um terminal aberto dentro e os que têm arquivo ignorado fora de bin/ e obj/ (.env, appsettings.Development.json) — o git os apagaria junto. Minimizado, pausa." />
     </StackPanel>
 
+    <!-- Só no global: os runners são da organização, e a fila não é de uma aba. -->
+    <StackPanel Classes="setting" IsVisible="{Binding !IsRepositoryScope}">
+      <TextBlock Classes="label" Text="Fila do GitHub Actions" />
+      <!-- Grava ao sair do campo, não a cada tecla: um nome pela metade viraria uma leitura que dá 404.
+           O Closing da janela grava o que ainda estiver no campo. 72: três linhas à vista. -->
+      <TextBox Name="ActionsRepositoriesBox"
+               Text="{Binding ActionsRepositoriesText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+               AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="72"
+               Watermark="owner/repo — um por linha" FontFamily="{DynamicResource Font.Mono}" />
+      <TextBlock Classes="help" Foreground="{DynamicResource Brush.Text.Warning}"
+                 Text="{Binding ActionsRepositoriesIgnored}"
+                 IsVisible="{Binding ActionsRepositoriesIgnored, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      <TextBlock Classes="help"
+                 Text="Os repositórios cuja fila o painel do Actions acompanha (botão da barra, ⇧⌘A). Os runners são da organização e todos os repositórios dela disputam os mesmos, mas não há endpoint de fila da org inteira: varrer todos estoura a cota. Escolha os que importam — cada um custa ~3 chamadas por ciclo, na cadência do monitoramento. Aceita owner/repo ou a URL do GitHub." />
+    </StackPanel>
+
   </StackPanel>
 </Window>

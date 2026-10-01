@@ -25,8 +25,11 @@ public enum CadenceTier
     Dormant,
 }
 
-/// <summary>O que a consulta GraphQL devolve em rateLimit — a cota da conta, não só do app.</summary>
-public sealed record GraphQLBudget(int Limit, int Used, int Cost, DateTimeOffset ResetAt)
+/// <summary>
+/// Cota de uma API do GitHub — da conta, não só do app. A do GraphQL vem no rateLimit da
+/// consulta; a da REST, nos cabeçalhos X-RateLimit-*. São cotas separadas.
+/// </summary>
+public sealed record ApiBudget(int Limit, int Used, int Cost, DateTimeOffset ResetAt)
 {
     public double UsedFraction => Limit <= 0 ? 0 : (double)Used / Limit;
 }
@@ -65,6 +68,12 @@ public sealed class MonitorScheduler
     /// </summary>
     public static readonly TimeSpan TerminalScanCadence = TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    /// A fila do GitHub Actions (#130): runners e jobs mudam em segundos, e o painel só existe
+    /// aberto. Com dois repositórios acompanhados são ~10 chamadas REST por ciclo.
+    /// </summary>
+    public static readonly TimeSpan ActionsCadence = TimeSpan.FromSeconds(30);
+
     /// <summary>Janela em segundo plano: tudo fica mais espaçado.</summary>
     public const double BackgroundFactor = 3;
 
@@ -81,6 +90,7 @@ public sealed class MonitorScheduler
     private DateTimeOffset _lastFetch = DateTimeOffset.MinValue;
     private DateTimeOffset _lastTerminalProbe = DateTimeOffset.MinValue;
     private DateTimeOffset _lastTerminalScan = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastActions = DateTimeOffset.MinValue;
 
     public MonitorProfile Profile { get; set; } = MonitorProfile.Balanced;
 
@@ -89,7 +99,7 @@ public sealed class MonitorScheduler
     public bool IsWindowMinimized { get; set; }
 
     /// <summary>Última cota lida; null antes da primeira consulta GraphQL.</summary>
-    public GraphQLBudget? Budget { get; private set; }
+    public ApiBudget? Budget { get; private set; }
 
     public bool IsPaused => Profile == MonitorProfile.Off || IsWindowMinimized;
 
@@ -158,7 +168,7 @@ public sealed class MonitorScheduler
 
     public bool IsBackingOff(DateTimeOffset now) => BudgetFactor(now) > 1;
 
-    public void RecordBudget(GraphQLBudget? budget)
+    public void RecordBudget(ApiBudget? budget)
     {
         if (budget is not null) Budget = budget;
     }
@@ -263,6 +273,18 @@ public sealed class MonitorScheduler
     }
 
     public void MarkTerminalsProbed(DateTimeOffset now) => _lastTerminalProbe = now;
+
+    /// <summary>
+    /// A leitura da fila do Actions venceu: segue perfil, janela e cota, como os PRs. A cota é a
+    /// que <see cref="RecordBudget"/> recebeu — para a fila, a da REST, lida nos cabeçalhos.
+    /// </summary>
+    public bool IsActionsDue(DateTimeOffset now)
+        => Factor(now) is { } factor && now - _lastActions >= ActionsCadence * factor;
+
+    public void MarkActionsChecked(DateTimeOffset now) => _lastActions = now;
+
+    /// <summary>O painel acabou de abrir: a próxima pergunta já vence, sem esperar o ciclo.</summary>
+    public void ExpireActions() => _lastActions = DateTimeOffset.MinValue;
 
     /// <summary>Repositório trocado: nada do histórico anterior vale.</summary>
     public void Reset()

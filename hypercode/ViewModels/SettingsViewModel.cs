@@ -30,6 +30,7 @@ public sealed class SettingsViewModel : ObservableObject
         nameof(WorktreesRoot), nameof(WorktreesRootUsesGlobal), nameof(CanEditWorktreesRoot), nameof(IsWorktreesRootOverridden),
         nameof(WorktreesRootPreview),
         nameof(KeepSlashes), nameof(KeepSlashesUsesGlobal), nameof(CanEditKeepSlashes), nameof(IsKeepSlashesOverridden),
+        nameof(ActionsRepositoriesText), nameof(ActionsRepositoriesIgnored),
     };
 
     private readonly MainViewModel _main;
@@ -230,6 +231,43 @@ public sealed class SettingsViewModel : ObservableObject
 
     public bool IsKeepSlashesOverridden => IsRepositoryScope && !KeepSlashesUsesGlobal;
     public bool CanEditKeepSlashes => !IsRepositoryScope || !KeepSlashesUsesGlobal;
+
+    // ── Fila do GitHub Actions (só global) ─────────────────────────────────
+
+    private string? _actionsIgnored;
+
+    /// <summary>
+    /// Os repositórios da fila do Actions, um por linha. Não tem override: os runners são da
+    /// organização, e a fila não é de uma aba. Linha que não é owner/repo (nem URL do GitHub) é
+    /// ignorada, e a tela diz qual.
+    /// </summary>
+    public string ActionsRepositoriesText
+    {
+        get => string.Join("\n", Global.ActionsRepositories);
+        set
+        {
+            var lines = (value ?? string.Empty)
+                .Split(new[] { '\n', '\r', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0)
+                .ToList();
+
+            var ignored = lines.Where(line => ActionsQueue.NormalizeRepository(line) is null).ToList();
+            _actionsIgnored = ignored.Count == 0 ? null : "Ignorado — não é owner/repo: " + string.Join(", ", ignored);
+
+            var repositories = ActionsQueue.ParseRepositories(value).ToList();
+            if (repositories.SequenceEqual(Global.ActionsRepositories, StringComparer.Ordinal))
+            {
+                RaiseFields();
+                return;
+            }
+
+            Global.ActionsRepositories = repositories;
+            Commit();
+        }
+    }
+
+    public string? ActionsRepositoriesIgnored => _actionsIgnored;
 
     // ── Gravação ────────────────────────────────────────────────────────────
 

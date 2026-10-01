@@ -188,7 +188,7 @@ public sealed record PullRequestLookup(
     IReadOnlyDictionary<string, PullRequestInfo> ByBranch,
     string? Warning,
     bool Failed = false,
-    GraphQLBudget? Budget = null)
+    ApiBudget? Budget = null)
 {
     public static PullRequestLookup Empty(string? warning = null) =>
         new(new Dictionary<string, PullRequestInfo>(StringComparer.OrdinalIgnoreCase), warning);
@@ -293,14 +293,14 @@ public static class GitHubService
     /// com 40). O rateLimit vem junto, de graça: é a leitura da cota que o monitoramento usa
     /// para recuar. Null em qualquer falha — quem chama cai para o pr list.
     /// </summary>
-    private static async Task<(Dictionary<string, PullRequestInfo> ByBranch, GraphQLBudget? Budget)?> TryLoadByBranchAsync(
+    private static async Task<(Dictionary<string, PullRequestInfo> ByBranch, ApiBudget? Budget)?> TryLoadByBranchAsync(
         string gh,
         string repositoryPath,
         IReadOnlyCollection<string> branches,
         CancellationToken cancellationToken)
     {
         var byBranch = new Dictionary<string, PullRequestInfo>(StringComparer.OrdinalIgnoreCase);
-        GraphQLBudget? budget = null;
+        ApiBudget? budget = null;
 
         foreach (var chunk in branches.Distinct(StringComparer.Ordinal).Chunk(BranchesPerQuery))
         {
@@ -367,7 +367,7 @@ public static class GitHubService
         return (byBranch, budget);
     }
 
-    private static GraphQLBudget? ParseBudget(JsonElement data)
+    private static ApiBudget? ParseBudget(JsonElement data)
     {
         if (!data.TryGetProperty("rateLimit", out var rateLimit)
             || rateLimit.ValueKind != JsonValueKind.Object
@@ -378,7 +378,7 @@ public static class GitHubService
             || !DateTimeOffset.TryParse(resetAt.GetString(), out var reset))
             return null;
 
-        return new GraphQLBudget(limit.GetInt32(), used.GetInt32(), cost.GetInt32(), reset);
+        return new ApiBudget(limit.GetInt32(), used.GetInt32(), cost.GetInt32(), reset);
     }
 
     /// <summary>

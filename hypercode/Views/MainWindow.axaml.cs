@@ -145,8 +145,90 @@ public partial class MainWindow : Window
 
     private async void OnOpened(object? sender, EventArgs e)
     {
+        if (Shell is not { } shell) return;
+
+        // A janela da fila volta se estava aberta ao sair.
+        if (shell.Actions.IsWindowOpen) ShowActionsWindow();
+
         // As abas da última sessão: a da frente carrega primeiro.
-        if (Shell is { } shell) await shell.OpenSavedAsync();
+        await shell.OpenSavedAsync();
+    }
+
+    // ── Fila do GitHub Actions (#130) ───────────────────────────────────────
+
+    private ActionsQueueWindow? _actionsWindow;
+
+    /// <summary>A janela própria da fila, se aberta.</summary>
+    internal ActionsQueueWindow? ActionsWindow => _actionsWindow;
+    private bool _isClosingApp;
+
+    private void OnToggleActionsPanelClick(object? sender, RoutedEventArgs e) => ToggleActionsPanel();
+
+    private void OnCloseActionsPanelClick(object? sender, RoutedEventArgs e)
+    {
+        if (Shell is { } shell) shell.Actions.IsPanelOpen = false;
+    }
+
+    /// <summary>
+    /// ⇧⌘A e o botão da barra. Com a janela própria aberta e o painel recolhido, traz a janela
+    /// para a frente em vez de abrir uma segunda view ao lado.
+    /// </summary>
+    private void ToggleActionsPanel()
+    {
+        if (Shell is not { } shell) return;
+
+        if (!shell.Actions.IsPanelOpen && _actionsWindow is not null)
+        {
+            _actionsWindow.Activate();
+            return;
+        }
+
+        shell.Actions.IsPanelOpen = !shell.Actions.IsPanelOpen;
+    }
+
+    /// <summary>Destacar: a fila vai para a janela própria e o painel recolhe.</summary>
+    private void OnDetachActionsClick(object? sender, RoutedEventArgs e)
+    {
+        if (Shell is not { } shell) return;
+
+        ShowActionsWindow();
+        shell.Actions.IsPanelOpen = false;
+    }
+
+    /// <summary>
+    /// Abre a janela da fila, ou a traz para a frente. Sem dono: num segundo monitor ela não
+    /// flutua sobre a principal nem minimiza junto. Fechar a janela é o que a tira do estado
+    /// salvo; fechar o app, não — ela volta na próxima sessão.
+    /// </summary>
+    internal void ShowActionsWindow()
+    {
+        if (Shell is not { } shell) return;
+
+        if (_actionsWindow is not null)
+        {
+            _actionsWindow.Activate();
+            return;
+        }
+
+        var window = new ActionsQueueWindow { DataContext = shell.Actions };
+        window.Closed += (_, _) =>
+        {
+            _actionsWindow = null;
+            if (!_isClosingApp) shell.Actions.IsWindowOpen = false;
+        };
+
+        _actionsWindow = window;
+        shell.Actions.IsWindowOpen = true;
+        window.Show();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        // A janela da fila sozinha não segura o app aberto.
+        _isClosingApp = true;
+        _actionsWindow?.Close();
+        Shell?.Actions.Stop();
+        base.OnClosed(e);
     }
 
     private async void OnAddRepositoryClick(object? sender, RoutedEventArgs e)
@@ -203,6 +285,11 @@ public partial class MainWindow : Window
             case Key.W when ViewModel is { } repository:
                 e.Handled = true;
                 _ = ConfirmCloseTabAsync(repository);
+                break;
+
+            case Key.A when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
+                e.Handled = true;
+                ToggleActionsPanel();
                 break;
 
             case >= Key.D1 and <= Key.D9:

@@ -2418,14 +2418,14 @@ public sealed class RepositoryViewModel : ObservableObject
     /// Cota lida por este repositório. A cota GraphQL é da conta inteira, não do repositório:
     /// passa para as outras abas, que recuam juntas.
     /// </summary>
-    private void RecordBudget(GraphQLBudget? budget)
+    private void RecordBudget(ApiBudget? budget)
     {
         ObserveBudget(budget);
         _hub.ShareBudget(this, budget);
     }
 
     /// <summary>Cota lida por este ou por outro repositório.</summary>
-    public void ObserveBudget(GraphQLBudget? budget)
+    public void ObserveBudget(ApiBudget? budget)
     {
         _scheduler.RecordBudget(budget);
         UpdateMonitorNotice();

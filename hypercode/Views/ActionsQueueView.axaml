@@ -1,0 +1,166 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Hypercode.ViewModels"
+             x:Class="Hypercode.Views.ActionsQueueView">
+
+  <!-- A fila do GitHub Actions (#130). DataContext é o ActionsQueueViewModel, o mesmo no painel
+       da janela principal e na janela própria: uma view só, em dois lugares. O que é do lugar
+       (destacar, recolher) fica com quem hospeda. -->
+  <UserControl.Styles>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
+    </Style>
+    <Style Selector="TextBlock.group">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.meta">
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
+    </Style>
+    <Style Selector="TextBlock.wrap">
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.problem">
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Warning}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- Estado do runner: a cor reforça, o texto diz. -->
+    <Style Selector="TextBlock.state">
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.state.busy">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Warning}" />
+    </Style>
+    <Style Selector="TextBlock.state.idle">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Success}" />
+    </Style>
+    <Style Selector="TextBlock.position">
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*">
+
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="{DynamicResource Padding.Bar}">
+      <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center" Text="{Binding StatusLine}" />
+      <Button Grid.Column="1" Classes="borderless" Content="Atualizar" Click="OnRefreshClick"
+              IsEnabled="{Binding HasRepositories}"
+              ToolTip.Tip="Lê os runners e a fila agora, sem esperar o ciclo do monitoramento." />
+    </Grid>
+
+    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Margin="{DynamicResource Padding.Bar}" Spacing="{DynamicResource Spacing.Group}">
+
+        <!-- Sem repositório: diz o que configurar em vez de ficar vazio. -->
+        <StackPanel Spacing="{DynamicResource Spacing.Related}" IsVisible="{Binding HasNoRepositories}">
+          <TextBlock Classes="body emphasized" Text="Nenhum repositório acompanhado" />
+          <TextBlock Classes="callout muted wrap"
+                     Text="Escolha nas configurações (⌘,), em Fila do GitHub Actions, os repositórios cuja fila acompanhar — owner/repo, um por linha. Os runners da organização deles aparecem aqui, com o que cada um roda e a ordem estimada do que espera." />
+          <Button Content="Abrir as configurações…" HorizontalAlignment="Left" Click="OnSettingsClick" />
+        </StackPanel>
+
+        <!-- Runners -->
+        <StackPanel Spacing="{DynamicResource Spacing.Related}" IsVisible="{Binding HasRepositories}">
+          <TextBlock Classes="section" Text="RUNNERS" />
+          <TextBlock Classes="problem" Text="{Binding RunnerProblem}" IsVisible="{Binding HasRunnerProblem}" />
+          <TextBlock Classes="meta wrap" Text="Nenhum runner self-hosted nas organizações dos repositórios acompanhados."
+                     IsVisible="{Binding HasNoRunners}" />
+          <ItemsControl ItemsSource="{Binding RunnerGroups}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <StackPanel Spacing="{DynamicResource Space.XS}" Margin="{DynamicResource Margin.TableRow}">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Classes="group" Text="{Binding Name}" />
+                    <TextBlock Grid.Column="1" Classes="meta" Text="{Binding Summary}" />
+                  </Grid>
+                  <ItemsControl ItemsSource="{Binding Runners}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <StackPanel Margin="{DynamicResource Margin.TableRow}" ToolTip.Tip="{Binding Detail}">
+                          <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Classes="callout" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="1" Classes="state" Margin="{DynamicResource Margin.AfterField}"
+                                       Classes.busy="{Binding IsBusy}" Classes.idle="{Binding IsIdle}"
+                                       Text="{Binding StateLabel}" />
+                          </Grid>
+                          <TextBlock Classes="meta" Text="{Binding Job}" IsVisible="{Binding HasJob}" />
+                          <TextBlock Classes="meta" Text="{Binding JobOrigin}" IsVisible="{Binding HasJob}" />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- Fila -->
+        <StackPanel Spacing="{DynamicResource Spacing.Related}" IsVisible="{Binding HasRepositories}">
+          <TextBlock Classes="section" Text="FILA" />
+          <TextBlock Classes="meta wrap" Text="Ordem estimada pelo horário de entrada — o GitHub não expõe a posição."
+                     ToolTip.Tip="{x:Static vm:ActionsQueueViewModel.EstimateNotice}" />
+          <TextBlock Classes="problem" Text="{Binding QueueProblem}" IsVisible="{Binding HasQueueProblem}" />
+          <TextBlock Classes="meta wrap" Text="Nenhum job esperando runner." IsVisible="{Binding HasNoQueue}" />
+          <ItemsControl ItemsSource="{Binding Lanes}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <StackPanel Spacing="{DynamicResource Space.XS}" Margin="{DynamicResource Margin.TableRow}">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Classes="group mono" Text="{Binding Labels}" TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding Labels}" />
+                    <TextBlock Grid.Column="1" Classes="meta" Margin="{DynamicResource Margin.AfterField}" Text="{Binding Summary}" />
+                  </Grid>
+                  <ItemsControl ItemsSource="{Binding Jobs}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <!-- 28: largura da posição (até 99º), para os títulos alinharem. -->
+                        <Grid ColumnDefinitions="28,*" Margin="{DynamicResource Margin.TableRow}">
+                          <TextBlock Grid.Column="0" Classes="position" Text="{Binding Position}" />
+                          <StackPanel Grid.Column="1">
+                            <TextBlock Classes="callout" Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                            <TextBlock Classes="meta" Text="{Binding Origin}" />
+                            <TextBlock Classes="meta" Text="{Binding Wait}" />
+                          </StackPanel>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- Runs sem job: não disputam runner ainda, e a API não diz por quê. -->
+        <StackPanel Spacing="{DynamicResource Spacing.Related}" IsVisible="{Binding HasWaitingRuns}">
+          <TextBlock Classes="section" Text="RUNS SEM JOB AINDA" />
+          <TextBlock Classes="meta wrap"
+                     Text="Na fila, mas sem job criado: costuma ser o concurrency segurando o run, ou o GitHub ainda criando os jobs. A API não diz qual." />
+          <ItemsControl ItemsSource="{Binding WaitingRuns}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <StackPanel Margin="{DynamicResource Margin.TableRow}">
+                  <TextBlock Classes="callout" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Classes="meta" Text="{Binding Origin}" />
+                  <TextBlock Classes="meta" Text="{Binding Wait}" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>
