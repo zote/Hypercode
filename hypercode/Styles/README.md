@@ -94,6 +94,10 @@ versão clara/escura nem entram no teste. Com o azul padrão, o branco dá 6,1:1
 `Brush.Selection.Active` mas só 4,0:1 sobre `Brush.Accent`: texto sobre destaque vai
 sobre `Selection.Active`.
 
+`Brush.Accent.Pressed` não vem do `SystemAccentColorDark2` do Fluent, que na accent vermelha
+sai igual ao solto (#135): o App o deriva de `Brush.Selection.Active`, escurecendo em HSV
+(`Views/AccentPressed.cs`), e o `AccentPressedTests` confere que escurece em toda accent.
+
 ### Onde os valores diferem dos da Apple
 
 As cores de sistema do macOS foram pensadas para o fundo delas e nem todas passam em AA
