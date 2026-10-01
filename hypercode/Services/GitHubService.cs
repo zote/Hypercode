@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -329,7 +330,7 @@ public static class GitHubService
             ProcessResult result;
             try
             {
-                result = await ProcessRunner.RunAsync(gh, arguments, repositoryPath, TimeSpan.FromSeconds(60), cancellationToken)
+                result = await ProcessRunner.RunAsync(gh, arguments, repositoryPath, TimeSpan.FromSeconds(60), cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
             }
             catch (TimeoutException)
@@ -444,10 +445,10 @@ public static class GitHubService
         var gh = ExecutableLocator.Find("gh")
             ?? throw new InvalidOperationException("GitHub CLI (gh) não encontrado. Instale com: brew install gh");
 
-        var arguments = new List<string> { "run", "rerun", runId.ToString(), "--failed" };
+        var arguments = new List<string> { "run", "rerun", runId.ToString(CultureInfo.InvariantCulture), "--failed" };
         if (repository is not null) arguments.AddRange(new[] { "-R", repository });
 
-        var result = await ProcessRunner.RunAsync(gh, arguments, repositoryPath, TimeSpan.FromSeconds(30), cancellationToken)
+        var result = await ProcessRunner.RunAsync(gh, arguments, repositoryPath, TimeSpan.FromSeconds(30), cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         if (!result.Success)
@@ -465,10 +466,10 @@ public static class GitHubService
 
         var result = await ProcessRunner.RunAsync(
             gh,
-            new[] { "pr", "view", number.ToString(), "--json", "number,title,state,headRefName,isCrossRepository" },
+            new[] { "pr", "view", number.ToString(CultureInfo.InvariantCulture), "--json", "number,title,state,headRefName,isCrossRepository" },
             repositoryPath,
             TimeSpan.FromSeconds(30),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
             throw new InvalidOperationException($"PR #{number}: {result.FirstErrorLine}");
@@ -488,10 +489,10 @@ public static class GitHubService
 
         var result = await ProcessRunner.RunAsync(
             gh,
-            new[] { "issue", "view", number.ToString(), "--json", "number,title,state,url,assignees" },
+            new[] { "issue", "view", number.ToString(CultureInfo.InvariantCulture), "--json", "number,title,state,url,assignees" },
             repositoryPath,
             TimeSpan.FromSeconds(30),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
             throw new InvalidOperationException($"Issue #{number}: {result.FirstErrorLine}");
@@ -513,7 +514,7 @@ public static class GitHubService
             new[] { "api", "user", "--jq", ".login" },
             repositoryPath,
             TimeSpan.FromSeconds(30),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         var login = result.StandardOutput.Trim();
         if (!result.Success || login.Length == 0)
@@ -536,10 +537,10 @@ public static class GitHubService
 
         var result = await ProcessRunner.RunAsync(
             gh,
-            new[] { "issue", "edit", number.ToString(), "--add-assignee", "@me" },
+            new[] { "issue", "edit", number.ToString(CultureInfo.InvariantCulture), "--add-assignee", "@me" },
             repositoryPath,
             TimeSpan.FromSeconds(30),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
             throw new InvalidOperationException(result.FirstErrorLine);
@@ -558,7 +559,7 @@ public static class GitHubService
                 new[] { "pr", "list", "--state", "all", "--limit", "100", "--json", fields },
                 repositoryPath,
                 TimeSpan.FromSeconds(60),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {

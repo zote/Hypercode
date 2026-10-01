@@ -405,7 +405,7 @@ public sealed class WorktreeRow : ObservableObject
         if (_pullRequest is not { } pullRequest) return false;
 
         var number = term.TrimStart('#');
-        return (number.Length > 0 && pullRequest.Number.ToString().StartsWith(number, StringComparison.Ordinal))
+        return (number.Length > 0 && pullRequest.Number.ToString(System.Globalization.CultureInfo.InvariantCulture).StartsWith(number, StringComparison.Ordinal))
                || Contains(pullRequest.Title);
     }
 

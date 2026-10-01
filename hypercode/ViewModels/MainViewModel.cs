@@ -133,7 +133,7 @@ public sealed class MainViewModel : ObservableObject
         var index = Repositories.IndexOf(old);
         var replacement = Find(root) ?? new RepositoryViewModel(root, _hub);
 
-        old.Close();
+        old.Dispose();
         Repositories.RemoveAt(index);
         if (!Repositories.Contains(replacement)) Repositories.Insert(index, replacement);
 
@@ -206,7 +206,7 @@ public sealed class MainViewModel : ObservableObject
         // Antes de remover: a faixa de abas zera a seleção quando o item selecionado sai dela.
         var wasSelected = ReferenceEquals(_selectedRepository, repository);
 
-        repository.Close();
+        repository.Dispose();
         Repositories.RemoveAt(index);
         PersistRepositories();
 

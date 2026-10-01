@@ -35,9 +35,9 @@ public static class TitleBarDoubleClick
 
     private static string? ReadGlobalString(string key)
     {
-        var cfKey = CFStringCreateWithCString(IntPtr.Zero, key, KCFStringEncodingUtf8);
+        var cfKey = CFStringCreateWithCString(IntPtr.Zero, CString(key), KCFStringEncodingUtf8);
         // kCFPreferencesAnyApplication: o valor da constante é o próprio nome.
-        var anyApp = CFStringCreateWithCString(IntPtr.Zero, "kCFPreferencesAnyApplication", KCFStringEncodingUtf8);
+        var anyApp = CFStringCreateWithCString(IntPtr.Zero, CString("kCFPreferencesAnyApplication"), KCFStringEncodingUtf8);
         try
         {
             var value = CFPreferencesCopyAppValue(cfKey, anyApp);
@@ -62,11 +62,15 @@ public static class TitleBarDoubleClick
     private const uint KCFStringEncodingUtf8 = 0x08000100;
     private const string CoreFoundation = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
 
-    [DllImport(CoreFoundation)] private static extern IntPtr CFStringCreateWithCString(IntPtr allocator, string value, uint encoding);
+    // Bytes UTF-8 com o terminador, em vez de deixar o runtime escolher o marshaling da string.
+    private static byte[] CString(string value) => System.Text.Encoding.UTF8.GetBytes(value + "\0");
+
+    [DllImport(CoreFoundation)] private static extern IntPtr CFStringCreateWithCString(IntPtr allocator, byte[] value, uint encoding);
     [DllImport(CoreFoundation)] private static extern IntPtr CFPreferencesCopyAppValue(IntPtr key, IntPtr applicationId);
     [DllImport(CoreFoundation)] private static extern nuint CFGetTypeID(IntPtr value);
     [DllImport(CoreFoundation)] private static extern nuint CFStringGetTypeID();
-    [DllImport(CoreFoundation)] [return: MarshalAs(UnmanagedType.I1)]
+    [DllImport(CoreFoundation)]
+    [return: MarshalAs(UnmanagedType.I1)]
     private static extern bool CFStringGetCString(IntPtr value, byte[] buffer, nint bufferSize, uint encoding);
     [DllImport(CoreFoundation)] private static extern void CFRelease(IntPtr value);
 }

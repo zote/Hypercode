@@ -2,22 +2,25 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
     <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
     <RuntimeIdentifiers>osx-arm64;osx-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia.Headless.XUnit" Version="11.*" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
-    <PackageReference Include="xunit" Version="2.*" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\hypercode\Hypercode.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>

@@ -9,7 +9,7 @@ namespace Hypercode.ViewModels;
 /// &lt;repo&gt;.worktrees/&lt;branch&gt;) até o usuário editá-la. Sem raiz configurada, segue onde os
 /// worktrees que já existem moram. A pasta editada pode virar a configuração do repositório.
 /// </summary>
-public sealed class CreateWorktreeViewModel : ObservableObject
+public sealed class CreateWorktreeViewModel : ObservableObject, IDisposable
 {
     private enum CreateMode { NewBranch, PullRequest, Issue }
 
@@ -93,6 +93,20 @@ public sealed class CreateWorktreeViewModel : ObservableObject
             : $"{WorktreeCreator.IncludeFileName}: copia os arquivos ignorados que casarem com "
               + string.Join(", ", patterns.Take(6))
               + (patterns.Count > 6 ? $" e mais {patterns.Count - 6}" : string.Empty) + ".";
+    }
+
+    /// <summary>Diálogo fechado: interrompe as consultas que ainda estiverem esperando o gh ou o git.</summary>
+    public void Dispose()
+    {
+        foreach (var cancellation in new[] { _lookupCancellation, _issueLookupCancellation, _branchCheckCancellation })
+        {
+            cancellation?.Cancel();
+            cancellation?.Dispose();
+        }
+
+        _lookupCancellation = null;
+        _issueLookupCancellation = null;
+        _branchCheckCancellation = null;
     }
 
     public string Command { get; }
