@@ -61,6 +61,7 @@ public sealed record ApiResponse(int Status, string Body, ApiBudget? Budget, str
 /// Lê do GitHub o que o painel da fila mostra. Por ciclo, por repositório acompanhado: os runs
 /// em <c>queued</c> e em <c>in_progress</c> e os jobs de cada um. Mais os runners, por dono: a
 /// lista de grupos e os runners de cada grupo — a lista da org não diz mais o grupo de cada um.
+/// Fora do ciclo, de hora em hora, o histórico de durações que a estimativa de início usa.
 /// </summary>
 public static class ActionsQueueService
 {
@@ -147,6 +148,59 @@ public static class ActionsQueueService
             queueResults.Select(result => result.Problem).OfType<string>().ToList(),
             latest,
             now);
+    }
+
+    /// <summary>
+    /// O histórico de um repositório: os workflows ativos, os últimos
+    /// <see cref="ActionsQueue.HistoryRuns"/> runs concluídos de cada e os jobs de cada run —
+    /// uma chamada por run. Por isso anda de hora em hora, nunca na cadência do painel. Null se
+    /// a lista de workflows falhar; run cujos jobs falharem só fica de fora.
+    /// </summary>
+    public static async Task<RepositoryDurations?> LoadDurationsAsync(
+        string repository,
+        Func<string, CancellationToken, Task<ApiResponse>> get,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        using var gate = new SemaphoreSlim(Parallelism);
+
+        async Task<JsonDocument?> Get(string path)
+        {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var response = await get(path, cancellationToken).ConfigureAwait(false);
+                return response.Success ? TryParse(response.Body) : null;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        IReadOnlyList<long> workflows;
+        using (var document = await Get($"repos/{repository}/actions/workflows?per_page=100").ConfigureAwait(false))
+        {
+            if (document is null) return null;
+            workflows = ActionsQueue.ParseWorkflows(document.RootElement);
+        }
+
+        var runs = (await Task.WhenAll(workflows.Select(async workflow =>
+        {
+            using var document = await Get($"repos/{repository}/actions/workflows/{workflow}/runs?status=completed&per_page={ActionsQueue.HistoryRuns}")
+                .ConfigureAwait(false);
+            return document is null ? Array.Empty<ActionsQueue.RunInfo>() : ActionsQueue.ParseRuns(document.RootElement);
+        })).ConfigureAwait(false)).SelectMany(list => list).ToList();
+
+        var samples = (await Task.WhenAll(runs.Select(async run =>
+        {
+            using var document = await Get($"repos/{repository}/actions/runs/{run.Id}/jobs?per_page=100").ConfigureAwait(false);
+            return document is null
+                ? Array.Empty<(string, string, IReadOnlyList<string>, TimeSpan)>()
+                : ActionsQueue.ParseJobDurations(document.RootElement, run.Workflow);
+        })).ConfigureAwait(false)).SelectMany(list => list);
+
+        return new RepositoryDurations { CollectedAt = now, Jobs = ActionsQueue.Medians(samples) };
     }
 
     private static string Owner(string repository) => repository.Split('/')[0];

@@ -115,6 +115,8 @@
           <TextBlock Classes="section" Text="FILA" />
           <TextBlock Classes="meta wrap" Text="Ordem estimada pelo horário de entrada — o GitHub não expõe a posição."
                      ToolTip.Tip="{x:Static vm:ActionsQueueViewModel.EstimateNotice}" />
+          <TextBlock Classes="meta wrap" Text="{Binding EstimateLine}"
+                     ToolTip.Tip="{x:Static vm:ActionsQueueViewModel.EstimateTip}" />
           <TextBlock Classes="problem" Text="{Binding QueueProblem}" IsVisible="{Binding HasQueueProblem}" />
           <TextBlock Classes="meta wrap" Text="Nenhum job esperando runner." IsVisible="{Binding HasNoQueue}" />
           <ItemsControl ItemsSource="{Binding Lanes}">
@@ -137,6 +139,8 @@
                             <TextBlock Classes="callout" Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
                             <TextBlock Classes="meta" Text="{Binding Origin}" />
                             <TextBlock Classes="meta" Text="{Binding Wait}" />
+                            <TextBlock Classes="meta" Text="{Binding Estimate}"
+                                       ToolTip.Tip="{x:Static vm:ActionsQueueViewModel.EstimateTip}" />
                             <TextBlock Classes="state busy" Text="cancelamento pedido…" IsVisible="{Binding IsCancelRequested}" />
                           </StackPanel>
                         </Grid>
