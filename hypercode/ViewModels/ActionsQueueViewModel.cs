@@ -58,7 +58,7 @@ public sealed record RunnerItem(string Name, string Detail, RunnerState State, s
 
 public sealed record RunnerGroupItem(string Name, string Summary, IReadOnlyList<RunnerItem> Runners);
 
-public sealed record QueuedJobItem(string Position, string Title, string Origin, string Wait, RunTarget? Run = null)
+public sealed record QueuedJobItem(string Position, string Title, string Origin, string Wait, string Estimate, RunTarget? Run = null)
 {
     public bool IsCancelRequested => Run?.IsCancelRequested == true;
 }
@@ -84,6 +84,14 @@ public sealed class ActionsQueueViewModel : ObservableObject
     public const string EstimateNotice =
         "Ordem estimada pelo horário de entrada na fila. O GitHub não expõe a posição: o despacho para self-hosted é FIFO na prática, mas não é contrato — e jobs de repositórios não acompanhados disputam os mesmos runners sem aparecer aqui.";
 
+    public const string EstimateTip =
+        "Aproximação: soma a duração mediana de cada job, nos últimos runs concluídos do workflow dele, ao que já está rodando nos runners que atendem às labels. Runner ocupado com job sem histórico, ou de repositório não acompanhado, fica fora da conta — por isso ela tende a errar para mais, não para menos.";
+
+    public const string NoEstimate = "sem estimativa";
+
+    /// <summary>Depois de uma coleta que falhou (ou que não deu em nada), o mínimo até a próxima tentativa.</summary>
+    private static readonly TimeSpan HistoryRetry = TimeSpan.FromMinutes(15);
+
     private readonly Settings _settings;
     private readonly Action _save;
     private readonly Func<string, CancellationToken, Task<ApiResponse>> _get;
@@ -91,6 +99,12 @@ public sealed class ActionsQueueViewModel : ObservableObject
     private readonly Func<DateTimeOffset> _clock;
     private readonly Func<Task> _settle;
     private readonly MonitorScheduler _scheduler = new();
+    private readonly ActionsDurationStore? _durationStore;
+    private readonly Dictionary<string, RepositoryDurations> _durationsByRepository;
+    private ActionsDurations _durations;
+    private Task _history = Task.CompletedTask;
+    private bool _isCollecting;
+    private DateTimeOffset _historyAttempt = DateTimeOffset.MinValue;
 
     private CancellationTokenSource? _loop;
     private CancellationTokenSource? _load;
@@ -118,7 +132,8 @@ public sealed class ActionsQueueViewModel : ObservableObject
         Func<string, CancellationToken, Task<ApiResponse>>? get = null,
         Func<DateTimeOffset>? clock = null,
         Func<string, CancellationToken, Task<ApiResponse>>? post = null,
-        Func<Task>? settle = null)
+        Func<Task>? settle = null,
+        ActionsDurationStore? durations = null)
     {
         _settings = settings;
         _save = save;
@@ -126,6 +141,9 @@ public sealed class ActionsQueueViewModel : ObservableObject
         _post = post ?? ActionsQueueService.PostAsync;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _settle = settle ?? (() => Task.Delay(ActionSettleDelay));
+        _durationStore = durations;
+        _durationsByRepository = durations?.Load() ?? new Dictionary<string, RepositoryDurations>(StringComparer.OrdinalIgnoreCase);
+        _durations = TrackedDurations();
         _scheduler.Profile = EffectiveSettings.Resolve(settings, null).MonitorProfile;
         UpdateSchedulerActivity();
     }
@@ -240,6 +258,8 @@ public sealed class ActionsQueueViewModel : ObservableObject
 
         _load?.Cancel();
         _loadedRepositories = null;
+        _historyAttempt = DateTimeOffset.MinValue;
+        _durations = TrackedDurations();
         _scheduler.ExpireActions();
         Apply(null);
         _ = CheckAsync();
@@ -361,6 +381,8 @@ public sealed class ActionsQueueViewModel : ObservableObject
     {
         var now = _clock();
 
+        StartHistoryIfDue(now);
+
         if (!IsShown || !HasRepositories || IsLoading || !_scheduler.IsActionsDue(now))
         {
             if (!IsMenuOpen) Rebuild(now);
@@ -415,6 +437,82 @@ public sealed class ActionsQueueViewModel : ObservableObject
             await CheckAsync().ConfigureAwait(true);
         }
     }
+
+    // ── Histórico de durações ───────────────────────────────────────────────
+
+    /// <summary>A coleta do histórico em andamento, para quem precisa esperar por ela (os testes).</summary>
+    internal Task HistoryTask => _history;
+
+    /// <summary>
+    /// Coleta o histórico dos repositórios cujas durações passaram de uma hora (ou nunca vieram),
+    /// em segundo plano: com alguma view à vista, monitoramento ligado e fora do recuo pela cota.
+    /// O ciclo do painel só lê o que já está em memória — a coleta nunca anda na cadência dele.
+    /// </summary>
+    private void StartHistoryIfDue(DateTimeOffset now)
+    {
+        if (_durationStore is null || _isCollecting || !IsShown || !HasRepositories) return;
+        if (_scheduler.Profile == MonitorProfile.Off || _scheduler.IsBackingOff(now)) return;
+        if (now - _historyAttempt < HistoryRetry) return;
+
+        var stale = _settings.ActionsRepositories
+            .Where(repository => !_durationsByRepository.TryGetValue(repository, out var durations)
+                                 || now - durations.CollectedAt >= ActionsDurationStore.MaxAge)
+            .ToList();
+        if (stale.Count == 0) return;
+
+        _historyAttempt = now;
+        _isCollecting = true;
+        RaisePropertyChanged(nameof(EstimateLine));
+        _history = CollectHistoryAsync(stale, now);
+    }
+
+    private async Task CollectHistoryAsync(IReadOnlyList<string> repositories, DateTimeOffset now)
+    {
+        try
+        {
+            foreach (var repository in repositories)
+            {
+                RepositoryDurations? durations;
+                try
+                {
+                    durations = await ActionsQueueService.LoadDurationsAsync(repository, _get, now).ConfigureAwait(true);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    durations = null;
+                }
+
+                // Falhou: fica o que havia, e tenta de novo depois do HistoryRetry.
+                if (durations is not null) _durationsByRepository[repository] = durations;
+            }
+
+            // Repositório que saiu da configuração sai do arquivo.
+            var tracked = _settings.ActionsRepositories.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var gone in _durationsByRepository.Keys.Where(repository => !tracked.Contains(repository)).ToList())
+                _durationsByRepository.Remove(gone);
+
+            _durationStore?.Save(_durationsByRepository);
+            _durations = TrackedDurations();
+        }
+        finally
+        {
+            _isCollecting = false;
+            Rebuild(_clock());
+        }
+    }
+
+    /// <summary>As medianas só dos repositórios acompanhados agora.</summary>
+    private ActionsDurations TrackedDurations()
+        => new(_durationsByRepository
+            .Where(item => _settings.ActionsRepositories.Contains(item.Key, StringComparer.OrdinalIgnoreCase))
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>A legenda da estimativa: de quando são as durações, ou que ainda não vieram.</summary>
+    public string EstimateLine => _durations.CollectedAt is { } collected
+        ? $"Início estimado pela duração mediana dos últimos {ActionsQueue.HistoryRuns} runs de cada workflow, coletada às {collected.ToLocalTime():HH:mm}. É aproximação, como a ordem."
+        : _isCollecting
+            ? "Coletando a duração dos jobs nos runs anteriores…"
+            : "Sem histórico de duração ainda: a fila fica sem estimativa de início.";
 
     private void Apply(ActionsSnapshot? snapshot)
     {
@@ -557,7 +655,7 @@ public sealed class ActionsQueueViewModel : ObservableObject
         {
             var targets = Targets(snapshot);
             foreach (var group in BuildRunnerGroups(snapshot, now, targets)) RunnerGroups.Add(group);
-            foreach (var lane in BuildLanes(snapshot, now, targets)) Lanes.Add(lane);
+            foreach (var lane in BuildLanes(snapshot, now, targets, _durations)) Lanes.Add(lane);
             foreach (var run in snapshot.WaitingRuns.OrderBy(run => run.CreatedAt))
                 WaitingRuns.Add(new WaitingRunItem(
                     run.Workflow, Origin(run.Repository, run.Branch, run.PullRequest), Waiting(now - run.CreatedAt), targets(run.Repository, run.Id)));
@@ -572,6 +670,7 @@ public sealed class ActionsQueueViewModel : ObservableObject
         RaisePropertyChanged(nameof(QueueProblem));
         RaisePropertyChanged(nameof(HasQueueProblem));
         RaisePropertyChanged(nameof(StatusLine));
+        RaisePropertyChanged(nameof(EstimateLine));
     }
 
     internal static IReadOnlyList<RunnerGroupItem> BuildRunnerGroups(
@@ -616,8 +715,12 @@ public sealed class ActionsQueueViewModel : ObservableObject
     internal static IReadOnlyList<LaneItem> BuildLanes(
         ActionsSnapshot snapshot,
         DateTimeOffset now,
-        Func<string, long, RunTarget?>? targets = null)
-        => ActionsQueue.BuildLanes(snapshot.Jobs)
+        Func<string, long, RunTarget?>? targets = null,
+        ActionsDurations? durations = null)
+    {
+        var starts = ActionsQueue.EstimateStarts(snapshot.Runners, snapshot.Jobs, (durations ?? ActionsDurations.Empty).Median, now);
+
+        return ActionsQueue.BuildLanes(snapshot.Jobs)
             .Select(lane => new LaneItem(
                 lane.Labels.Count == 0 ? "sem labels" : string.Join(", ", lane.Labels),
                 lane.Jobs.Count == 1 ? "1 esperando" : $"{lane.Jobs.Count} esperando",
@@ -626,9 +729,24 @@ public sealed class ActionsQueueViewModel : ObservableObject
                         $"{job.Workflow} › {job.Name}",
                         Origin(job.Repository, job.Branch, job.PullRequest),
                         Waiting(now - job.CreatedAt),
+                        Estimate(starts.GetValueOrDefault(job.Id)),
                         targets?.Invoke(job.Repository, job.RunId)))
                     .ToList()))
             .ToList();
+    }
+
+    /// <summary>
+    /// Quando deve começar, sempre com til: é estimativa. Zero é o runner que já devia ter
+    /// liberado (ou está livre) — "a qualquer momento", nunca um tempo negativo.
+    /// </summary>
+    internal static string Estimate(TimeSpan? start)
+    {
+        if (start is not { } value) return NoEstimate;
+        if (value <= TimeSpan.Zero) return "deve começar a qualquer momento";
+
+        var minutes = TimeSpan.FromMinutes(Math.Ceiling(value.TotalMinutes));
+        return $"deve começar em ~{Duration(minutes)}";
+    }
 
     /// <summary>repo · PR #12 (branch), ou repo · branch sem PR. O dono sai: é o mesmo de todos, quase sempre.</summary>
     internal static string Origin(string repository, string? branch, int? pullRequest)

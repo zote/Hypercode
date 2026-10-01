@@ -18,16 +18,22 @@ public sealed class MainViewModel : ObservableObject
     private bool _isWindowMinimized;
 
     public MainViewModel()
-        : this(SettingsStore.Load(), SettingsStore.Save, PullRequestMemory.Load(), AutoCleanupStore.Default)
+        : this(SettingsStore.Load(), SettingsStore.Save, PullRequestMemory.Load(), AutoCleanupStore.Default, ActionsDurationStore.Default)
     {
     }
 
-    public MainViewModel(Settings settings, Action<Settings> save, PullRequestMemory pullRequests, AutoCleanupStore autoCleanupStore)
+    /// <param name="actionsDurations">O cache das durações da fila do Actions. Sem ele, a fila fica sem estimativa de início e nada é coletado.</param>
+    public MainViewModel(
+        Settings settings,
+        Action<Settings> save,
+        PullRequestMemory pullRequests,
+        AutoCleanupStore autoCleanupStore,
+        ActionsDurationStore? actionsDurations = null)
     {
         _settings = settings;
         _save = save;
         _hub = new RepositoryHub(settings, pullRequests, autoCleanupStore, SaveSettings, () => Repositories);
-        Actions = new ActionsQueueViewModel(settings, SaveSettings);
+        Actions = new ActionsQueueViewModel(settings, SaveSettings, durations: actionsDurations);
 
         foreach (var path in settings.Repositories)
             Repositories.Add(new RepositoryViewModel(path, _hub));
