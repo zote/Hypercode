@@ -27,6 +27,7 @@ public sealed class MainViewModel : ObservableObject
         _settings = settings;
         _save = save;
         _hub = new RepositoryHub(settings, pullRequests, autoCleanupStore, SaveSettings, () => Repositories);
+        Actions = new ActionsQueueViewModel(settings, SaveSettings);
 
         foreach (var path in settings.Repositories)
             Repositories.Add(new RepositoryViewModel(path, _hub));
@@ -43,6 +44,9 @@ public sealed class MainViewModel : ObservableObject
         get => _selectedRepository;
         set => Select(value, persist: true);
     }
+
+    /// <summary>A fila do GitHub Actions: o painel ao lado da lista e a janela própria mostram esta mesma.</summary>
+    public ActionsQueueViewModel Actions { get; }
 
     public bool HasRepositories => Repositories.Count > 0;
 
@@ -98,6 +102,8 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     public async Task OpenSavedAsync()
     {
+        Actions.Start();
+
         if (_settings.LegacyRepository is { } legacy)
         {
             _settings.LegacyRepository = null;
@@ -236,6 +242,7 @@ public sealed class MainViewModel : ObservableObject
         _isWindowActive = isActive;
         _isWindowMinimized = isMinimized;
         ReportActivity();
+        Actions.SetMainWindowActivity(isActive, isMinimized);
     }
 
     private void ReportActivity()
@@ -248,6 +255,7 @@ public sealed class MainViewModel : ObservableObject
     public void ApplySettingsChanged()
     {
         foreach (var repository in Repositories) repository.RefreshSettings();
+        Actions.RefreshSettings();
     }
 
     public void SaveSettings() => _save(_settings);

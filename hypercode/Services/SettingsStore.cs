@@ -77,6 +77,19 @@ public sealed class Settings
     public bool WorktreeFolderKeepsSlashes { get; set; }
 
     /// <summary>
+    /// Repositórios (owner/repo) cuja fila do GitHub Actions o painel acompanha. É global: os
+    /// runners são da organização, e a fila não segue as abas abertas. Cada um custa ~3
+    /// chamadas REST por ciclo — por isso a escolha é explícita, não os da org inteira.
+    /// </summary>
+    public List<string> ActionsRepositories { get; set; } = new();
+
+    /// <summary>O painel da fila do Actions aberto ao lado da lista, ou recolhido.</summary>
+    public bool ActionsPanelOpen { get; set; }
+
+    /// <summary>A janela própria da fila do Actions aberta — volta aberta na próxima sessão.</summary>
+    public bool ActionsWindowOpen { get; set; }
+
+    /// <summary>
     /// O repositório veio da chave antiga, e não de uma aba: pode ser a pasta de um worktree
     /// qualquer, e precisa ser resolvido para o principal antes de virar aba.
     /// </summary>
@@ -272,6 +285,11 @@ public static class SettingsStore
         settings.Repositories = (settings.Repositories ?? new List<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Distinct(StringComparer.Ordinal)
+            .ToList();
+        settings.ActionsRepositories = (settings.ActionsRepositories ?? new List<string>())
+            .Select(ActionsQueue.NormalizeRepository)
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         settings.RepositoryOverrides = new Dictionary<string, RepositorySettings>(
             (settings.RepositoryOverrides ?? new Dictionary<string, RepositorySettings>())

@@ -11,6 +11,13 @@ public partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
+
+        // A lista da fila do Actions grava ao sair do campo; fechar com o cursor nele também conta.
+        Closing += (_, _) =>
+        {
+            if (DataContext is SettingsViewModel viewModel && ActionsRepositoriesBox.Text is { } text)
+                viewModel.ActionsRepositoriesText = text;
+        };
     }
 
 

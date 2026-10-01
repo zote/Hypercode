@@ -195,6 +195,10 @@
           <Button Content="Atualizar"
                   Click="OnRefreshClick" IsEnabled="{Binding SelectedRepository.IsNotBusy, FallbackValue=False}" HotKey="Cmd+R"
                   ToolTip.Tip="Relê tudo da aba, inclusive os PRs (⌘R). Worktree criado ou apagado fora do app e commit, fetch ou push já aparecem sozinhos." />
+          <Button Name="ActionsToggle" Classes="borderless" Click="OnToggleActionsPanelClick"
+                  ToolTip.Tip="Fila do GitHub Actions (⇧⌘A): os runners da organização, o que cada um roda e a ordem estimada do que espera, nos repositórios escolhidos nas configurações">
+            <PathIcon Data="{StaticResource Icon.Columns}" />
+          </Button>
           <Button Classes="borderless" Click="OnHelpClick"
                   ToolTip.Tip="O que significam as etiquetas, a coluna PR, as abas e a limpeza">
             <PathIcon Data="{StaticResource Icon.Help}" />
@@ -208,8 +212,11 @@
       </Grid>
     </Border>
 
+    <!-- Abaixo das abas: o repositório da frente e, à direita, o painel da fila do Actions. -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+
     <!-- Sem aba nenhuma -->
-    <StackPanel Grid.Row="1" IsVisible="{Binding HasNoRepositories}"
+    <StackPanel Grid.Column="0" IsVisible="{Binding HasNoRepositories}"
                 HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="{DynamicResource Space.M}">
       <TextBlock Classes="title2" Text="Nenhum repositório aberto" HorizontalAlignment="Center" />
       <TextBlock Classes="body muted" HorizontalAlignment="Center" TextAlignment="Center"
@@ -219,7 +226,7 @@
 
     <!-- A aba da frente: tudo daqui para baixo é do repositório selecionado. -->
     <!-- Fundo de conteúdo, o mesmo da aba selecionada: a aba se encaixa nele. -->
-    <Grid Grid.Row="1" RowDefinitions="Auto,Auto,*,Auto"
+    <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*,Auto"
           Background="{DynamicResource Brush.Background.Content}"
           DataContext="{Binding SelectedRepository}"
           IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
@@ -385,6 +392,30 @@
                 ToolTip.Tip="{Binding CleanupToolTip}" ToolTip.ShowOnDisabled="True" />
         <Button Grid.Column="5" Content="Abrir no iTerm2" Click="OnOpenTerminalClick"
                 IsEnabled="{Binding SelectedWorktree, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      </Grid>
+    </Border>
+
+    </Grid>
+
+    <!-- A fila do GitHub Actions (#130): global, não da aba — fica com a janela sem repositório
+         também. A mesma view da janela própria; recolhido, não busca nada. 340: largura do
+         painel, layout desta janela. -->
+    <Border Grid.Column="1" Name="ActionsPanel" Width="340"
+            BorderThickness="1,0,0,0" BorderBrush="{DynamicResource Brush.Separator}"
+            Background="{DynamicResource Brush.Background.Content}"
+            DataContext="{Binding Actions}"
+            IsVisible="{Binding IsPanelOpen}">
+      <Grid RowDefinitions="Auto,*">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="{DynamicResource Padding.Bar}">
+          <TextBlock Grid.Column="0" Classes="headline" VerticalAlignment="Center" Text="Fila do GitHub Actions" />
+          <Button Grid.Column="1" Classes="borderless" Content="Destacar" Click="OnDetachActionsClick"
+                  ToolTip.Tip="Abre a fila numa janela própria — para deixar num segundo monitor — e recolhe o painel. A janela continua aberta se o painel voltar ou for recolhido." />
+          <Button Grid.Column="2" Classes="borderless" Click="OnCloseActionsPanelClick"
+                  ToolTip.Tip="Recolher o painel (⇧⌘A). Recolhido, não consulta o GitHub.">
+            <PathIcon Classes="small" Data="{StaticResource Icon.Close}" />
+          </Button>
+        </Grid>
+        <views:ActionsQueueView Grid.Row="1" />
       </Grid>
     </Border>
 
