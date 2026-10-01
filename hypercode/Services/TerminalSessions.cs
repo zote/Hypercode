@@ -4,13 +4,19 @@ namespace Hypercode.Services;
 
 /// <summary>
 /// O app dono de uma sessão de terminal — só o iTerm2 e o Terminal.app sabem dar foco nela.
-/// <see cref="Multiplexer"/> é sessão de zmx, tmux, screen ou zellij: tem <c>tty</c>, mas não
-/// é janela nenhuma — pode estar desanexada, ou dentro de outro app (o zmx do supacode).
+/// Os demais terminais conhecidos (<see cref="TerminalLauncher.Known"/>) são reconhecidos para
+/// dizer de quem é a sessão, mas não expõem o <c>tty</c> das janelas. <see cref="Multiplexer"/>
+/// é sessão de zmx, tmux, screen ou zellij: tem <c>tty</c>, mas não é janela nenhuma — pode
+/// estar desanexada, ou dentro de outro app (o zmx do supacode).
 /// </summary>
 public enum TerminalApp
 {
     ITerm2,
     Terminal,
+    Ghostty,
+    WezTerm,
+    Alacritty,
+    Kitty,
     Multiplexer,
     Other,
 }
@@ -23,14 +29,12 @@ public enum TerminalApp
 /// </summary>
 public sealed record TerminalSession(string Tty, TerminalApp App, TimeSpan Age, string? Name, string? Multiplexer = null)
 {
-    public bool CanFocus => App is TerminalApp.ITerm2 or TerminalApp.Terminal;
+    public bool CanFocus => TerminalSessions.DefinitionOf(App)?.CanFocus ?? false;
 
     public string AppName => App switch
     {
-        TerminalApp.ITerm2 => "iTerm2",
-        TerminalApp.Terminal => "Terminal",
         TerminalApp.Multiplexer => Multiplexer ?? "multiplexador",
-        _ => "outro terminal",
+        _ => TerminalSessions.DefinitionOf(App)?.Name ?? "outro terminal",
     };
 }
 
@@ -67,7 +71,11 @@ public sealed record ProcessEntry(int Pid, int ParentPid, string? Tty, TimeSpan 
 /// </summary>
 public static class TerminalSessions
 {
-    private const string ITerm2BundleId = "com.googlecode.iterm2";
+    private static readonly string ITerm2BundleId = TerminalLauncher.ITerm2.BundleId;
+
+    /// <summary>O terminal conhecido de um app de sessão; null para multiplexador e desconhecido.</summary>
+    public static TerminalDefinition? DefinitionOf(TerminalApp app)
+        => TerminalLauncher.Known.FirstOrDefault(terminal => terminal.App == app);
 
     /// <summary>
     /// O que há aberto em cada worktree, pelo caminho. Worktree sem nada não entra no
@@ -300,7 +308,9 @@ public static class TerminalSessions
     /// <summary>
     /// Sobe pelos pais até achar o app: no iTerm2 o shell é filho do login, que é filho do
     /// iTermServer (em ~/Library/Application Support/iTerm2), que é filho do iTerm2; no
-    /// Terminal.app o login é filho direto dele. Um multiplexador no caminho encerra a busca:
+    /// Terminal.app e no Ghostty o login é filho direto dele; no kitty, no Alacritty e no
+    /// WezTerm, o próprio shell. Cada um é achado pelo .app no caminho do executável
+    /// (<see cref="TerminalDefinition.ProcessMarker"/>). Um multiplexador no caminho encerra a busca:
     /// o servidor dele é filho do launchd, então o shell de dentro não diz em que janela está
     /// (se estiver em alguma). <paramref name="multiplexer"/> diz qual foi.
     /// </summary>
@@ -310,8 +320,9 @@ public static class TerminalSessions
         var current = process;
         for (var step = 0; step < 64 && current is not null; step++)
         {
-            if (current.Command.Contains("/iTerm", StringComparison.Ordinal)) return TerminalApp.ITerm2;
-            if (current.Command.Contains("/Terminal.app/", StringComparison.Ordinal)) return TerminalApp.Terminal;
+            var command = current.Command;
+            if (TerminalLauncher.Known.FirstOrDefault(terminal => command.Contains(terminal.ProcessMarker, StringComparison.Ordinal)) is { } terminal)
+                return terminal.App;
             if (MultiplexerOf(current.Command) is { } name)
             {
                 multiplexer = name;

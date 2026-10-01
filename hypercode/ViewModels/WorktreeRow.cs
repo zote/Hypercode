@@ -474,6 +474,23 @@ public sealed class WorktreeRow : ObservableObject
     /// <summary>Há sessão de terminal aqui a que dá para dar foco — iTerm2 ou Terminal.</summary>
     public bool CanFocusTerminal => _terminal.Focusable is not null;
 
+    /// <summary>Por que não dá para ir ao terminal deste worktree; null quando dá.</summary>
+    public string? FocusTerminalUnavailableReason
+    {
+        get
+        {
+            if (CanFocusTerminal) return null;
+
+            var apps = _terminal.Sessions.Select(session => session.AppName).Distinct(StringComparer.Ordinal).ToList();
+            if (apps.Count == 0) return "Nenhum terminal aberto neste worktree.";
+
+            var owners = string.Join(", ", apps);
+            return _terminal.Sessions.All(session => session.App is TerminalApp.Multiplexer)
+                ? $"Só há sessão do {owners}, sem janela para onde ir."
+                : $"A sessão aberta aqui é do {owners}, que não expõe as janelas pelo tty: só o iTerm2 e o Terminal deixam trazê-las para a frente.";
+        }
+    }
+
     public void RefreshTags()
     {
         RaisePropertyChanged(nameof(Tags));

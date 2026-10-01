@@ -32,6 +32,7 @@ public sealed class MainViewModel : ObservableObject
     {
         _settings = settings;
         _save = save;
+        TerminalLauncher.Configure(settings.Terminal);
         _hub = new RepositoryHub(settings, pullRequests, autoCleanupStore, SaveSettings, () => Repositories);
         Actions = new ActionsQueueViewModel(settings, SaveSettings, durations: actionsDurations);
 
@@ -260,6 +261,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Depois de a tela de configurações mudar algo: cada aba relê o que vale para ela.</summary>
     public void ApplySettingsChanged()
     {
+        TerminalLauncher.Configure(_settings.Terminal);
         foreach (var repository in Repositories) repository.RefreshSettings();
         Actions.RefreshSettings();
     }

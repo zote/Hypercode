@@ -1,4 +1,5 @@
 using Hypercode.Services;
+using Hypercode.ViewModels;
 using Xunit;
 
 namespace Hypercode.Tests;
@@ -119,5 +120,25 @@ public sealed class SettingsTests
 
         // Campo sem override não vai para o arquivo como null: fica claro o que o repositório sobrescreve.
         Assert.DoesNotContain("\"Command\": null", json);
+    }
+
+    [Fact]
+    public void TerminalPadraoNaoVaiParaOArquivoEOEscolhidoVolta()
+    {
+        Assert.DoesNotContain("\"Terminal\"", SettingsStore.Serialize(new Settings()));
+
+        var reloaded = SettingsStore.Parse(SettingsStore.Serialize(new Settings { Terminal = "ghostty" }));
+        Assert.Equal("ghostty", reloaded.Terminal);
+    }
+
+    [Fact]
+    public void SeletorDeTerminalMostraSoOsInstaladosEAvisaQuemNaoDaFoco()
+    {
+        var options = SettingsViewModel.BuildTerminalOptions(new HashSet<string> { "terminal", "kitty", "iterm2" });
+
+        Assert.Equal(new string?[] { null, "iterm2", "terminal", "kitty" }, options.Select(option => option.Id));
+        Assert.Equal("Padrão do sistema (iTerm2)", options[0].Label);
+        Assert.Equal("iTerm2", options[1].Label);
+        Assert.Equal("kitty — sem \"Ir para o terminal aberto\"", options[3].Label);
     }
 }

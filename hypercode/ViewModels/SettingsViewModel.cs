@@ -10,6 +10,12 @@ public sealed record SettingsScope(string Label, RepositoryViewModel? Repository
     public override string ToString() => Label;
 }
 
+/// <summary>Uma opção do seletor de terminal. <paramref name="Id"/> null é o padrão do sistema.</summary>
+public sealed record TerminalOption(string Label, string? Id)
+{
+    public override string ToString() => Label;
+}
+
 /// <summary>
 /// A tela de configurações. No escopo global, cada campo é o padrão de todos os repositórios.
 /// No escopo de um repositório, cada campo ganha "usar o global": marcado, o campo mostra o
@@ -31,6 +37,7 @@ public sealed class SettingsViewModel : ObservableObject
         nameof(WorktreesRootPreview),
         nameof(KeepSlashes), nameof(KeepSlashesUsesGlobal), nameof(CanEditKeepSlashes), nameof(IsKeepSlashesOverridden),
         nameof(ActionsRepositoriesText), nameof(ActionsRepositoriesIgnored),
+        nameof(SelectedTerminal), nameof(TerminalHint), nameof(TerminalNotice),
     };
 
     private readonly MainViewModel _main;
@@ -39,6 +46,7 @@ public sealed class SettingsViewModel : ObservableObject
     public SettingsViewModel(MainViewModel main, RepositoryViewModel? initialScope = null)
     {
         _main = main;
+        TerminalOptions = BuildTerminalOptions(TerminalLauncher.Installed.Keys.ToHashSet(StringComparer.Ordinal));
         _selectedScope = new SettingsScope("Global — todos os repositórios", null);
         RebuildScopes(initialScope);
         _main.Repositories.CollectionChanged += OnRepositoriesChanged;
@@ -231,6 +239,66 @@ public sealed class SettingsViewModel : ObservableObject
 
     public bool IsKeepSlashesOverridden => IsRepositoryScope && !KeepSlashesUsesGlobal;
     public bool CanEditKeepSlashes => !IsRepositoryScope || !KeepSlashesUsesGlobal;
+
+    // ── Terminal (só global) ────────────────────────────────────────────────
+
+    /// <summary>
+    /// O padrão do sistema e os terminais conhecidos que estão instalados. Quem não sabe dar
+    /// foco numa sessão já diz isso no rótulo: melhor saber antes de escolher do que clicando.
+    /// </summary>
+    public IReadOnlyList<TerminalOption> TerminalOptions { get; }
+
+    internal static IReadOnlyList<TerminalOption> BuildTerminalOptions(IReadOnlySet<string> installed)
+    {
+        var fallback = TerminalLauncher.Resolve(null, terminal => installed.Contains(terminal.Id)).Definition;
+        var options = new List<TerminalOption> { new($"Padrão do sistema ({fallback.Name})", null) };
+        options.AddRange(TerminalLauncher.Known
+            .Where(terminal => installed.Contains(terminal.Id))
+            .Select(terminal => new TerminalOption(
+                terminal.CanFocus ? terminal.Name : $"{terminal.Name} — sem \"Ir para o terminal aberto\"",
+                terminal.Id)));
+        return options;
+    }
+
+    /// <summary>
+    /// A opção do terminal que vale agora. Escolha que não está mais instalada aparece como o
+    /// padrão do sistema — que é o que o app usa —, e <see cref="TerminalNotice"/> explica.
+    /// </summary>
+    public TerminalOption SelectedTerminal
+    {
+        get
+        {
+            var current = TerminalLauncher.Current;
+            return (current.IsSystemDefault ? null : TerminalOptions.FirstOrDefault(option => option.Id == current.Definition.Id))
+                   ?? TerminalOptions[0];
+        }
+        set
+        {
+            // O ComboBox manda null enquanto a lista é refeita.
+            if (value is null || value.Id == Global.Terminal) return;
+            Global.Terminal = value.Id;
+            Commit();
+        }
+    }
+
+    public string TerminalHint
+    {
+        get
+        {
+            var current = TerminalLauncher.Current;
+            var name = current.Definition.Name;
+            var opens = $"Duplo-clique (ou Enter) abre uma janela nova do {name} no worktree e roda o comando.";
+
+            if (current.IsSystemDefault)
+                return $"{opens} O padrão do sistema é o iTerm2 se estiver instalado e, senão, o Terminal.app. A lista mostra só os terminais instalados.";
+            if (current.Definition.CanFocus)
+                return $"{opens} Com uma sessão do {name} já aberta no worktree, o duplo-clique vai para ela.";
+            return $"{opens} Mas o {name} não expõe as janelas pelo tty, e daqui não dá para trazer uma sessão dele para a frente: o duplo-clique sempre abre uma janela nova, e Ir para o terminal aberto só funciona com sessões do iTerm2 e do Terminal.";
+        }
+    }
+
+    /// <summary>A escolha das configurações sumiu da máquina e o padrão está valendo.</summary>
+    public string? TerminalNotice => TerminalLauncher.Current.Notice;
 
     // ── Fila do GitHub Actions (só global) ─────────────────────────────────
 
