@@ -89,7 +89,10 @@
   <!-- Destaque e seleção seguem a accent color do sistema, que o FluentTheme lê do macOS (#64). -->
   <SolidColorBrush x:Key="Brush.Accent" Color="{DynamicResource SystemAccentColor}" />
   <SolidColorBrush x:Key="Brush.Selection.Active" Color="{DynamicResource SystemAccentColorDark1}" />
-  <SolidColorBrush x:Key="Brush.Accent.Pressed" Color="{DynamicResource SystemAccentColorDark2}" />
+  <!-- O pressionado não usa o SystemAccentColorDark2: na accent vermelha ele sai igual ao
+       Dark1 (#135). A cor vem do App, que escurece a de Brush.Selection.Active
+       (Views/AccentPressed.cs); a daqui, o pressionado do azul padrão, só vale até lá. -->
+  <SolidColorBrush x:Key="Brush.Accent.Pressed" Color="#004B9D" />
   <!-- Anel de foco (Tab, e clique no campo de texto): a accent a 50%, por fora do controle -->
   <SolidColorBrush x:Key="Brush.Focus" Color="{DynamicResource SystemAccentColor}" Opacity="0.5" />
   <SolidColorBrush x:Key="Brush.Text.OnAccent" Color="#FFFFFF" />
