@@ -6,7 +6,8 @@
   <!-- A fila do GitHub Actions (#130). DataContext é o ActionsQueueViewModel, o mesmo no painel
        da janela principal e na janela própria: uma view só, em dois lugares. O que é do lugar
        (destacar, recolher) fica com quem hospeda.
-       Clique direito num runner ocupado, num job da fila ou num run sem job abre o menu do run
+       Clique direito num runner ocupado, num job da fila, num segurado por concurrency ou num run
+       sem job abre o menu do run
        (#133): cancelar e forçar cancelamento. Reordenar a fila não existe — a API não tem o
        conceito —, e o menu não finge que tem. -->
   <UserControl.Styles>
@@ -153,11 +154,36 @@
           </ItemsControl>
         </StackPanel>
 
-        <!-- Runs sem job: não disputam runner ainda, e a API não diz por quê. -->
+        <!-- Segurados por concurrency (#131): fora da fila, porque runner livre não os destrava. -->
+        <StackPanel Spacing="{DynamicResource Spacing.Related}" IsVisible="{Binding HasHeldRuns}">
+          <TextBlock Classes="section" Text="SEGURADOS POR CONCURRENCY" />
+          <TextBlock Classes="meta wrap"
+                     Text="Não esperam runner: outro run do mesmo grupo de concurrency está rodando. Esperar a fila não adianta — destrava quando ele terminar ou for cancelado." />
+          <ItemsControl ItemsSource="{Binding HeldRuns}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <StackPanel Margin="{DynamicResource Margin.TableRow}"
+                            Background="Transparent" ContextRequested="OnRunContextRequested">
+                  <TextBlock Classes="callout" Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                  <TextBlock Classes="meta" Text="{Binding Origin}" />
+                  <TextBlock Classes="meta" Text="{Binding Wait}" />
+                  <TextBlock Classes="meta" Text="{Binding Group, StringFormat='grupo {0}'}" ToolTip.Tip="{Binding Group}" />
+                  <Button Classes="borderless" Padding="0" HorizontalAlignment="Left" Click="OnHolderClick"
+                          IsEnabled="{Binding HasHolderUrl}" ToolTip.Tip="Abrir no navegador o run que está rodando no grupo">
+                    <TextBlock Classes="meta wrap" Text="{Binding Unlock}" />
+                  </Button>
+                  <TextBlock Classes="state busy" Text="cancelamento pedido…" IsVisible="{Binding IsCancelRequested}" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- Runs sem job e sem concurrency segurando: não disputam runner ainda. -->
         <StackPanel Spacing="{DynamicResource Spacing.Related}" IsVisible="{Binding HasWaitingRuns}">
           <TextBlock Classes="section" Text="RUNS SEM JOB AINDA" />
           <TextBlock Classes="meta wrap"
-                     Text="Na fila, mas sem job criado: costuma ser o concurrency segurando o run, ou o GitHub ainda criando os jobs. A API não diz qual." />
+                     Text="Na fila, mas sem job criado, e nenhum grupo de concurrency segurando pelo que a API mostra: costuma ser o GitHub ainda criando os jobs." />
           <ItemsControl ItemsSource="{Binding WaitingRuns}">
             <ItemsControl.ItemTemplate>
               <DataTemplate>

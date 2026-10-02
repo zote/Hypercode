@@ -27,6 +27,15 @@ public partial class ActionsQueueView : UserControl
         main?.ShowSettings();
     }
 
+    /// <summary>O run que segura o grupo de concurrency (#131): é ele que destrava o segurado.</summary>
+    private async void OnHolderClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: HeldRunItem { HolderUrl: { } url } }
+            && Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            && TopLevel.GetTopLevel(this) is { } top)
+            await top.Launcher.LaunchUriAsync(uri);
+    }
+
     // ── Menu do run (#133) ──────────────────────────────────────────────────
 
     /// <summary>
@@ -43,6 +52,7 @@ public partial class ActionsQueueView : UserControl
             RunnerItem item => item.Run,
             QueuedJobItem item => item.Run,
             WaitingRunItem item => item.Run,
+            HeldRunItem item => item.Run,
             _ => null,
         };
         if (run is null) return;

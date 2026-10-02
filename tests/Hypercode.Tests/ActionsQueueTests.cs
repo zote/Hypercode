@@ -229,7 +229,36 @@ public sealed class ActionsQueueTests
 
         public void GroupRunners(string owner, long group, params object[] runners)
             => Routes[$"orgs/{owner}/actions/runner-groups/{group}/runners?per_page=100"] = (200, new { total_count = runners.Length, runners });
+
+        /// <summary>Os grupos de concurrency ativos do repositório, cada um com os membros dados.</summary>
+        public void Concurrency(string repository, params (string Name, object[] Members)[] groups)
+        {
+            Routes[$"repos/{repository}/actions/concurrency_groups?per_page=100"] = (200, new
+            {
+                total_count = groups.Length,
+                concurrency_groups = groups.Select(group => new
+                {
+                    group_name = group.Name,
+                    group_url = $"https://api.github.com/repos/{repository}/actions/concurrency_groups/{Uri.EscapeDataString(group.Name)}",
+                    last_acquired_at = Start.ToString("O"),
+                }).ToArray(),
+            });
+            foreach (var (name, members) in groups)
+                Routes[$"repos/{repository}/actions/concurrency_groups/{Uri.EscapeDataString(name)}"] =
+                    (200, new { group_name = name, total_count = members.Length, group_members = members });
+        }
     }
+
+    private static object MemberJson(long run, string status, long? job = null)
+        => new
+        {
+            run_id = run,
+            run_name = "CI",
+            run_html_url = $"https://github.com/o/r/actions/runs/{run}",
+            job_id = job,
+            job_name = job is null ? null : $"job {job}",
+            status,
+        };
 
     private static object RunJson(long id, string status, string branch = "feat/x", int? pullRequest = null)
         => new
@@ -274,8 +303,9 @@ public sealed class ActionsQueueTests
         Assert.Equal(12, lane.Jobs[1].PullRequest);
         Assert.Equal(20, ActionsQueue.JobsByRunner(snapshot.Runners, snapshot.Jobs)[4].Id);
 
-        // Uma chamada por grupo, uma de grupos, e por repositório 2 + 1 por run ativo.
-        Assert.Equal(2 + 3 + 2 + 2, api.Calls.Count);
+        // Uma chamada por grupo, uma de grupos, e por repositório 2 + 1 por run ativo + a
+        // listagem dos grupos de concurrency, porque nos dois há job na fila.
+        Assert.Equal(2 + 3 + 2 + 2 + 2, api.Calls.Count);
     }
 
     [Fact]
@@ -349,6 +379,162 @@ public sealed class ActionsQueueTests
 
         Assert.Empty(snapshot.QueueProblems);
         Assert.Empty(snapshot.Jobs);
+    }
+
+    // ── Concurrency (#131) ──────────────────────────────────────────────────
+
+    private static ActionsConcurrencyMember Member(long run, string status, long? job = null)
+        => new(run, "CI", $"https://github.com/o/r/actions/runs/{run}", job, job is null ? null : $"job {job}", status);
+
+    [Fact]
+    public void GrupoSoComQuemEsperaNaoSeguraNinguem()
+        => Assert.Empty(ActionsQueue.Holds(new[]
+        {
+            new ActionsConcurrencyGroup("Zimps/a", "ci-1", new[] { Member(1, "pending"), Member(2, "pending") }),
+        }));
+
+    [Fact]
+    public void GrupoComQuemRodaSeguraQuemEspera()
+    {
+        var hold = Assert.Single(ActionsQueue.Holds(new[]
+        {
+            new ActionsConcurrencyGroup("Zimps/a", "ci-1226", new[] { Member(1, "in_progress"), Member(2, "pending") }),
+        }));
+
+        Assert.Equal(2, hold.RunId);
+        Assert.Null(hold.JobId);
+        Assert.Equal("ci-1226", hold.Group);
+        Assert.Equal(1, hold.Holder.RunId);
+    }
+
+    [Fact]
+    public void GrupoVazioNaoSeguraNinguem()
+        => Assert.Empty(ActionsQueue.Holds(new[]
+        {
+            new ActionsConcurrencyGroup("Zimps/a", "ci-1", Array.Empty<ActionsConcurrencyMember>()),
+        }));
+
+    [Fact]
+    public void ConcurrencyDeJobSeguraOJobNaoORun()
+    {
+        var hold = Assert.Single(ActionsQueue.Holds(new[]
+        {
+            new ActionsConcurrencyGroup("Zimps/a", "deploy", new[] { Member(1, "in_progress", job: 10), Member(2, "pending", job: 20) }),
+        }));
+
+        Assert.Equal(20, hold.JobId);
+        Assert.Equal(10, hold.Holder.JobId);
+    }
+
+    [Fact]
+    public async Task RunSeguradoPorConcurrencyVemDaListagemDoRepositorio()
+    {
+        var api = new FakeApi();
+        api.Runs("Zimps/a", "queued", RunJson(2, "queued"));
+        api.Runs("Zimps/a", "in_progress", RunJson(1, "in_progress"));
+        api.Jobs("Zimps/a", 1, JobJson(10, "in_progress", "2026-10-01T11:59:00Z", new[] { "ARM64" }, 4, "Runner4"));
+        api.Jobs("Zimps/a", 2);
+        api.Groups("Zimps");
+        api.Concurrency("Zimps/a", ("ci-refs/heads/main", new[] { MemberJson(1, "in_progress"), MemberJson(2, "pending") }));
+
+        var snapshot = await ActionsQueueService.LoadAsync(new[] { "Zimps/a" }, api.GetAsync, Start);
+
+        var hold = Assert.Single(snapshot.Holds);
+        Assert.Equal(2, hold.RunId);
+        Assert.Equal(1, hold.Holder.RunId);
+        Assert.Empty(snapshot.QueueProblems);
+
+        // Uma listagem por repositório e o GET de cada grupo ativo — nunca o endpoint por run.
+        Assert.Single(api.Calls, call => call.StartsWith("repos/Zimps/a/actions/concurrency_groups?", StringComparison.Ordinal));
+        Assert.Single(api.Calls, call => call.StartsWith("repos/Zimps/a/actions/concurrency_groups/", StringComparison.Ordinal));
+        Assert.DoesNotContain(api.Calls, call => call.Contains("/runs/") && call.Contains("concurrency"));
+    }
+
+    [Fact]
+    public async Task RepositorioSemNadaEsperandoNaoLeOsGrupos()
+    {
+        var api = new FakeApi();
+        api.Runs("Zimps/a", "queued");
+        api.Runs("Zimps/a", "in_progress", RunJson(1, "in_progress"));
+        api.Jobs("Zimps/a", 1, JobJson(10, "in_progress", "2026-10-01T11:59:00Z", new[] { "ARM64" }, 4, "Runner4"));
+        api.Groups("Zimps");
+
+        await ActionsQueueService.LoadAsync(new[] { "Zimps/a" }, api.GetAsync, Start);
+
+        Assert.DoesNotContain(api.Calls, call => call.Contains("concurrency_groups"));
+    }
+
+    [Fact]
+    public async Task SemAcessoAosGruposAFilaSegueSemDistinguir()
+    {
+        var api = new FakeApi();
+        api.Runs("Zimps/a", "queued", RunJson(2, "queued"));
+        api.Runs("Zimps/a", "in_progress");
+        api.Jobs("Zimps/a", 2);
+        api.Groups("Zimps");
+        // Sem rota para concurrency_groups: 404.
+
+        var snapshot = await ActionsQueueService.LoadAsync(new[] { "Zimps/a" }, api.GetAsync, Start);
+
+        Assert.Empty(snapshot.Holds);
+        Assert.Empty(snapshot.QueueProblems);
+        Assert.Single(snapshot.WaitingRuns);
+    }
+
+    [Fact]
+    public void JobSeguradoSaiDaFilaEDizQuemDestrava()
+    {
+        var waiting = Job(20, "Zimps/a", "queued", Start, "ARM64") with { RunId = 2 };
+        var free = Job(30, "Zimps/a", "queued", Start.AddSeconds(1), "ARM64") with { RunId = 3 };
+        var snapshot = Snapshot(jobs: new[] { waiting, free }) with
+        {
+            Holds = new[] { new ActionsHold("Zimps/a", "deploy", 2, 20, Member(1, "in_progress", job: 10)) },
+        };
+
+        var lane = Assert.Single(ActionsQueueViewModel.BuildLanes(snapshot, Start));
+        Assert.Equal("CI › job 30", Assert.Single(lane.Jobs).Title);
+
+        var held = Assert.Single(ActionsQueueViewModel.BuildHeld(snapshot, Start));
+        Assert.Equal("CI › job 20", held.Title);
+        Assert.Equal("deploy", held.Group);
+        Assert.Equal("destrava quando CI › job 10 terminar ou for cancelado", held.Unlock);
+        Assert.Equal("https://github.com/o/r/actions/runs/1", held.HolderUrl);
+    }
+
+    [Fact]
+    public void RunSeguradoNomeiaOQueRodaPeloNumero()
+    {
+        var snapshot = new ActionsSnapshot(
+            Array.Empty<ActionsRunner>(),
+            Array.Empty<ActionsJob>(),
+            new[] { new ActionsWaitingRun(2, "Zimps/a", "CI", "feat/x", 12, Start, null) },
+            new[] { new ActionsRun(1, "Zimps/a", "CI", "feat: x", 482, "feat/x", 12, "https://github.com/o/r/actions/runs/1") },
+            Array.Empty<string>(),
+            Array.Empty<string>(),
+            null,
+            Start)
+        {
+            Holds = new[] { new ActionsHold("Zimps/a", "ci-12", 2, null, new ActionsConcurrencyMember(1, "CI", null, null, null, "in_progress")) },
+        };
+        var targets = (string repository, long id) => id == 1
+            ? new RunTarget(repository, 1, "CI", "feat: x", 482, "feat/x", 12, "https://github.com/o/r/actions/runs/1", null, null)
+            : null;
+
+        var held = Assert.Single(ActionsQueueViewModel.BuildHeld(snapshot, Start.AddMinutes(3), targets));
+        Assert.Equal("destrava quando CI #482 terminar ou for cancelado", held.Unlock);
+        Assert.Equal("https://github.com/o/r/actions/runs/1", held.HolderUrl);
+        Assert.Equal("espera há 3 min", held.Wait);
+    }
+
+    [Fact]
+    public void MembroQueNaoEstaNaLeituraNaoViraItem()
+    {
+        var snapshot = Snapshot() with
+        {
+            Holds = new[] { new ActionsHold("Zimps/a", "ci-1", 99, null, Member(1, "in_progress")) },
+        };
+
+        Assert.Empty(ActionsQueueViewModel.BuildHeld(snapshot, Start));
     }
 
     // ── Cadência ────────────────────────────────────────────────────────────

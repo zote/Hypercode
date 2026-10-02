@@ -71,6 +71,19 @@ public sealed record WaitingRunItem(string Title, string Origin, string Wait, Ru
 }
 
 /// <summary>
+/// Um run (ou job) segurado por <c>concurrency</c> (#131). <see cref="Holder"/> é quem roda no
+/// grupo — o que destrava —, com o link dele; o menu age sobre o segurado, como nos outros itens.
+/// </summary>
+public sealed record HeldRunItem(string Title, string Origin, string Wait, string Group, string Holder, string? HolderUrl, RunTarget? Run = null)
+{
+    public bool IsCancelRequested => Run?.IsCancelRequested == true;
+
+    public bool HasHolderUrl => HolderUrl is not null;
+
+    public string Unlock => $"destrava quando {Holder} terminar ou for cancelado";
+}
+
+/// <summary>
 /// A fila do GitHub Actions (#130): os runners e o que espera por eles, nos repositórios
 /// escolhidos nas configurações. Uma instância só, hospedada no painel lateral da janela e na
 /// janela própria — as duas views mostram o mesmo estado. Com as duas fechadas, não busca nada.
@@ -277,6 +290,10 @@ public sealed class ActionsQueueViewModel : ObservableObject
     public ObservableCollection<WaitingRunItem> WaitingRuns { get; } = new();
 
     public bool HasWaitingRuns => WaitingRuns.Count > 0;
+
+    public ObservableCollection<HeldRunItem> HeldRuns { get; } = new();
+
+    public bool HasHeldRuns => HeldRuns.Count > 0;
 
     public bool HasSnapshot => _snapshot is not null;
 
@@ -650,13 +667,16 @@ public sealed class ActionsQueueViewModel : ObservableObject
         RunnerGroups.Clear();
         Lanes.Clear();
         WaitingRuns.Clear();
+        HeldRuns.Clear();
 
         if (_snapshot is { } snapshot)
         {
             var targets = Targets(snapshot);
+            var held = HeldKeys.Of(snapshot);
             foreach (var group in BuildRunnerGroups(snapshot, now, targets)) RunnerGroups.Add(group);
             foreach (var lane in BuildLanes(snapshot, now, targets, _durations)) Lanes.Add(lane);
-            foreach (var run in snapshot.WaitingRuns.OrderBy(run => run.CreatedAt))
+            foreach (var item in BuildHeld(snapshot, now, targets)) HeldRuns.Add(item);
+            foreach (var run in snapshot.WaitingRuns.Where(run => !held.Runs.Contains((run.Repository, run.Id))).OrderBy(run => run.CreatedAt))
                 WaitingRuns.Add(new WaitingRunItem(
                     run.Workflow, Origin(run.Repository, run.Branch, run.PullRequest), Waiting(now - run.CreatedAt), targets(run.Repository, run.Id)));
         }
@@ -665,6 +685,7 @@ public sealed class ActionsQueueViewModel : ObservableObject
         RaisePropertyChanged(nameof(HasNoRunners));
         RaisePropertyChanged(nameof(HasNoQueue));
         RaisePropertyChanged(nameof(HasWaitingRuns));
+        RaisePropertyChanged(nameof(HasHeldRuns));
         RaisePropertyChanged(nameof(RunnerProblem));
         RaisePropertyChanged(nameof(HasRunnerProblem));
         RaisePropertyChanged(nameof(QueueProblem));
@@ -718,9 +739,12 @@ public sealed class ActionsQueueViewModel : ObservableObject
         Func<string, long, RunTarget?>? targets = null,
         ActionsDurations? durations = null)
     {
-        var starts = ActionsQueue.EstimateStarts(snapshot.Runners, snapshot.Jobs, (durations ?? ActionsDurations.Empty).Median, now);
+        // Job segurado por concurrency não disputa runner: sai da fila e da conta da estimativa.
+        var held = HeldKeys.Of(snapshot);
+        var jobs = snapshot.Jobs.Where(job => !held.Jobs.Contains((job.Repository, job.Id))).ToList();
+        var starts = ActionsQueue.EstimateStarts(snapshot.Runners, jobs, (durations ?? ActionsDurations.Empty).Median, now);
 
-        return ActionsQueue.BuildLanes(snapshot.Jobs)
+        return ActionsQueue.BuildLanes(jobs)
             .Select(lane => new LaneItem(
                 lane.Labels.Count == 0 ? "sem labels" : string.Join(", ", lane.Labels),
                 lane.Jobs.Count == 1 ? "1 esperando" : $"{lane.Jobs.Count} esperando",
@@ -733,6 +757,63 @@ public sealed class ActionsQueueViewModel : ObservableObject
                         targets?.Invoke(job.Repository, job.RunId)))
                     .ToList()))
             .ToList();
+    }
+
+    /// <summary>
+    /// Os segurados por concurrency que esta leitura conhece: o run na fila sem job, quando a
+    /// concorrência é do workflow, e o job que não roda, quando é de job. Membro que não casa com
+    /// nada da leitura (run que já começou, de outro estado) fica de fora: não há o que mostrar.
+    /// </summary>
+    internal static IReadOnlyList<HeldRunItem> BuildHeld(
+        ActionsSnapshot snapshot,
+        DateTimeOffset now,
+        Func<string, long, RunTarget?>? targets = null)
+    {
+        var waiting = new Dictionary<(string Repository, long Id), ActionsWaitingRun>(RunKeyComparer.Instance);
+        foreach (var run in snapshot.WaitingRuns) waiting.TryAdd((run.Repository, run.Id), run);
+        var jobs = new Dictionary<(string Repository, long Id), ActionsJob>(RunKeyComparer.Instance);
+        foreach (var job in snapshot.Jobs.Where(job => !job.IsRunning)) jobs.TryAdd((job.Repository, job.Id), job);
+
+        var items = new List<(DateTimeOffset CreatedAt, HeldRunItem Item)>();
+        var seen = new HashSet<(string Repository, long Id, bool IsJob)>();
+
+        foreach (var hold in snapshot.Holds)
+        {
+            var holderTarget = targets?.Invoke(hold.Repository, hold.Holder.RunId);
+            var holder = holderTarget?.Name ?? hold.Holder.RunName ?? $"o run {hold.Holder.RunId}";
+            if (hold.Holder.JobName is { Length: > 0 } holderJob) holder = $"{holder} › {holderJob}";
+            var holderUrl = hold.Holder.RunUrl ?? holderTarget?.Url;
+
+            if (hold.JobId is { } jobId)
+            {
+                if (!jobs.TryGetValue((hold.Repository, jobId), out var job) || !seen.Add((job.Repository, job.Id, true))) continue;
+                items.Add((job.CreatedAt, new HeldRunItem(
+                    $"{job.Workflow} › {job.Name}", Origin(job.Repository, job.Branch, job.PullRequest), Waiting(now - job.CreatedAt),
+                    hold.Group, holder, holderUrl, targets?.Invoke(job.Repository, job.RunId))));
+            }
+            else
+            {
+                if (!waiting.TryGetValue((hold.Repository, hold.RunId), out var run) || !seen.Add((run.Repository, run.Id, false))) continue;
+                items.Add((run.CreatedAt, new HeldRunItem(
+                    run.Workflow, Origin(run.Repository, run.Branch, run.PullRequest), Waiting(now - run.CreatedAt),
+                    hold.Group, holder, holderUrl, targets?.Invoke(run.Repository, run.Id))));
+            }
+        }
+
+        return items.OrderBy(item => item.CreatedAt).Select(item => item.Item).ToList();
+    }
+
+    /// <summary>Quem a concurrency segura, por (repositório, id): os runs inteiros e os jobs.</summary>
+    private sealed record HeldKeys(HashSet<(string Repository, long Id)> Runs, HashSet<(string Repository, long Id)> Jobs)
+    {
+        public static HeldKeys Of(ActionsSnapshot snapshot)
+        {
+            var keys = new HeldKeys(new(RunKeyComparer.Instance), new(RunKeyComparer.Instance));
+            foreach (var hold in snapshot.Holds)
+                if (hold.JobId is { } job) keys.Jobs.Add((hold.Repository, job));
+                else keys.Runs.Add((hold.Repository, hold.RunId));
+            return keys;
+        }
     }
 
     /// <summary>
