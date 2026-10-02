@@ -59,6 +59,7 @@ PHOSPHORS = [
     ("Icon.Info", "info", "explicação de um ajuste"),
     ("Icon.SortAscending", "caret-up", "coluna ordenada, crescente"),
     ("Icon.SortDescending", "caret-down", "coluna ordenada, decrescente"),
+    ("Icon.Graph", "graph", "grafo de issues"),
 ]
 
 

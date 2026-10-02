@@ -104,6 +104,7 @@
         <PathIcon Data="{StaticResource Icon.Info}" ToolTip.Tip="Icon.Info" />
         <PathIcon Data="{StaticResource Icon.SortAscending}" ToolTip.Tip="Icon.SortAscending" />
         <PathIcon Data="{StaticResource Icon.SortDescending}" ToolTip.Tip="Icon.SortDescending" />
+        <PathIcon Data="{StaticResource Icon.Graph}" ToolTip.Tip="Icon.Graph" />
       </WrapPanel>
       <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Spacing.Related}">
         <PathIcon Classes="small" Data="{StaticResource Icon.Settings}" />
