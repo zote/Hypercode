@@ -199,5 +199,12 @@
                  Text="Os repositórios cuja fila o painel do Actions acompanha (botão da barra, ⇧⌘A). Os runners são da organização e todos os repositórios dela disputam os mesmos, mas não há endpoint de fila da org inteira: varrer todos estoura a cota. Escolha os que importam — cada um custa ~3 chamadas por ciclo, na cadência do monitoramento. Aceita owner/repo ou a URL do GitHub." />
     </StackPanel>
 
+    <!-- Só no global: o painel é da janela e segue a aba da frente. -->
+    <StackPanel Classes="setting" IsVisible="{Binding !IsRepositoryScope}">
+      <CheckBox Name="IssueGraphBox" IsChecked="{Binding IssueGraphEnabled, Mode=TwoWay}" Content="Grafo de issues do repositório" />
+      <TextBlock Classes="help"
+                 Text="Botão na barra (⇧⌘G) com as issues abertas do repositório da aba: quais estão livres — sem bloqueador aberto — e quantas cada uma destrava, somando todos os níveis de Blocked by / Blocking. Lista por impacto e grafo em camadas, com filtro de milestone, label e tipo. Lê o GitHub ao abrir o painel e ao trocar de aba (~2 pontos da cota GraphQL a cada 50 issues). Desligado, nada é lido." />
+    </StackPanel>
+
   </StackPanel>
 </Window>

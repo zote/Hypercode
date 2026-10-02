@@ -55,9 +55,10 @@ public sealed class GitSandbox : IDisposable
 
     /// <summary>
     /// O app como o usuário o abre, mas gravando na sandbox. Sem <paramref name="settings"/>,
-    /// relê o settings.json da sandbox — é o "fechar e abrir o app".
+    /// relê o settings.json da sandbox — é o "fechar e abrir o app". <paramref name="loadIssues"/>
+    /// troca a leitura das issues do grafo, que sem ela seria o gh de verdade.
     /// </summary>
-    public MainViewModel OpenApp(Settings? settings = null)
+    public MainViewModel OpenApp(Settings? settings = null, Func<string, CancellationToken, Task<IssueGraphData>>? loadIssues = null)
     {
         settings ??= File.Exists(SettingsFile) ? SettingsStore.Parse(File.ReadAllText(SettingsFile)) : new Settings();
 
@@ -68,7 +69,8 @@ public sealed class GitSandbox : IDisposable
             settings,
             saved => File.WriteAllText(SettingsFile, SettingsStore.Serialize(saved)),
             PullRequestMemory.Load(Path.Combine(Root, "pull-requests.json")),
-            new AutoCleanupStore(Path.Combine(Root, "autocleanup.json")));
+            new AutoCleanupStore(Path.Combine(Root, "autocleanup.json")),
+            loadIssues: loadIssues);
 
         _shells.Add(shell);
         return shell;

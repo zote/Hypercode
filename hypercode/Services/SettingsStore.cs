@@ -99,6 +99,18 @@ public sealed class Settings
     public bool ActionsWindowOpen { get; set; }
 
     /// <summary>
+    /// O grafo de issues do repositório (#144). Desligado por padrão: desligado, não há botão,
+    /// painel nem janela, e nada é lido do GitHub.
+    /// </summary>
+    public bool IssueGraphEnabled { get; set; }
+
+    /// <summary>O painel do grafo de issues aberto ao lado da lista, ou recolhido.</summary>
+    public bool IssueGraphPanelOpen { get; set; }
+
+    /// <summary>A janela própria do grafo de issues aberta — volta aberta na próxima sessão.</summary>
+    public bool IssueGraphWindowOpen { get; set; }
+
+    /// <summary>
     /// O repositório veio da chave antiga, e não de uma aba: pode ser a pasta de um worktree
     /// qualquer, e precisa ser resolvido para o principal antes de virar aba.
     /// </summary>

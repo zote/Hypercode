@@ -59,9 +59,35 @@ public partial class MainWindow : Window
 
     private void WatchShell()
     {
-        if (_watchedShell is not null) _watchedShell.PropertyChanged -= OnShellPropertyChanged;
+        if (_watchedShell is not null)
+        {
+            _watchedShell.PropertyChanged -= OnShellPropertyChanged;
+            _watchedShell.Issues.PropertyChanged -= OnIssuesPropertyChanged;
+        }
+
         _watchedShell = Shell;
-        if (_watchedShell is not null) _watchedShell.PropertyChanged += OnShellPropertyChanged;
+        if (_watchedShell is not null)
+        {
+            _watchedShell.PropertyChanged += OnShellPropertyChanged;
+            _watchedShell.Issues.PropertyChanged += OnIssuesPropertyChanged;
+        }
+    }
+
+    /// <summary>Desligar o grafo nas configurações fecha a janela própria dele — mas ela volta se ligar de novo.</summary>
+    private void OnIssuesPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(IssueGraphViewModel.IsEnabled) || Shell is not { } shell) return;
+
+        if (!shell.Issues.IsEnabled && _issueGraphWindow is { } window)
+        {
+            _keepIssueGraphWindowState = true;
+            window.Close();
+            _keepIssueGraphWindowState = false;
+        }
+        else if (shell.Issues.IsEnabled && shell.Issues.IsWindowOpen)
+        {
+            ShowIssueGraphWindow();
+        }
     }
 
     private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -147,8 +173,9 @@ public partial class MainWindow : Window
     {
         if (Shell is not { } shell) return;
 
-        // A janela da fila volta se estava aberta ao sair.
+        // A janela da fila volta se estava aberta ao sair; a do grafo também, se ele está ligado.
         if (shell.Actions.IsWindowOpen) ShowActionsWindow();
+        if (shell.Issues.IsEnabled && shell.Issues.IsWindowOpen) ShowIssueGraphWindow();
 
         // As abas da última sessão: a da frente carrega primeiro.
         await shell.OpenSavedAsync();
@@ -222,10 +249,73 @@ public partial class MainWindow : Window
         window.Show();
     }
 
+    // ── Grafo de issues (#144) ──────────────────────────────────────────────
+
+    private IssueGraphWindow? _issueGraphWindow;
+
+    /// <summary>Fechando a janela do grafo por desligar o recurso: ela fica guardada como aberta.</summary>
+    private bool _keepIssueGraphWindowState;
+
+    /// <summary>A janela própria do grafo, se aberta.</summary>
+    internal IssueGraphWindow? IssueGraphWindow => _issueGraphWindow;
+
+    private void OnToggleIssueGraphPanelClick(object? sender, RoutedEventArgs e) => ToggleIssueGraphPanel();
+
+    private void OnCloseIssueGraphPanelClick(object? sender, RoutedEventArgs e)
+    {
+        if (Shell is { } shell) shell.Issues.IsPanelOpen = false;
+    }
+
+    /// <summary>⇧⌘G e o botão da barra; como na fila, com a janela própria aberta e o painel recolhido, traz a janela.</summary>
+    private void ToggleIssueGraphPanel()
+    {
+        if (Shell is not { } shell || !shell.Issues.IsEnabled) return;
+
+        if (!shell.Issues.IsPanelOpen && _issueGraphWindow is not null)
+        {
+            _issueGraphWindow.Activate();
+            return;
+        }
+
+        shell.Issues.IsPanelOpen = !shell.Issues.IsPanelOpen;
+    }
+
+    private void OnDetachIssueGraphClick(object? sender, RoutedEventArgs e)
+    {
+        if (Shell is not { } shell) return;
+
+        ShowIssueGraphWindow();
+        shell.Issues.IsPanelOpen = false;
+    }
+
+    /// <summary>Abre a janela do grafo, ou a traz para a frente. Sem dono, como a da fila.</summary>
+    internal void ShowIssueGraphWindow()
+    {
+        if (Shell is not { } shell || !shell.Issues.IsEnabled) return;
+
+        if (_issueGraphWindow is not null)
+        {
+            _issueGraphWindow.Activate();
+            return;
+        }
+
+        var window = new IssueGraphWindow { DataContext = shell.Issues };
+        window.Closed += (_, _) =>
+        {
+            _issueGraphWindow = null;
+            if (!_isClosingApp && !_keepIssueGraphWindowState) shell.Issues.IsWindowOpen = false;
+        };
+
+        _issueGraphWindow = window;
+        shell.Issues.IsWindowOpen = true;
+        window.Show();
+    }
+
     protected override void OnClosed(EventArgs e)
     {
-        // A janela da fila sozinha não segura o app aberto.
+        // As janelas da fila e do grafo sozinhas não seguram o app aberto.
         _isClosingApp = true;
+        _issueGraphWindow?.Close();
         _actionsWindow?.Close();
         Shell?.Actions.Stop();
         base.OnClosed(e);
@@ -290,6 +380,11 @@ public partial class MainWindow : Window
             case Key.A when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
                 e.Handled = true;
                 ToggleActionsPanel();
+                break;
+
+            case Key.G when e.KeyModifiers.HasFlag(KeyModifiers.Shift) && Shell is { Issues.IsEnabled: true }:
+                e.Handled = true;
+                ToggleIssueGraphPanel();
                 break;
 
             case >= Key.D1 and <= Key.D9:

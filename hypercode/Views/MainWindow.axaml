@@ -199,6 +199,12 @@
                   ToolTip.Tip="Fila do GitHub Actions (⇧⌘A): os runners da organização, o que cada um roda e a ordem estimada do que espera, nos repositórios escolhidos nas configurações">
             <PathIcon Data="{StaticResource Icon.Columns}" />
           </Button>
+          <!-- Só com o grafo ligado nas configurações (#144): desligado, nem o botão aparece. -->
+          <Button Name="IssueGraphToggle" Classes="borderless" Click="OnToggleIssueGraphPanelClick"
+                  IsVisible="{Binding Issues.IsEnabled}"
+                  ToolTip.Tip="Grafo de issues (⇧⌘G): quais issues do repositório da aba estão livres e quantas cada uma destrava">
+            <PathIcon Data="{StaticResource Icon.Graph}" />
+          </Button>
           <Button Classes="borderless" Click="OnHelpClick"
                   ToolTip.Tip="O que significam as etiquetas, a coluna PR, as abas e a limpeza">
             <PathIcon Data="{StaticResource Icon.Help}" />
@@ -212,8 +218,8 @@
       </Grid>
     </Border>
 
-    <!-- Abaixo das abas: o repositório da frente e, à direita, o painel da fila do Actions. -->
-    <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+    <!-- Abaixo das abas: o repositório da frente e, à direita, os painéis do grafo de issues e da fila do Actions. -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto">
 
     <!-- Sem aba nenhuma -->
     <StackPanel Grid.Column="0" IsVisible="{Binding HasNoRepositories}"
@@ -400,7 +406,32 @@
     <!-- A fila do GitHub Actions (#130): global, não da aba — fica com a janela sem repositório
          também. A mesma view da janela própria; recolhido, não busca nada. 340: largura do
          painel, layout desta janela. -->
-    <Border Grid.Column="1" Name="ActionsPanel" Width="340"
+    <!-- O grafo de issues (#144): da aba da frente, segue a troca de aba. A mesma view da janela
+         própria; recolhido ou desligado, não lê nada. 440: largura do painel, cabe a lista com
+         os filtros numa linha e meia e dois cartões do grafo lado a lado. -->
+    <Border Grid.Column="1" Name="IssueGraphPanel" Width="440"
+            BorderThickness="1,0,0,0" BorderBrush="{DynamicResource Brush.Separator}"
+            Background="{DynamicResource Brush.Background.Content}"
+            DataContext="{Binding Issues}"
+            IsVisible="{Binding IsPanelVisible}">
+      <Grid RowDefinitions="Auto,*">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="{DynamicResource Padding.Bar}">
+          <TextBlock Grid.Column="0" Classes="headline" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+            <Run Text="Issues" />
+            <Run Text="{Binding RepositoryName}" Foreground="{DynamicResource Brush.Label.Secondary}" />
+          </TextBlock>
+          <Button Grid.Column="1" Classes="borderless" Content="Destacar" Click="OnDetachIssueGraphClick"
+                  ToolTip.Tip="Abre o grafo numa janela própria, com espaço para as colunas, e recolhe o painel." />
+          <Button Grid.Column="2" Classes="borderless" Click="OnCloseIssueGraphPanelClick"
+                  ToolTip.Tip="Recolher o painel (⇧⌘G). Recolhido, não consulta o GitHub.">
+            <PathIcon Classes="small" Data="{StaticResource Icon.Close}" />
+          </Button>
+        </Grid>
+        <views:IssueGraphView Grid.Row="1" />
+      </Grid>
+    </Border>
+
+    <Border Grid.Column="2" Name="ActionsPanel" Width="340"
             BorderThickness="1,0,0,0" BorderBrush="{DynamicResource Brush.Separator}"
             Background="{DynamicResource Brush.Background.Content}"
             DataContext="{Binding Actions}"

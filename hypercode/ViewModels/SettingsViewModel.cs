@@ -37,6 +37,7 @@ public sealed class SettingsViewModel : ObservableObject
         nameof(WorktreesRootPreview),
         nameof(KeepSlashes), nameof(KeepSlashesUsesGlobal), nameof(CanEditKeepSlashes), nameof(IsKeepSlashesOverridden),
         nameof(ActionsRepositoriesText), nameof(ActionsRepositoriesIgnored),
+        nameof(IssueGraphEnabled),
         nameof(SelectedTerminal), nameof(TerminalHint), nameof(TerminalNotice),
     };
 
@@ -336,6 +337,23 @@ public sealed class SettingsViewModel : ObservableObject
     }
 
     public string? ActionsRepositoriesIgnored => _actionsIgnored;
+
+    // ── Grafo de issues (só global) ─────────────────────────────────────────
+
+    /// <summary>
+    /// Liga o grafo de issues (#144). Sem override: é um painel da janela, que segue a aba da
+    /// frente — ligar num repositório e não em outro faria o botão aparecer e sumir ao trocar de aba.
+    /// </summary>
+    public bool IssueGraphEnabled
+    {
+        get => Global.IssueGraphEnabled;
+        set
+        {
+            if (Global.IssueGraphEnabled == value) return;
+            Global.IssueGraphEnabled = value;
+            Commit();
+        }
+    }
 
     // ── Gravação ────────────────────────────────────────────────────────────
 
