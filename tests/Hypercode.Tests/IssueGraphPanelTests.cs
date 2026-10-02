@@ -3,6 +3,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Hypercode.Services;
 using Hypercode.ViewModels;
 using Hypercode.Views;
@@ -17,6 +18,9 @@ public sealed class IssueGraphPanelTests : IDisposable
 
     private readonly List<string> _reads = new();
 
+    /// <summary>#2 também presa por uma issue de outro repositório, que o grafo mostra como cartão.</summary>
+    private bool _withExternal;
+
     public void Dispose() => _sandbox.Dispose();
 
     /// <summary>A leitura das issues anota o repositório e devolve #1 bloqueando #2.</summary>
@@ -29,10 +33,11 @@ public sealed class IssueGraphPanelTests : IDisposable
             => new(repo, number, $"issue {number}", $"https://github.com/{repo}/issues/{number}", null, null, null,
                 Array.Empty<IssueLabel>(), blockedBy, blocking);
 
+        var external = new IssueRef("outro/repo", 9, "issue de fora", "https://github.com/outro/repo/issues/9", true);
         return Task.FromResult(new IssueGraphData(repo, new[]
         {
             Issue(1, Array.Empty<IssueRef>(), new[] { Ref(2) }),
-            Issue(2, new[] { Ref(1) }, Array.Empty<IssueRef>()),
+            Issue(2, _withExternal ? new[] { Ref(1), external } : new[] { Ref(1) }, Array.Empty<IssueRef>()),
         }, Array.Empty<string>(), DateTimeOffset.UtcNow));
     }
 
@@ -165,6 +170,99 @@ public sealed class IssueGraphPanelTests : IDisposable
         Assert.True(window.IssueGraphWindow is { IsVisible: true });
 
         settings.Detach();
+        window.Close();
+    }
+
+    /// <summary>O worktree principal sai da lista de worktrees, lida do git fora da thread da UI.</summary>
+    private static void WaitForWorktrees(MainViewModel shell)
+    {
+        var until = DateTime.UtcNow.AddSeconds(10);
+        while (shell.SelectedRepository is not { CanCreateWorktree: true } && DateTime.UtcNow < until)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+
+        Assert.True(shell.SelectedRepository is { CanCreateWorktree: true });
+    }
+
+    private static CreateWorktreeViewModel DialogViewModel(MainWindow window)
+        => Assert.IsType<CreateWorktreeViewModel>(window.CreateWorktreeDialog?.DataContext);
+
+    [AvaloniaFact]
+    public void MenuDoCartaoPedeWorktreeComONumeroEMantemOPainel()
+    {
+        _withExternal = true;
+        var repository = _sandbox.CreateRepository("repo");
+        var (window, shell) = Open(new Settings { Repositories = { repository }, IssueGraphEnabled = true, IssueGraphPanelOpen = true });
+        shell.Issues.ShowsGraph = true;
+        shell.Issues.Focus(new IssueKey("zote/teste", 2));
+        WaitForWorktrees(shell);
+
+        var view = Panel(window).GetLogicalDescendants().OfType<IssueGraphView>().Single();
+        var cards = view.GetVisualDescendants().OfType<Border>().Where(border => border.DataContext is GraphNodeItem && border.ContextMenu is not null).ToList();
+        MenuItem CreateItem(int number)
+        {
+            var card = cards.Single(border => ((GraphNodeItem)border.DataContext!).Key.Number == number);
+            card.ContextMenu!.Open(card);
+            Dispatcher.UIThread.RunJobs();
+            var item = card.ContextMenu.Items.OfType<MenuItem>().Last();
+            card.ContextMenu.Close();
+            return item;
+        }
+
+        // A de outro repositório: desabilitada, com o motivo no próprio item.
+        var external = CreateItem(9);
+        Assert.False(external.IsEnabled);
+        Assert.Contains("outro repositório", external.Header as string);
+
+        var local = CreateItem(2);
+        Assert.True(local.IsEnabled);
+        local.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+
+        var dialog = DialogViewModel(window);
+        Assert.Equal("2", dialog.IssueNumberText);
+        Assert.True(dialog.IsIssueMode);
+        Assert.Same(window, window.CreateWorktreeDialog!.Owner);
+
+        // Com o diálogo aberto, outro pedido não abre um segundo.
+        var first = window.CreateWorktreeDialog;
+        shell.Issues.RequestWorktree(1);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(first, window.CreateWorktreeDialog);
+
+        // Cancelado, o grafo segue como estava: painel aberto, no grafo, com o foco.
+        first!.Close();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Null(window.CreateWorktreeDialog);
+        Assert.True(shell.Issues.IsPanelOpen);
+        Assert.True(shell.Issues.ShowsGraph);
+        Assert.True(shell.Issues.IsFocused);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void PedidoDaJanelaDestacadaAbreODialogoSobreEla()
+    {
+        var repository = _sandbox.CreateRepository("repo");
+        var (window, shell) = Open(new Settings { Repositories = { repository }, IssueGraphEnabled = true });
+        window.ShowIssueGraphWindow();
+        Dispatcher.UIThread.RunJobs();
+        var detached = window.IssueGraphWindow!;
+        detached.Activate();
+        WaitForWorktrees(shell);
+
+        Assert.True(detached.IsActive);
+        shell.Issues.RequestWorktree(1);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal("1", DialogViewModel(window).IssueNumberText);
+        Assert.Same(detached, window.CreateWorktreeDialog!.Owner);
+
+        window.CreateWorktreeDialog.Close();
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(detached.IsVisible);
         window.Close();
     }
 }

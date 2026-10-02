@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Hypercode.Services;
 using Hypercode.ViewModels;
 
 namespace Hypercode.Views;
@@ -60,18 +61,34 @@ public partial class IssueGraphView : UserControl
         if ((sender as Control)?.DataContext is IssueImpactItem item) _ = OpenAsync(item.Url);
     }
 
+    /// <summary>Do menu da linha ou do cartão.</summary>
     private void OnOpenItemClick(object? sender, RoutedEventArgs e)
     {
-        if ((sender as Control)?.DataContext is IssueImpactItem item) _ = OpenAsync(item.Url);
+        if (ItemOf(sender) is { } item) _ = OpenAsync(item.Url);
     }
 
-    /// <summary>Do menu da linha: isola a issue no grafo e mostra o grafo.</summary>
+    /// <summary>Do menu da linha ou do cartão: isola a issue no grafo e mostra o grafo.</summary>
     private void OnFocusItemClick(object? sender, RoutedEventArgs e)
     {
-        if ((sender as Control)?.DataContext is not IssueImpactItem item || ViewModel is not { } viewModel) return;
+        if (ItemOf(sender) is not { } item || ViewModel is not { } viewModel) return;
         viewModel.Focus(item.Key);
         viewModel.ShowsGraph = true;
     }
+
+    /// <summary>Do menu da linha ou do cartão: o diálogo de worktree já com o número da issue (#147).</summary>
+    private void OnCreateWorktreeItemClick(object? sender, RoutedEventArgs e)
+    {
+        if (ItemOf(sender) is not { External: false } item || ViewModel is not { } viewModel) return;
+        viewModel.RequestWorktree(item.Key.Number);
+    }
+
+    /// <summary>A issue por trás de um item de menu: uma linha da lista ou um cartão do grafo.</summary>
+    private static (IssueKey Key, string Url, bool External)? ItemOf(object? sender) => (sender as Control)?.DataContext switch
+    {
+        IssueImpactItem item => (item.Key, item.Url, false),
+        GraphNodeItem node => (node.Key, node.Url, !node.CanCreateWorktree),
+        _ => null,
+    };
 
     private async Task OpenAsync(string url)
     {

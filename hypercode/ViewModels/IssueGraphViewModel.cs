@@ -61,6 +61,13 @@ public sealed record GraphNodeItem(
     public bool IsBlocked => IsLocalOpen && !IsFree;
 
     public bool IsStub => !IsLocalOpen;
+
+    /// <summary>O worktree é deste repositório: issue de outro não ganha um aqui (#147).</summary>
+    public bool CanCreateWorktree => !IsExternal;
+
+    public string CreateWorktreeHeader => IsExternal
+        ? "Criar worktree: a issue é de outro repositório"
+        : IssueGraphViewModel.CreateWorktreeText;
 }
 
 /// <summary>O vão que uma aresta longa atravessa numa coluna do meio: entra à esquerda e sai à direita, na mesma altura.</summary>
@@ -107,6 +114,8 @@ public sealed class IssueGraphViewModel : ObservableObject
 
     public const string ReachTip =
         "Alcance transitivo: quantas issues abertas, somando todos os níveis, dependem desta — direta ou indiretamente. Conta todas as abertas do repositório, não só as do filtro. Livre é a aberta sem nenhum bloqueador aberto: bloqueador já fechado não segura mais nada.";
+
+    public const string CreateWorktreeText = "Criar worktree para esta issue";
 
     private readonly Settings _settings;
     private readonly Action _save;
@@ -240,6 +249,16 @@ public sealed class IssueGraphViewModel : ObservableObject
         _started = true;
         _ = EnsureLoadedAsync();
     }
+
+    // ── Worktree ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Pedido de worktree para uma issue deste repositório, pelo menu do grafo (#147). Quem monta
+    /// o diálogo é a janela principal, a mesma montagem do Novo worktree.
+    /// </summary>
+    public event Action<int>? WorktreeRequested;
+
+    public void RequestWorktree(int number) => WorktreeRequested?.Invoke(number);
 
     // ── Repositório ─────────────────────────────────────────────────────────
 
