@@ -435,6 +435,26 @@ public sealed class IssueGraphViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Desenha as fechadas que chegam como ponta de dependência (#146). Só exibição: a consulta
+    /// não muda, e livre e alcance já contam só bloqueadores abertos, marcado ou não. Persiste.
+    /// </summary>
+    public bool ShowClosed
+    {
+        get => _settings.IssueGraphShowClosed;
+        set
+        {
+            if (_settings.IssueGraphShowClosed == value) return;
+            _settings.IssueGraphShowClosed = value;
+            _save();
+            RaisePropertyChanged();
+
+            // O foco numa fechada que acabou de sumir não tem o que mostrar.
+            if (!value && _state is { Focus: { } focus, Graph: { } graph } state && !graph.Nodes[focus].IsOpen) state.Focus = null;
+            Rebuild();
+        }
+    }
+
     // ── Lista e grafo ───────────────────────────────────────────────────────
 
     /// <summary>O grafo à vista; senão, a lista por impacto. A lista decide mais rápido; o grafo explica.</summary>
@@ -504,7 +524,7 @@ public sealed class IssueGraphViewModel : ObservableObject
     /// </summary>
     public void Focus(IssueKey key)
     {
-        if (_state is not { Graph: { } graph } state || !graph.Nodes.ContainsKey(key)) return;
+        if (_state is not { Graph: { } graph } state || !graph.Nodes.TryGetValue(key, out var node) || !Visible(node)) return;
         if (state.Focus == key) return;
         state.Focus = key;
         Rebuild();
@@ -664,6 +684,7 @@ public sealed class IssueGraphViewModel : ObservableObject
         }
 
         IssueGraph shown;
+        var showClosed = ShowClosed;
         if (state.Focus is { } focus)
         {
             var keep = new HashSet<IssueKey> { focus };
@@ -671,19 +692,22 @@ public sealed class IssueGraphViewModel : ObservableObject
             keep.UnionWith(graph.Reach(focus));
             keep.UnionWith(graph.Predecessors(focus));
             keep.UnionWith(graph.Successors(focus));
+            keep.RemoveWhere(key => key != focus && !Visible(graph.Nodes[key]));
             shown = graph.Subgraph(keep);
             GraphNote = null;
         }
         else
         {
             // Os filtros valem antes do layout. As pontas fechadas ou de fora vêm junto das
-            // issues que ficaram; issue sem aresta nenhuma não entra — fica só na lista.
+            // issues que ficaram — as fechadas só se a pessoa pediu; issue sem aresta nenhuma
+            // não entra — fica só na lista. A ponta que sai leva junto as arestas dela.
             var matching = data.Issues.Where(issue => Matches(state, issue)).Select(issue => issue.Key).ToHashSet();
             var keep = new HashSet<IssueKey>(matching);
+            bool Stub(IssueKey other) => graph.Nodes[other] is { IsLocalOpen: false } node && Visible(node);
             foreach (var key in matching)
             {
-                keep.UnionWith(graph.Predecessors(key).Where(other => !graph.Nodes[other].IsLocalOpen));
-                keep.UnionWith(graph.Successors(key).Where(other => !graph.Nodes[other].IsLocalOpen));
+                keep.UnionWith(graph.Predecessors(key).Where(Stub));
+                keep.UnionWith(graph.Successors(key).Where(Stub));
             }
 
             var filtered = graph.Subgraph(keep);
@@ -691,11 +715,12 @@ public sealed class IssueGraphViewModel : ObservableObject
             shown = filtered.Subgraph(connected);
 
             var alone = matching.Count(key => !connected.Contains(key));
+            var dependency = showClosed ? "dependência" : "dependência aberta";
             GraphNote = !graph.HasEdges ? null
-                : connected.Count == 0 ? "Nenhuma issue do filtro tem dependência — estão todas só na lista."
+                : connected.Count == 0 ? $"Nenhuma issue do filtro tem {dependency} — estão todas só na lista."
                 : alone == 0 ? null
-                : alone == 1 ? "1 issue sem dependência fica só na lista."
-                : $"{alone} issues sem dependência ficam só na lista.";
+                : alone == 1 ? $"1 issue sem {dependency} fica só na lista."
+                : $"{alone} issues sem {dependency} ficam só na lista.";
         }
 
         var layout = IssueLayout.Compute(shown);
@@ -764,6 +789,9 @@ public sealed class IssueGraphViewModel : ObservableObject
                                                     + (GraphEdges.Any(edge => edge.IsCycle) ? ColumnGap : 0);
         GraphHeight = tallest == 0 ? 0 : 2 * Margin + tallest;
     }
+
+    /// <summary>A fechada só entra no desenho com <see cref="ShowClosed"/>; o resto, sempre.</summary>
+    private bool Visible(IssueGraphNode node) => node.IsOpen || ShowClosed;
 
     /// <summary>A segunda linha do cartão: o estado para a aberta daqui; fechada ou de fora para as pontas.</summary>
     private static string Detail(RepositoryState state, IssueGraph graph, IssueGraphNode node)

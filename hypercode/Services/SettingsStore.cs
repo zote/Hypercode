@@ -111,6 +111,12 @@ public sealed class Settings
     public bool IssueGraphWindowOpen { get; set; }
 
     /// <summary>
+    /// O grafo de issues desenha as fechadas que chegam como ponta de dependência (#146).
+    /// Desligado por padrão: o que já foi resolvido só atrapalha escolher a próxima.
+    /// </summary>
+    public bool IssueGraphShowClosed { get; set; }
+
+    /// <summary>
     /// O repositório veio da chave antiga, e não de uma aba: pode ser a pasta de um worktree
     /// qualquer, e precisa ser resolvido para o principal antes de virar aba.
     /// </summary>

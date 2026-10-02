@@ -387,7 +387,7 @@ public sealed class IssueGraphTests
 
         Assert.Equal(new[] { "Todas as milestones", "v1", "v2", "Sem milestone" }, viewModel.MilestoneOptions.Select(option => option.Label));
         Assert.Equal(4, viewModel.GraphNodes.Count);
-        Assert.Equal("1 issue sem dependência fica só na lista.", viewModel.GraphNote);
+        Assert.Equal("1 issue sem dependência aberta fica só na lista.", viewModel.GraphNote);
 
         viewModel.SelectedMilestone = viewModel.MilestoneOptions.Single(option => option.Value == "v1");
         Assert.Equal(new[] { 1, 2 }, viewModel.Items.Select(item => item.Number).OrderBy(n => n));
@@ -446,6 +446,90 @@ public sealed class IssueGraphTests
         viewModel.ClearFocus();
         Assert.Equal(6, viewModel.GraphNodes.Count);
         Assert.False(viewModel.IsFocused);
+    }
+
+    /// <summary>
+    /// #10 presa pela #5 (fechada) e pela #7 (aberta); #11 presa só pela #6 (fechada). As
+    /// fechadas chegam só como ponta de dependência, como na leitura de verdade.
+    /// </summary>
+    private static IReadOnlyList<IssueData> AbertasEFechadas() => new[]
+    {
+        Issue(7, blocks: new[] { 10 }),
+        Issue(10, blockedBy: new[] { 7 }) with { BlockedBy = new[] { Ref(5, open: false), Ref(7) } },
+        Issue(11) with { BlockedBy = new[] { Ref(6, open: false) } },
+    };
+
+    private static void AssertMetricaSoContaAbertas(IssueGraphViewModel viewModel)
+    {
+        var items = viewModel.Items.ToDictionary(item => item.Number);
+        Assert.Equal(new[] { 7, 10, 11 }, items.Keys.OrderBy(n => n));
+        Assert.Equal(1, items[10].OpenBlockers);
+        Assert.True(items[11].IsFree);
+        Assert.True(items[7].IsFree);
+        Assert.Equal(1, items[7].Reach);
+    }
+
+    [Fact]
+    public void FechadasSomemDoGrafoPorPadraoComAsArestas()
+    {
+        var (viewModel, github, _) = Open(AbertasEFechadas());
+
+        Assert.False(viewModel.ShowClosed);
+        Assert.Equal(new[] { 7, 10 }, viewModel.GraphNodes.Select(node => node.Key.Number).OrderBy(n => n));
+        Assert.DoesNotContain(viewModel.GraphNodes, node => node.IsClosed);
+        var edge = Assert.Single(viewModel.GraphEdges);
+        Assert.False(edge.IsResolved);
+        Assert.Equal("1 issue sem dependência aberta fica só na lista.", viewModel.GraphNote);
+        AssertMetricaSoContaAbertas(viewModel);
+        Assert.Equal(1, github.Calls);
+    }
+
+    [Fact]
+    public void MostrarFechadasDesenhaSemMudarAMetricaNemLerDeNovo()
+    {
+        var (viewModel, github, _) = Open(AbertasEFechadas());
+
+        viewModel.ShowClosed = true;
+
+        Assert.Equal(new[] { 5, 6, 7, 10, 11 }, viewModel.GraphNodes.Select(node => node.Key.Number).OrderBy(n => n));
+        Assert.Equal(new[] { 5, 6 }, viewModel.GraphNodes.Where(node => node.IsClosed).Select(node => node.Key.Number).OrderBy(n => n));
+        Assert.All(viewModel.GraphNodes.Where(node => node.IsClosed), node => Assert.True(node.IsStub));
+        Assert.Equal(3, viewModel.GraphEdges.Count);
+        Assert.Equal(2, viewModel.GraphEdges.Count(edge => edge.IsResolved));
+        Assert.Null(viewModel.GraphNote);
+        AssertMetricaSoContaAbertas(viewModel);
+        Assert.True(viewModel.GraphNodes.Single(node => node.Key.Number == 11).IsFree);
+        Assert.Equal(1, github.Calls);
+    }
+
+    [Fact]
+    public void MostrarFechadasPersisteNasConfiguracoes()
+    {
+        var settings = new Settings { IssueGraphEnabled = true, IssueGraphPanelOpen = true };
+        var saves = 0;
+        var viewModel = new IssueGraphViewModel(settings, () => saves++, new FakeGitHub().LoadAsync);
+
+        viewModel.ShowClosed = true;
+
+        Assert.True(settings.IssueGraphShowClosed);
+        Assert.Equal(1, saves);
+        Assert.True(new IssueGraphViewModel(settings, () => { }, new FakeGitHub().LoadAsync).ShowClosed);
+    }
+
+    [Fact]
+    public void EsconderFechadasTiraOFocoDeUmaFechada()
+    {
+        var (viewModel, _, _) = Open(AbertasEFechadas());
+        viewModel.Focus(K(5));
+        Assert.False(viewModel.IsFocused);
+
+        viewModel.ShowClosed = true;
+        viewModel.Focus(K(5));
+        Assert.Equal(new[] { 5, 10 }, viewModel.GraphNodes.Select(node => node.Key.Number).OrderBy(n => n));
+
+        viewModel.ShowClosed = false;
+        Assert.False(viewModel.IsFocused);
+        Assert.Equal(new[] { 7, 10 }, viewModel.GraphNodes.Select(node => node.Key.Number).OrderBy(n => n));
     }
 
     [Fact]
