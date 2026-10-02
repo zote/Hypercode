@@ -134,6 +134,7 @@
                 <ContextMenu>
                   <MenuItem Header="Focar no grafo" Click="OnFocusItemClick" />
                   <MenuItem Header="Abrir no navegador" Click="OnOpenItemClick" />
+                  <MenuItem Header="{x:Static vm:IssueGraphViewModel.CreateWorktreeText}" Click="OnCreateWorktreeItemClick" />
                 </ContextMenu>
               </Grid.ContextMenu>
               <Border Grid.Column="0" CornerRadius="2" Margin="0,2"
@@ -177,6 +178,14 @@
                         Classes.free="{Binding IsFree}" Classes.cycle="{Binding IsInCycle}"
                         Classes.stub="{Binding IsStub}" Classes.focused="{Binding IsFocused}"
                         PointerPressed="OnCardPointerPressed">
+                  <Border.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="Focar no grafo" Click="OnFocusItemClick" />
+                      <MenuItem Header="Abrir no navegador" Click="OnOpenItemClick" />
+                      <MenuItem Header="{Binding CreateWorktreeHeader}" IsEnabled="{Binding CanCreateWorktree}"
+                                Click="OnCreateWorktreeItemClick" />
+                    </ContextMenu>
+                  </Border.ContextMenu>
                   <ToolTip.Tip>
                     <StackPanel MaxWidth="360">
                       <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="{Binding Title}" />

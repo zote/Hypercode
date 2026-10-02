@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -63,6 +64,7 @@ public partial class MainWindow : Window
         {
             _watchedShell.PropertyChanged -= OnShellPropertyChanged;
             _watchedShell.Issues.PropertyChanged -= OnIssuesPropertyChanged;
+            _watchedShell.Issues.WorktreeRequested -= OnIssueWorktreeRequested;
         }
 
         _watchedShell = Shell;
@@ -70,6 +72,7 @@ public partial class MainWindow : Window
         {
             _watchedShell.PropertyChanged += OnShellPropertyChanged;
             _watchedShell.Issues.PropertyChanged += OnIssuesPropertyChanged;
+            _watchedShell.Issues.WorktreeRequested += OnIssueWorktreeRequested;
         }
     }
 
@@ -528,28 +531,57 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnCreateWorktreeClick(object? sender, RoutedEventArgs e)
+    private async void OnCreateWorktreeClick(object? sender, RoutedEventArgs e) => await CreateWorktreeAsync(this);
+
+    /// <summary>
+    /// Do menu do grafo de issues (#147): o mesmo diálogo, já com o número. Pedido da janela
+    /// destacada, o diálogo abre sobre ela; o grafo fica como estava, para continuar a escolha.
+    /// </summary>
+    private async void OnIssueWorktreeRequested(int number)
+        => await CreateWorktreeAsync(_issueGraphWindow is { IsActive: true } detached ? detached : this, number);
+
+    /// <summary>O diálogo aberto agora, se houver: a janela do grafo não é modal à principal, e daria para abrir dois.</summary>
+    internal CreateWorktreeWindow? CreateWorktreeDialog { get; private set; }
+
+    /// <summary>
+    /// Novo worktree no repositório da aba da frente, com o contexto dele: raiz, barras, comando,
+    /// autoatribuição e os worktrees de hoje. Com <paramref name="issueNumber"/>, a tela já nasce
+    /// com ele no campo, e o setter busca a issue como se tivesse sido digitado.
+    /// </summary>
+    internal async Task CreateWorktreeAsync(Window owner, int? issueNumber = null)
     {
         if (Shell is not { } shell || ViewModel is not { } viewModel || viewModel.MainWorktreePath is not { } mainPath) return;
-
-        var dialog = new CreateWorktreeWindow
+        if (CreateWorktreeDialog is { } open)
         {
-            DataContext = new CreateWorktreeViewModel(
-                mainPath,
-                shell.OpenTerminalAfterCreate,
-                viewModel.EffectiveCommand,
-                viewModel.AssignIssueOnCreate,
-                viewModel.Effective.WorktreesRoot,
-                viewModel.Effective.WorktreeFolderKeepsSlashes,
-                viewModel.Worktrees.Select(row => row.Worktree).ToList(),
-                viewModel.RememberWorktreeLayout),
-        };
+            open.Activate();
+            return;
+        }
 
-        var result = await dialog.ShowDialog<WorktreeCreationResult?>(this);
+        var dialogViewModel = new CreateWorktreeViewModel(
+            mainPath,
+            shell.OpenTerminalAfterCreate,
+            viewModel.EffectiveCommand,
+            viewModel.AssignIssueOnCreate,
+            viewModel.Effective.WorktreesRoot,
+            viewModel.Effective.WorktreeFolderKeepsSlashes,
+            viewModel.Worktrees.Select(row => row.Worktree).ToList(),
+            viewModel.RememberWorktreeLayout);
+        if (issueNumber is { } number) dialogViewModel.IssueNumberText = number.ToString(CultureInfo.InvariantCulture);
+
+        var dialog = new CreateWorktreeWindow { DataContext = dialogViewModel };
+        CreateWorktreeDialog = dialog;
+        WorktreeCreationResult? result;
+        try
+        {
+            result = await dialog.ShowDialog<WorktreeCreationResult?>(owner);
+        }
+        finally
+        {
+            CreateWorktreeDialog = null;
+        }
 
         // O checkbox vale como preferência mesmo se o usuário cancelar depois de mexer nele.
-        if (dialog.DataContext is CreateWorktreeViewModel dialogViewModel)
-            shell.OpenTerminalAfterCreate = dialogViewModel.OpenTerminal;
+        shell.OpenTerminalAfterCreate = dialogViewModel.OpenTerminal;
 
         if (result is not null)
             await viewModel.CompleteCreationAsync(result, shell.OpenTerminalAfterCreate);
