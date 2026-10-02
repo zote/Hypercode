@@ -9,7 +9,8 @@
        do lugar (destacar, recolher) fica com quem hospeda. Duas vistas do mesmo conjunto: a
        lista por impacto, que decide mais rápido, e o grafo em camadas, que explica o porquê.
        Clique num cartão foca a vizinhança dele; duplo-clique (no cartão ou na linha) abre a
-       issue no navegador. -->
+       issue no navegador. Issue que já tem worktree ganha o ícone de branch e, no botão
+       direito, o menu do worktree (#148). -->
   <UserControl.Styles>
     <Style Selector="TextBlock.meta">
       <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
@@ -69,6 +70,15 @@
     <!-- Fechada (#146): riscada, para não se confundir com a ponta aberta de outro repositório. -->
     <Style Selector="Border.card.closed TextBlock.callout">
       <Setter Property="TextDecorations" Value="Strikethrough" />
+    </Style>
+    <!-- Já tem worktree (#148): a marca é o ícone de branch antes do número, na cor accent; o
+         tooltip diz o worktree e por onde a ligação foi feita. -->
+    <Style Selector="Border.worktree">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.worktree PathIcon">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
     </Style>
     <Style Selector="Border.card.focused">
       <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
@@ -134,22 +144,24 @@
       <ListBox Grid.Row="1" Name="ImpactList" ItemsSource="{Binding Items}" Background="Transparent">
         <ListBox.ItemTemplate>
           <DataTemplate>
+            <!-- O menu vem do ContextRequested: o do worktree, se a issue já tem um (#148);
+                 senão, o curto da issue, com o Criar worktree (#147). -->
             <Grid ColumnDefinitions="4,*,Auto" Background="Transparent"
-                  DoubleTapped="OnItemDoubleTapped" ToolTip.Tip="{x:Static vm:IssueGraphViewModel.ReachTip}">
-              <Grid.ContextMenu>
-                <ContextMenu>
-                  <MenuItem Header="Focar no grafo" Click="OnFocusItemClick" />
-                  <MenuItem Header="Abrir no navegador" Click="OnOpenItemClick" />
-                  <MenuItem Header="{x:Static vm:IssueGraphViewModel.CreateWorktreeText}" Click="OnCreateWorktreeItemClick" />
-                </ContextMenu>
-              </Grid.ContextMenu>
+                  DoubleTapped="OnItemDoubleTapped" ContextRequested="OnItemContextRequested"
+                  ToolTip.Tip="{x:Static vm:IssueGraphViewModel.ReachTip}">
               <Border Grid.Column="0" CornerRadius="2" Margin="0,2"
                       Background="{Binding Color, Converter={x:Static views:HexBrushConverter.Instance}}" />
               <StackPanel Grid.Column="1" Margin="8,0,8,0">
-                <TextBlock Classes="callout" TextTrimming="CharacterEllipsis">
-                  <Run Text="{Binding Label}" FontWeight="SemiBold" />
-                  <Run Text="{Binding Title}" />
-                </TextBlock>
+                <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Space.XS}">
+                  <!-- O tooltip do ícone diz de onde veio a ligação: o PR ou o nome da branch. -->
+                  <Border Classes="worktree" IsVisible="{Binding HasWorktree}" ToolTip.Tip="{Binding WorktreeTip}">
+                    <PathIcon Classes="small" Data="{StaticResource Icon.GitBranch}" />
+                  </Border>
+                  <TextBlock Classes="callout" TextTrimming="CharacterEllipsis">
+                    <Run Text="{Binding Label}" FontWeight="SemiBold" />
+                    <Run Text="{Binding Title}" />
+                  </TextBlock>
+                </StackPanel>
                 <TextBlock Classes="meta" Text="{Binding Meta}" IsVisible="{Binding HasMeta}" />
               </StackPanel>
               <StackPanel Grid.Column="2" VerticalAlignment="Center">
@@ -183,29 +195,27 @@
                 <Border Classes="card" Width="{Binding Width}" Height="{Binding Height}"
                         Classes.free="{Binding IsFree}" Classes.cycle="{Binding IsInCycle}"
                         Classes.stub="{Binding IsStub}" Classes.closed="{Binding IsClosed}" Classes.focused="{Binding IsFocused}"
-                        PointerPressed="OnCardPointerPressed">
-                  <Border.ContextMenu>
-                    <ContextMenu>
-                      <MenuItem Header="Focar no grafo" Click="OnFocusItemClick" />
-                      <MenuItem Header="Abrir no navegador" Click="OnOpenItemClick" />
-                      <MenuItem Header="{Binding CreateWorktreeHeader}" IsEnabled="{Binding CanCreateWorktree}"
-                                Click="OnCreateWorktreeItemClick" />
-                    </ContextMenu>
-                  </Border.ContextMenu>
+                        PointerPressed="OnCardPointerPressed" ContextRequested="OnCardContextRequested">
                   <ToolTip.Tip>
                     <StackPanel MaxWidth="360">
                       <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="{Binding Title}" />
                       <TextBlock TextWrapping="Wrap" Text="{Binding Detail}" />
+                      <TextBlock TextWrapping="Wrap" Text="{Binding WorktreeTip}" IsVisible="{Binding HasWorktree}" />
                       <TextBlock TextWrapping="Wrap" Classes="meta" Text="Clique foca a vizinhança; duplo-clique abre no navegador." />
                     </StackPanel>
                   </ToolTip.Tip>
                   <Grid ColumnDefinitions="4,*">
                     <Border Grid.Column="0" Background="{Binding Color, Converter={x:Static views:HexBrushConverter.Instance}}" />
                     <StackPanel Grid.Column="1" Margin="8,6" VerticalAlignment="Center">
-                      <TextBlock Classes="callout" TextTrimming="CharacterEllipsis">
-                        <Run Text="{Binding Label}" FontWeight="SemiBold" />
-                        <Run Text="{Binding Title}" />
-                      </TextBlock>
+                      <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Space.XS}">
+                        <Border Classes="worktree" IsVisible="{Binding HasWorktree}">
+                          <PathIcon Classes="small" Data="{StaticResource Icon.GitBranch}" />
+                        </Border>
+                        <TextBlock Classes="callout" TextTrimming="CharacterEllipsis">
+                          <Run Text="{Binding Label}" FontWeight="SemiBold" />
+                          <Run Text="{Binding Title}" />
+                        </TextBlock>
+                      </StackPanel>
                       <TextBlock Classes="state" TextTrimming="CharacterEllipsis"
                                  Classes.free="{Binding IsFree}" Classes.blocked="{Binding IsBlocked}" Text="{Binding Detail}" />
                     </StackPanel>

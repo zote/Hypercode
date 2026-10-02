@@ -199,16 +199,12 @@ public sealed class IssueGraphPanelTests : IDisposable
         shell.Issues.Focus(new IssueKey("zote/teste", 2));
         WaitForWorktrees(shell);
 
+        // O menu do cartão vem do ContextRequested (#148): o MenuFor é o que ele abre.
         var view = Panel(window).GetLogicalDescendants().OfType<IssueGraphView>().Single();
-        var cards = view.GetVisualDescendants().OfType<Border>().Where(border => border.DataContext is GraphNodeItem && border.ContextMenu is not null).ToList();
         MenuItem CreateItem(int number)
         {
-            var card = cards.Single(border => ((GraphNodeItem)border.DataContext!).Key.Number == number);
-            card.ContextMenu!.Open(card);
-            Dispatcher.UIThread.RunJobs();
-            var item = card.ContextMenu.Items.OfType<MenuItem>().Last();
-            card.ContextMenu.Close();
-            return item;
+            var node = shell.Issues.GraphNodes.Single(node => node.Key.Number == number);
+            return view.MenuFor(node.Key, node.Url, external: !node.CanCreateWorktree).ItemsSource!.OfType<MenuItem>().Last();
         }
 
         // A de outro repositório: desabilitada, com o motivo no próprio item.
@@ -242,6 +238,53 @@ public sealed class IssueGraphPanelTests : IDisposable
         window.Close();
     }
 
+    // ── Issue com worktree (#148) ───────────────────────────────────────────
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline) throw new TimeoutException("a janela não chegou ao estado esperado");
+            await Task.Delay(20);
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    private static readonly IssueKey Issue1 = new("zote/teste", 1);
+    private static readonly IssueKey Issue2 = new("zote/teste", 2);
+
+    private static IssueImpactItem Item(MainViewModel shell, int number) => shell.Issues.Items.Single(item => item.Number == number);
+
+    private static string?[] Headers(ContextMenu menu)
+        => menu.ItemsSource!.OfType<MenuItem>().Select(item => item.Header as string).ToArray();
+
+    /// <summary>Repositório com o worktree da #2 (pela branch), a janela aberta e o grafo lido e ligado.</summary>
+    private async Task<(MainWindow Window, MainViewModel Shell, IssueGraphView View)> OpenWithWorktreeAsync()
+    {
+        var repository = _sandbox.CreateRepository("repo", "claude/issue-2-algo");
+        var (window, shell) = Open(new Settings { Repositories = { repository }, IssueGraphEnabled = true, IssueGraphPanelOpen = true });
+        await WaitUntilAsync(() => shell.Issues.Items.Count == 2 && Item(shell, 2).HasWorktree);
+        var view = Panel(window).GetLogicalDescendants().OfType<IssueGraphView>().Single();
+        return (window, shell, view);
+    }
+
+    [AvaloniaFact]
+    public async Task IssueComWorktreeFicaMarcadaComAOrigem()
+    {
+        var (window, shell, _) = await OpenWithWorktreeAsync();
+
+        Assert.False(Item(shell, 1).HasWorktree);
+        Assert.Contains("pelo nome da branch", Item(shell, 2).WorktreeTip);
+        Assert.Contains("repo-claude", shell.Issues.WorktreeFor(Issue2)!.Row.FullPath);
+
+        shell.Issues.ShowsGraph = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(shell.Issues.GraphNodes.Single(node => node.Key == Issue2).HasWorktree);
+        Assert.False(shell.Issues.GraphNodes.Single(node => node.Key == Issue1).HasWorktree);
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void PedidoDaJanelaDestacadaAbreODialogoSobreEla()
     {
@@ -263,6 +306,62 @@ public sealed class IssueGraphPanelTests : IDisposable
         window.CreateWorktreeDialog.Close();
         Dispatcher.UIThread.RunJobs();
         Assert.True(detached.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task BotaoDireitoNaIssueComWorktreeEOMenuDoWorktree()
+    {
+        var (window, shell, view) = await OpenWithWorktreeAsync();
+
+        // A lista usa a mesma classe; configurada para a mesma linha, os itens têm de bater.
+        Assert.Same(window.WorktreeMenu.Menu, window.FindControl<ListBox>("WorktreeList")!.ContextMenu);
+        window.WorktreeMenu.Configure(new[] { shell.Issues.WorktreeFor(Issue2)!.Row });
+        var fromList = window.WorktreeMenu.Menu.ItemsSource!.OfType<MenuItem>()
+            .Select(item => (item.Header as string, item.IsEnabled, item.IsVisible)).ToArray();
+
+        var fromGraph = view.MenuFor(Issue2, "https://github.com/zote/teste/issues/2").ItemsSource!.OfType<MenuItem>()
+            .Select(item => (item.Header as string, item.IsEnabled, item.IsVisible)).ToArray();
+
+        Assert.Equal(fromList, fromGraph[..fromList.Length]);
+        Assert.Equal(new[] { "Focar no grafo", "Abrir a issue no navegador" }, fromGraph[fromList.Length..].Select(item => item.Item1));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task IssueSemWorktreeTemOMenuCurto()
+    {
+        var (window, _, view) = await OpenWithWorktreeAsync();
+
+        Assert.Equal(new[] { "Focar no grafo", "Abrir a issue no navegador", IssueGraphViewModel.CreateWorktreeText },
+            Headers(view.MenuFor(Issue1, "https://github.com/zote/teste/issues/1")));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task RemoverOWorktreeDesmarcaAIssueNaHora()
+    {
+        var (window, shell, _) = await OpenWithWorktreeAsync();
+        var row = shell.Issues.WorktreeFor(Issue2)!.Row;
+
+        Assert.Null(await shell.SelectedRepository!.RemoveWorktreeAsync(row));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(Item(shell, 2).HasWorktree);
+        Assert.Null(shell.Issues.WorktreeFor(Issue2));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task JanelaDestacadaTemOMesmoMenu()
+    {
+        var (window, _, _) = await OpenWithWorktreeAsync();
+
+        window.ShowIssueGraphWindow();
+        Dispatcher.UIThread.RunJobs();
+        var detached = window.IssueGraphWindow!.GetLogicalDescendants().OfType<IssueGraphView>().Single();
+
+        Assert.Contains("Apagar o worktree…", Headers(detached.MenuFor(Issue2, "https://github.com/zote/teste/issues/2")));
         window.Close();
     }
 }

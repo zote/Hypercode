@@ -304,38 +304,8 @@
              SelectedItems="{Binding SelectedWorktrees}"
              KeyDown="OnListKeyDown">
       <!-- Um menu só, para a lista inteira: age sobre todas as linhas selecionadas. O clique
-           direito numa linha fora da seleção seleciona só ela (o ListBox faz isso), e o
-           Opening põe a contagem nos rótulos e habilita o que ao menos uma linha suporta. -->
-      <ListBox.ContextMenu>
-        <ContextMenu Opening="OnListContextMenuOpening">
-          <!-- O tooltip vem do Opening: o que o item faz ou, desabilitado, por quê. -->
-          <MenuItem Name="FocusTerminalMenuItem" Click="OnFocusTerminalMenuClick" ToolTip.ShowOnDisabled="True" />
-          <MenuItem Name="LaunchMenuItem" Click="OnOpenTerminalMenuClick"
-                    ToolTip.Tip="Abre uma janela nova, mesmo que já haja terminal aberto aqui." />
-          <MenuItem Name="ShellMenuItem" Click="OnOpenShellMenuClick"
-                    ToolTip.Tip="Abre o terminal na pasta do worktree, sem rodar o comando." />
-          <MenuItem Name="ResumeClaudeMenuItem" Click="OnResumeClaudeMenuClick"
-                    ToolTip.Tip="Abre o terminal rodando claude --continue: volta à última conversa deste worktree." />
-          <Separator />
-          <MenuItem Name="RevealMenuItem" Click="OnRevealMenuClick" />
-          <MenuItem Name="OpenPullRequestMenuItem" Click="OnOpenPullRequestMenuClick" />
-          <MenuItem Name="MarkSeenMenuItem" Click="OnMarkSeenMenuClick"
-                    ToolTip.Tip="Tira o sino da linha: as mudanças do PR avisadas pelo monitoramento ficam como vistas. Abrir o PR no navegador faz o mesmo." />
-          <MenuItem Name="RerunFailedChecksMenuItem" Click="OnRerunFailedChecksMenuClick"
-                    ToolTip.Tip="gh run rerun --failed em cada workflow run do GitHub Actions com job falho no último commit do PR: só os jobs que falharam voltam para a fila. Check de CI externo (status commit) não é reexecutado." />
-          <Separator />
-          <MenuItem Name="UpdateBranchMenuItem" Click="OnUpdateBranchMenuClick"
-                    ToolTip.Tip="git pull --ff-only: traz os commits do upstream da própria branch. Se a branch divergiu, o git recusa e nada muda. Não traz a base do PR." />
-          <MenuItem Name="UpdateFromBaseMenuItem" Click="OnUpdateFromBaseMenuClick"
-                    ToolTip.Tip="Faz fetch da base do PR e a traz para dentro da branch, com merge ou rebase — você escolhe na hora. É o que resolve o ícone de base desatualizada. Uma linha por vez." />
-          <MenuItem Name="LockMenuItem" Click="OnLockMenuClick"
-                    ToolTip.Tip="git worktree lock, com um motivo opcional: o git passa a recusar remover e podar o worktree, e a limpeza o ignora." />
-          <MenuItem Name="UnlockMenuItem" Click="OnUnlockMenuClick"
-                    ToolTip.Tip="git worktree unlock, depois de mostrar o worktree e a trava. Uma linha por vez." />
-          <MenuItem Name="RemoveMenuItem" Click="OnRemoveWorktreeMenuClick"
-                    ToolTip.Tip="git worktree remove, com confirmação. A branch local não é tocada." />
-        </ContextMenu>
-      </ListBox.ContextMenu>
+           direito numa linha fora da seleção seleciona só ela (o ListBox faz isso). O menu é
+           o WorktreeMenu, posto pelo code-behind — o mesmo da issue do grafo com worktree. -->
       <ListBox.ItemTemplate>
         <DataTemplate>
           <Grid ColumnDefinitions="2.8*,2.2*,162,2.4*"

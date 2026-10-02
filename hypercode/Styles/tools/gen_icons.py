@@ -47,6 +47,7 @@ OCTICONS = [
     ("Icon.CheckCircle", "check-circle"),
     ("Icon.FileDiff", "file-diff"),
     ("Icon.CodeReview", "code-review"),
+    ("Icon.GitBranch", "git-branch"),
 ]
 
 # Nome do recurso -> arquivo do Phosphor (peso regular), com o uso
