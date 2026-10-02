@@ -59,7 +59,8 @@ public sealed record ApiResponse(int Status, string Body, ApiBudget? Budget, str
 
 /// <summary>
 /// Lê do GitHub o que o painel da fila mostra. Por ciclo, por repositório acompanhado: os runs
-/// em <c>queued</c> e em <c>in_progress</c> e os jobs de cada um. Mais os runners, por dono: a
+/// em <c>queued</c> e em <c>in_progress</c>, os jobs de cada um e, se algo espera, os grupos de
+/// <c>concurrency</c> ativos com os membros de cada um. Mais os runners, por dono: a
 /// lista de grupos e os runners de cada grupo — a lista da org não diz mais o grupo de cada um.
 /// Fora do ciclo, de hora em hora, o histórico de durações que a estimativa de início usa.
 /// </summary>
@@ -147,7 +148,10 @@ public static class ActionsQueueService
             runnerResults.Select(result => result.Problem).OfType<string>().ToList(),
             queueResults.Select(result => result.Problem).OfType<string>().ToList(),
             latest,
-            now);
+            now)
+        {
+            Holds = queueResults.SelectMany(result => result.Holds).ToList(),
+        };
     }
 
     /// <summary>
@@ -205,7 +209,10 @@ public static class ActionsQueueService
 
     private static string Owner(string repository) => repository.Split('/')[0];
 
-    private sealed record RepositoryResult(IReadOnlyList<ActionsJob> Jobs, IReadOnlyList<ActionsWaitingRun> Waiting, IReadOnlyList<ActionsRun> Runs, string? Problem);
+    private sealed record RepositoryResult(IReadOnlyList<ActionsJob> Jobs, IReadOnlyList<ActionsWaitingRun> Waiting, IReadOnlyList<ActionsRun> Runs, string? Problem)
+    {
+        public IReadOnlyList<ActionsHold> Holds { get; init; } = Array.Empty<ActionsHold>();
+    }
 
     private sealed record RunnerResult(IReadOnlyList<ActionsRunner> Runners, string? Problem);
 
@@ -242,7 +249,38 @@ public static class ActionsQueueService
             .Select(item => new ActionsWaitingRun(item.Run.Id, repository, item.Run.Workflow, item.Run.Branch, item.Run.PullRequest, item.Run.CreatedAt, item.Run.Url))
             .ToList();
 
-        return new RepositoryResult(jobs, waiting, runs.Select(run => run.ToRun(repository)).ToList(), null);
+        // Só há quem segurar se há quem espere: repositório sem nada na fila não gasta a chamada.
+        // Job segurado por concurrency de job pode vir como pending ou waiting, não só queued.
+        var holds = waiting.Count > 0 || jobs.Any(job => !job.IsRunning && !string.Equals(job.Status, "completed", StringComparison.OrdinalIgnoreCase))
+            ? await LoadHoldsAsync(repository, get).ConfigureAwait(false)
+            : Array.Empty<ActionsHold>();
+
+        return new RepositoryResult(jobs, waiting, runs.Select(run => run.ToRun(repository)).ToList(), null) { Holds = holds };
+    }
+
+    /// <summary>
+    /// Quem a <c>concurrency</c> segura num repositório (#131): a listagem dos grupos ativos e o
+    /// GET de cada um, que é o que traz os membros. O endpoint por run não serve — devolveu zero
+    /// grupos para um run que era membro de um. Falhar aqui não é problema da fila: sem saber, o
+    /// painel só não distingue, como antes.
+    /// </summary>
+    private static async Task<IReadOnlyList<ActionsHold>> LoadHoldsAsync(string repository, Func<string, Task<ApiResponse>> get)
+    {
+        var list = await get($"repos/{repository}/actions/concurrency_groups?per_page=100").ConfigureAwait(false);
+        if (!list.Success || TryParse(list.Body) is not { } listDocument) return Array.Empty<ActionsHold>();
+
+        IReadOnlyList<(string Name, string Path)> groups;
+        using (listDocument) groups = ActionsQueue.ParseConcurrencyGroups(listDocument.RootElement, repository);
+
+        var loaded = await Task.WhenAll(groups.Select(async group =>
+        {
+            // Grupo que esvaziou entre as chamadas dá 404: é só um grupo a menos.
+            var response = await get(group.Path).ConfigureAwait(false);
+            if (!response.Success || TryParse(response.Body) is not { } document) return null;
+            using (document) return ActionsQueue.ParseConcurrencyGroup(document.RootElement, repository, group.Name);
+        })).ConfigureAwait(false);
+
+        return ActionsQueue.Holds(loaded.OfType<ActionsConcurrencyGroup>());
     }
 
     /// <summary>

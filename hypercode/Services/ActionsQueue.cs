@@ -42,8 +42,8 @@ public sealed record ActionsJob(
 
 /// <summary>
 /// Um run na fila sem job nenhum criado. Job que espera um <c>needs</c> não aparece na API,
-/// mas o run inteiro sem job é outra coisa: costuma ser o <c>concurrency</c> segurando, ou o
-/// GitHub ainda criando os jobs. A API não diz qual dos dois.
+/// mas o run inteiro sem job é outra coisa: o <c>concurrency</c> segurando, ou o GitHub ainda
+/// criando os jobs. O primeiro caso se separa pelos grupos (<see cref="ActionsHold"/>, #131).
 /// </summary>
 public sealed record ActionsWaitingRun(
     long Id,
@@ -53,6 +53,31 @@ public sealed record ActionsWaitingRun(
     int? PullRequest,
     DateTimeOffset CreatedAt,
     string? Url);
+
+/// <summary>
+/// Um membro de um grupo de <c>concurrency</c>: o run e, quando a concorrência é de job, o job.
+/// O status é <c>in_progress</c> para quem detém o grupo e <c>pending</c> para quem espera nele.
+/// </summary>
+public sealed record ActionsConcurrencyMember(
+    long RunId,
+    string? RunName,
+    string? RunUrl,
+    long? JobId,
+    string? JobName,
+    string Status)
+{
+    public bool IsRunning => string.Equals(Status, "in_progress", StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>Um grupo de <c>concurrency</c> ativo de um repositório, com os membros dele.</summary>
+public sealed record ActionsConcurrencyGroup(string Repository, string Name, IReadOnlyList<ActionsConcurrencyMember> Members);
+
+/// <summary>
+/// Um run — ou, com <see cref="JobId"/>, um job — segurado por <c>concurrency</c> (#131): espera
+/// no grupo atrás de <see cref="Holder"/>, que está rodando. Runner livre não o destrava; o que
+/// destrava é o <see cref="Holder"/> terminar ou ser cancelado.
+/// </summary>
+public sealed record ActionsHold(string Repository, string Group, long RunId, long? JobId, ActionsConcurrencyMember Holder);
 
 /// <summary>
 /// Um run como o painel o nomeia ao agir sobre ele (#133): o título é o que o GitHub mostra na
@@ -93,7 +118,11 @@ public sealed record ActionsSnapshot(
     IReadOnlyList<string> RunnerProblems,
     IReadOnlyList<string> QueueProblems,
     ApiBudget? Budget,
-    DateTimeOffset ReadAt);
+    DateTimeOffset ReadAt)
+{
+    /// <summary>Quem está segurado por <c>concurrency</c>, e atrás de quem (#131).</summary>
+    public IReadOnlyList<ActionsHold> Holds { get; init; } = Array.Empty<ActionsHold>();
+}
 
 /// <summary>A conta da fila: tudo puro, sem I/O, para os testes não precisarem do GitHub.</summary>
 public static partial class ActionsQueue
@@ -150,6 +179,20 @@ public static partial class ActionsQueue
 
         return result;
     }
+
+    /// <summary>
+    /// Quem está segurado por <c>concurrency</c> (#131): todo membro que não roda num grupo em
+    /// que já há membro <c>in_progress</c>. Grupo só com quem espera não segura ninguém — ali o
+    /// que falta é runner, ou o GitHub ainda vai despachar —, nem grupo sem membro.
+    /// </summary>
+    public static IReadOnlyList<ActionsHold> Holds(IEnumerable<ActionsConcurrencyGroup> groups)
+        => groups
+            .SelectMany(group => group.Members.FirstOrDefault(member => member.IsRunning) is not { } holder
+                ? Enumerable.Empty<ActionsHold>()
+                : group.Members
+                    .Where(member => !member.IsRunning && !(member.RunId == holder.RunId && member.JobId == holder.JobId))
+                    .Select(member => new ActionsHold(group.Repository, group.Name, member.RunId, member.JobId, holder)))
+            .ToList();
 
     /// <summary>
     /// owner/repo de uma linha da configuração: aceita owner/repo, a URL do GitHub (com ou sem
@@ -265,6 +308,50 @@ public static partial class ActionsQueue
                 run.PullRequest,
                 String(job, "html_url")))
             .ToList();
+    }
+
+    /// <summary>
+    /// Os grupos ativos do <c>/actions/concurrency_groups</c>: o nome e o caminho do GET do grupo.
+    /// O caminho sai do <c>group_url</c> quando ele vem — o nome pode ter barra (<c>github.ref</c>),
+    /// e a URL que o GitHub monta é a que ele sabe rotear.
+    /// </summary>
+    internal static IReadOnlyList<(string Name, string Path)> ParseConcurrencyGroups(JsonElement root, string repository)
+    {
+        if (!root.TryGetProperty("concurrency_groups", out var groups) || groups.ValueKind != JsonValueKind.Array)
+            return Array.Empty<(string, string)>();
+
+        return groups.EnumerateArray()
+            .Where(group => group.ValueKind == JsonValueKind.Object && String(group, "group_name") is { Length: > 0 })
+            .Select(group =>
+            {
+                var name = String(group, "group_name")!;
+                var path = String(group, "group_url") is { } url
+                           && Uri.TryCreate(url, UriKind.Absolute, out var uri)
+                           && uri.AbsolutePath.StartsWith($"/repos/{repository}/", StringComparison.OrdinalIgnoreCase)
+                    ? uri.AbsolutePath.TrimStart('/')
+                    : $"repos/{repository}/actions/concurrency_groups/{Uri.EscapeDataString(name)}";
+                return (name, path);
+            })
+            .ToList();
+    }
+
+    /// <summary>Um grupo do <c>/actions/concurrency_groups/{nome}</c>, com os membros dele.</summary>
+    internal static ActionsConcurrencyGroup ParseConcurrencyGroup(JsonElement root, string repository, string name)
+    {
+        var members = !root.TryGetProperty("group_members", out var list) || list.ValueKind != JsonValueKind.Array
+            ? new List<ActionsConcurrencyMember>()
+            : list.EnumerateArray()
+                .Where(member => member.ValueKind == JsonValueKind.Object && Int64(member, "run_id") is not null)
+                .Select(member => new ActionsConcurrencyMember(
+                    Int64(member, "run_id")!.Value,
+                    String(member, "run_name"),
+                    String(member, "run_html_url"),
+                    Int64(member, "job_id") is > 0 and var job ? job : null,
+                    String(member, "job_name"),
+                    String(member, "status") ?? string.Empty))
+                .ToList();
+
+        return new ActionsConcurrencyGroup(repository, String(root, "group_name") ?? name, members);
     }
 
     /// <summary>
