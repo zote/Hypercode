@@ -332,7 +332,7 @@ Duas famílias, com papéis diferentes:
   que ele. O view-model escolhe a etiqueta pela chave do ícone (`StatusBadge.IconKey`), e
   o `BadgeConverter.ToGeometry` busca o recurso; a cor vem dos `Brush.Badge.*`.
 - **Phosphor** (MIT, peso regular) nos comandos do próprio app (nova aba, fechar, ajuda,
-  configurações, informação, ordenação, limpar o campo). É o conjunto aberto mais parecido com o SF
+  configurações, informação, ordenação, limpar o campo, grafo de issues). É o conjunto aberto mais parecido com o SF
   Symbols.
 
 **Por que não o SF Symbols:** a licença só permite usá-los em interfaces de apps para

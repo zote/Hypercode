@@ -82,6 +82,47 @@ O tooltip da aba traz o caminho completo e o resumo dos indicadores.
 Quem vem da versão de um repositório só não perde nada: o `RepositoryPath` antigo vira a primeira
 aba — resolvido para o repositório dono, se era a pasta de um worktree — e a chave some do arquivo.
 
+## Grafo de issues
+
+Responde qual issue atacar agora: resolver uma que destrava cinco outras vale mais que uma folha
+solta. Liga em **Configurações → Grafo de issues do repositório**, desligado por padrão; desligado,
+não há botão, painel nem janela, e nada é lido do GitHub.
+
+Ligado, o botão da barra (`⇧⌘G`) abre ao lado da lista as issues abertas do repositório da aba da
+frente — segue a troca de aba —, e **Destacar** leva a mesma view para uma janela própria, como a
+fila do Actions. Duas vistas do mesmo conjunto:
+
+- **Lista**, ordenada pelo **alcance transitivo**: quantas issues abertas, somando todos os níveis
+  de `blocking`, ficam destravadas se esta for resolvida. Cada linha diz se está **livre** (sem
+  bloqueador aberto) ou **presa por N**; **Só as livres** deixa só as que dá para pegar agora.
+- **Grafo** em camadas, da esquerda para a direita: a coluna é quantos níveis de dependência vêm
+  antes da issue. A seta vai de quem bloqueia para quem é bloqueado; a aresta que pula colunas
+  passa por um vão nas do meio, nunca por trás de um cartão. Clicar num cartão **foca** a
+  vizinhança dele — tudo o que o segura e tudo o que ele destrava —, e **Ver tudo** (`Esc`) volta.
+  Issue sem dependência fica só na lista.
+
+Duplo-clique, no cartão ou na linha, abre a issue no navegador. Os filtros de **milestone**,
+**label** e **tipo** valem para a lista e para o grafo antes do layout; o de tipo some quando o
+repositório não tem tipos (são da organização: conta pessoal não tem). O alcance conta todas as
+abertas do repositório, não só as do filtro.
+
+- Bloqueador **fechado** não segura mais nada: aparece apagado, com a aresta tracejada, e não
+  conta para o "presa por". Dependência de **outro repositório** vira um cartão cinza
+  `owner/repo#N`; aberta, segura.
+- O GitHub não impede **ciclo** de dependência: as issues do ciclo dividem a coluna, a aresta
+  entre elas contorna pela direita na cor de aviso, e o painel diz quais são — nenhuma delas fica
+  livre até alguém desfazer o ciclo.
+- Repositório sem nenhuma dependência registrada mostra como registrá-las (**Relationships** na
+  página da issue), em vez de um grafo vazio. Menção a `#123` no texto não vira aresta.
+- Só `blocks`/`blocked by`. Sub-issues (`parent`/`subIssues`) são hierarquia, não bloqueio, e
+  ficam de fora.
+
+A leitura é uma consulta GraphQL por página de 50 issues (~2 pontos da cota), com tipo,
+milestone, labels e as duas pontas da dependência. Acontece ao abrir o painel ou a janela, ao
+trocar de aba e ao voltar à janela com a leitura de mais de 10 minutos; **Atualizar** relê na
+hora. Não há laço: o grafo muda devagar. Até 1000 issues abertas por leitura; passou disso, o
+painel avisa que cortou.
+
 ## Requisitos
 
 - macOS 11+
@@ -477,6 +518,7 @@ Em `settings.json`:
 | `SelectedRepository` | — | a aba que volta à frente ao abrir |
 | `MonitorProfile` | `balanced` | `off`, `economical`, `balanced` ou `aggressive` — o mesmo do seletor das configurações |
 | `NotifyPullRequestChanges` | `true` | `false` mantém o sino e o rodapé, sem notificação |
+| `IssueGraphEnabled` | `false` | liga o [grafo de issues](#grafo-de-issues) |
 | `RepositoryOverrides` | `{}` | por raiz de repositório, o que ele sobrescreve do global (`Command`, `MonitorProfile`, `NotifyPullRequestChanges`, `AssignIssueOnCreate`, `AutoCleanup` + `AutoCleanupGraceMinutes`) e a ordenação da lista dele; campo ausente segue o global |
 
 A chave antiga `MonitorIntervalMinutes`, do intervalo fixo, é migrada na leitura: `0` vira `off`,
@@ -492,6 +534,9 @@ qualquer outro valor vira `balanced`. Ela some do arquivo no próximo salvamento
   o app prefere o aberto; depois o merged; depois o fechado.
 - **Terminal**: `osascript` com `tell application id "com.googlecode.iterm2"` → `create window with
   default profile` → `write text "cd '<path>' && claude"`. Sem iTerm2, usa `do script` no `Terminal.app`.
+- **Grafo de issues**: `gh api graphql` com `repository.issues(states: OPEN)` paginado, trazendo
+  `issueType`, `milestone`, `labels`, `blockedBy` e `blocking` de cada uma, e
+  `repository.issueTypes` para o filtro de tipo.
 - **Terminal aberto**: `lsof -n -P -w -d cwd -Fpn` e `ps -A -o pid=,ppid=,tty=,etime=,comm=`; o
   nome das sessões e o foco (`select` da janela, da aba e da sessão, e `activate`) por `osascript`,
   procurando a sessão pelo `tty`.
@@ -508,17 +553,21 @@ hypercode/
 ├── Views/MainWindow.axaml(.cs) UI e handlers (abas, duplo-clique, menu, atalhos, arrastar)
 ├── Views/CreateWorktreeWindow.axaml(.cs) diálogo "Novo worktree"
 ├── Views/SettingsWindow.axaml(.cs) tela de configurações (⌘,), global ou por repositório
+├── Views/IssueGraphView.axaml(.cs) grafo de issues, no painel e na janela própria
 ├── ViewModels/
 │   ├── MainViewModel.cs        as abas: abrir, fechar, reordenar, restaurar
 │   ├── RepositoryViewModel.cs  um repositório: carregamento, filtro, ordenação, status, monitor, limpeza, ações
 │   ├── RepositoryHub.cs        o que as abas dividem: preferências, memória dos PRs, vez do remoto, cota
 │   ├── SettingsViewModel.cs    tela de configurações, com o escopo e o "usar o global"
+│   ├── IssueGraphViewModel.cs  grafo de issues: filtros, lista por impacto, layout e foco
 │   ├── CreateWorktreeViewModel.cs  diálogo "Novo worktree"
 │   └── WorktreeRow.cs          uma linha da lista
 └── Services/
     ├── GitService.cs           parser do `worktree list --porcelain` e helpers de git
     ├── WorktreeCreator.cs      criação de worktree (branch nova / PR / issue) e cópia do .worktreeinclude
     ├── GitHubService.cs        leitura dos PRs via gh
+    ├── IssueGraph.cs           grafo de bloqueio: alcance, livres, ciclos e camadas
+    ├── IssueGraphService.cs    leitura paginada das issues e dependências via gh
     ├── RepositoryWatcher.cs    observa o git dir e avisa o que precisa ser relido
     ├── PullRequestMemory.cs    último estado visto de cada PR e as transições
     ├── AutoCleanup.cs          carência, pendências e histórico da limpeza automática; lsof
