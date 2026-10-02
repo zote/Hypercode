@@ -96,6 +96,7 @@
         <PathIcon Data="{StaticResource Icon.CheckCircle}" ToolTip.Tip="Icon.CheckCircle" />
         <PathIcon Data="{StaticResource Icon.FileDiff}" ToolTip.Tip="Icon.FileDiff" />
         <PathIcon Data="{StaticResource Icon.CodeReview}" ToolTip.Tip="Icon.CodeReview" />
+        <PathIcon Data="{StaticResource Icon.GitBranch}" ToolTip.Tip="Icon.GitBranch" />
         <PathIcon Data="{StaticResource Icon.Plus}" ToolTip.Tip="Icon.Plus" />
         <PathIcon Data="{StaticResource Icon.Close}" ToolTip.Tip="Icon.Close" />
         <PathIcon Data="{StaticResource Icon.ClearField}" ToolTip.Tip="Icon.ClearField" />

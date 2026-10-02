@@ -61,34 +61,75 @@ public partial class IssueGraphView : UserControl
         if ((sender as Control)?.DataContext is IssueImpactItem item) _ = OpenAsync(item.Url);
     }
 
-    /// <summary>Do menu da linha ou do cartão.</summary>
-    private void OnOpenItemClick(object? sender, RoutedEventArgs e)
+    private void OnItemContextRequested(object? sender, ContextRequestedEventArgs e)
     {
-        if (ItemOf(sender) is { } item) _ = OpenAsync(item.Url);
+        if (sender is not Control control || control.DataContext is not IssueImpactItem item) return;
+        e.Handled = true;
+        MenuFor(item.Key, item.Url).Open(control);
     }
 
-    /// <summary>Do menu da linha ou do cartão: isola a issue no grafo e mostra o grafo.</summary>
-    private void OnFocusItemClick(object? sender, RoutedEventArgs e)
+    private void OnCardContextRequested(object? sender, ContextRequestedEventArgs e)
     {
-        if (ItemOf(sender) is not { } item || ViewModel is not { } viewModel) return;
-        viewModel.Focus(item.Key);
-        viewModel.ShowsGraph = true;
+        if (sender is not Control control || control.DataContext is not GraphNodeItem node) return;
+        e.Handled = true;
+        MenuFor(node.Key, node.Url, external: !node.CanCreateWorktree).Open(control);
     }
 
-    /// <summary>Do menu da linha ou do cartão: o diálogo de worktree já com o número da issue (#147).</summary>
-    private void OnCreateWorktreeItemClick(object? sender, RoutedEventArgs e)
+    /// <summary>
+    /// O menu que o botão direito em <paramref name="key"/> abre. Já tem worktree (#148): o menu
+    /// do worktree, o mesmo da lista, com os itens da issue no fim — a linha é lida a cada
+    /// clique, porque a lista pode ter sido relida no meio. Senão, o curto da issue, com o
+    /// Criar worktree (#147).
+    /// </summary>
+    internal ContextMenu MenuFor(IssueKey key, string url, bool external = false)
     {
-        if (ItemOf(sender) is not { External: false } item || ViewModel is not { } viewModel) return;
-        viewModel.RequestWorktree(item.Key.Number);
+        if (ViewModel is { } viewModel && viewModel.WorktreeFor(key) is not null)
+        {
+            var menu = new WorktreeMenu(
+                this,
+                () => ViewModel?.Repository,
+                () => ViewModel?.WorktreeFor(key) is { } link ? new[] { link.Row } : Array.Empty<WorktreeRow>(),
+                IssueMenuItems(key, url));
+            if (menu.Prepare()) return menu.Menu;
+        }
+
+        var items = IssueMenuItems(key, url);
+        items.Add(CreateWorktreeItem(key, external));
+        return new ContextMenu { ItemsSource = items };
     }
 
-    /// <summary>A issue por trás de um item de menu: uma linha da lista ou um cartão do grafo.</summary>
-    private static (IssueKey Key, string Url, bool External)? ItemOf(object? sender) => (sender as Control)?.DataContext switch
+    /// <summary>Focar no grafo e abrir a issue no navegador: os itens da issue, nos dois menus.</summary>
+    private List<Control> IssueMenuItems(IssueKey key, string url)
     {
-        IssueImpactItem item => (item.Key, item.Url, false),
-        GraphNodeItem node => (node.Key, node.Url, !node.CanCreateWorktree),
-        _ => null,
-    };
+        var focus = new MenuItem { Header = "Focar no grafo" };
+        focus.Click += (_, _) =>
+        {
+            if (ViewModel is not { } viewModel) return;
+            viewModel.Focus(key);
+            viewModel.ShowsGraph = true;
+        };
+
+        // "a issue": no menu do worktree há também o Abrir PR no navegador.
+        var open = new MenuItem { Header = "Abrir a issue no navegador" };
+        open.Click += (_, _) => _ = OpenAsync(url);
+
+        return new List<Control> { focus, open };
+    }
+
+    /// <summary>
+    /// O diálogo de worktree já com o número da issue (#147). Issue de outro repositório: o item
+    /// fica desabilitado, com o motivo no texto — o tooltip de item desabilitado não aparece.
+    /// </summary>
+    private MenuItem CreateWorktreeItem(IssueKey key, bool external)
+    {
+        var item = new MenuItem
+        {
+            Header = external ? IssueGraphViewModel.CreateWorktreeExternalText : IssueGraphViewModel.CreateWorktreeText,
+            IsEnabled = !external,
+        };
+        item.Click += (_, _) => ViewModel?.RequestWorktree(key.Number);
+        return item;
+    }
 
     private async Task OpenAsync(string url)
     {

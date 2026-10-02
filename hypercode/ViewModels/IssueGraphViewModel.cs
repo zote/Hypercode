@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using Hypercode.Services;
 
 namespace Hypercode.ViewModels;
@@ -19,9 +21,13 @@ public sealed record IssueImpactItem(
     int OpenBlockers,
     bool IsInCycle,
     string? Color,
-    string Meta)
+    string Meta,
+    string? WorktreeTip = null)
 {
     public string Label => $"#{Number}";
+
+    /// <summary>Já tem worktree (#148): o menu da linha é o do worktree.</summary>
+    public bool HasWorktree => WorktreeTip is not null;
 
     public bool IsFree => OpenBlockers == 0;
 
@@ -56,18 +62,18 @@ public sealed record GraphNodeItem(
     bool IsClosed,
     bool IsExternal,
     bool IsInCycle,
-    bool IsFocused)
+    bool IsFocused,
+    string? WorktreeTip = null)
 {
     public bool IsBlocked => IsLocalOpen && !IsFree;
+
+    /// <summary>Já tem worktree (#148): o menu do cartão é o do worktree.</summary>
+    public bool HasWorktree => WorktreeTip is not null;
 
     public bool IsStub => !IsLocalOpen;
 
     /// <summary>O worktree é deste repositório: issue de outro não ganha um aqui (#147).</summary>
     public bool CanCreateWorktree => !IsExternal;
-
-    public string CreateWorktreeHeader => IsExternal
-        ? "Criar worktree: a issue é de outro repositório"
-        : IssueGraphViewModel.CreateWorktreeText;
 }
 
 /// <summary>O vão que uma aresta longa atravessa numa coluna do meio: entra à esquerda e sai à direita, na mesma altura.</summary>
@@ -117,10 +123,13 @@ public sealed class IssueGraphViewModel : ObservableObject
 
     public const string CreateWorktreeText = "Criar worktree para esta issue";
 
+    public const string CreateWorktreeExternalText = "Criar worktree: a issue é de outro repositório";
+
     private readonly Settings _settings;
     private readonly Action _save;
     private readonly Func<string, CancellationToken, Task<IssueGraphData>> _load;
     private readonly Func<DateTimeOffset> _clock;
+    private readonly Action<Action> _post;
     private readonly Dictionary<string, RepositoryState> _states = new(StringComparer.Ordinal);
 
     private RepositoryState? _state;
@@ -160,12 +169,21 @@ public sealed class IssueGraphViewModel : ObservableObject
         Settings settings,
         Action save,
         Func<string, CancellationToken, Task<IssueGraphData>>? load = null,
-        Func<DateTimeOffset>? clock = null)
+        Func<DateTimeOffset>? clock = null,
+        Action<Action>? post = null)
     {
         _settings = settings;
         _save = save;
         _load = load ?? IssueGraphService.LoadAsync;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
+        _post = post ?? PostToCurrentContext;
+    }
+
+    /// <summary>Para a fila do thread de interface, se houver uma; sem, na hora.</summary>
+    private static void PostToCurrentContext(Action action)
+    {
+        if (SynchronizationContext.Current is { } context) context.Post(_ => action(), null);
+        else action();
     }
 
     // ── Ligado, e onde a view está ──────────────────────────────────────────
@@ -262,6 +280,14 @@ public sealed class IssueGraphViewModel : ObservableObject
 
     // ── Repositório ─────────────────────────────────────────────────────────
 
+    /// <summary>A aba da frente mudou: o grafo dela, ligado aos worktrees dela.</summary>
+    public void SetRepository(RepositoryViewModel? repository)
+    {
+        WatchWorktrees(repository);
+        SetRepository(repository?.RepositoryPath, repository?.DisplayName);
+        RelinkWorktrees();
+    }
+
     /// <summary>A aba da frente mudou. O grafo é sempre do repositório selecionado.</summary>
     public void SetRepository(string? path, string? name)
     {
@@ -290,6 +316,84 @@ public sealed class IssueGraphViewModel : ObservableObject
     public bool HasRepository => _state is not null;
 
     public bool HasNoRepository => _state is null;
+
+    // ── Worktrees (#148) ────────────────────────────────────────────────────
+
+    private RepositoryViewModel? _worktreeSource;
+    private readonly List<WorktreeRow> _watchedRows = new();
+    private IReadOnlyDictionary<IssueKey, IssueWorktreeLink> _links = new Dictionary<IssueKey, IssueWorktreeLink>();
+    private bool _relinkPending;
+
+    /// <summary>O repositório da aba cujos worktrees o grafo marca; é nele que o menu do worktree age.</summary>
+    public RepositoryViewModel? Repository => _worktreeSource;
+
+    /// <summary>O worktree que já trata a issue, se algum — lido na hora, para o menu agir na linha atual da lista.</summary>
+    public IssueWorktreeLink? WorktreeFor(IssueKey key) => _links.GetValueOrDefault(key);
+
+    private void WatchWorktrees(RepositoryViewModel? repository)
+    {
+        if (ReferenceEquals(repository, _worktreeSource)) return;
+
+        if (_worktreeSource is { } previous) previous.Worktrees.CollectionChanged -= OnWorktreesChanged;
+        WatchRows(Array.Empty<WorktreeRow>());
+
+        _worktreeSource = repository;
+        if (repository is not null)
+        {
+            repository.Worktrees.CollectionChanged += OnWorktreesChanged;
+            WatchRows(repository.Worktrees);
+        }
+
+        RaisePropertyChanged(nameof(Repository));
+    }
+
+    /// <summary>O PR de uma linha muda depois dela entrar na lista: é ele que diz a issue declarada.</summary>
+    private void WatchRows(IEnumerable<WorktreeRow> rows)
+    {
+        foreach (var row in _watchedRows) row.PropertyChanged -= OnRowChanged;
+        _watchedRows.Clear();
+        _watchedRows.AddRange(rows);
+        foreach (var row in _watchedRows) row.PropertyChanged += OnRowChanged;
+    }
+
+    private void OnWorktreesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_worktreeSource is { } repository) WatchRows(repository.Worktrees);
+        ScheduleRelink();
+    }
+
+    private void OnRowChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(WorktreeRow.PullRequest)) ScheduleRelink();
+    }
+
+    /// <summary>
+    /// A lista se refaz linha a linha (limpa e adiciona) e os PRs chegam um por um: junta tudo
+    /// numa religação só, depois. Remover um worktree pelo grafo desmarca a issue na hora.
+    /// </summary>
+    private void ScheduleRelink()
+    {
+        if (_relinkPending) return;
+        _relinkPending = true;
+        _post(() =>
+        {
+            _relinkPending = false;
+            RelinkWorktrees();
+        });
+    }
+
+    /// <summary>Refaz as ligações; só remonta lista e grafo se alguma marca mudou.</summary>
+    private void RelinkWorktrees()
+    {
+        var links = _state?.Data?.Repository is { } repository
+            ? BuildLinks(repository)
+            : new Dictionary<IssueKey, IssueWorktreeLink>();
+
+        var changed = links.Count != _links.Count
+                      || links.Any(pair => _links.GetValueOrDefault(pair.Key)?.Tooltip != pair.Value.Tooltip);
+        _links = links;
+        if (changed) Rebuild();
+    }
 
     // ── Leitura ─────────────────────────────────────────────────────────────
 
@@ -330,6 +434,7 @@ public sealed class IssueGraphViewModel : ObservableObject
             state.Data = data with { ReadAt = _clock() };
             state.Problem = null;
             Analyze(state);
+            if (ReferenceEquals(state, _state)) _links = BuildLinks(data.Repository);
         }
         catch (OperationCanceledException)
         {
@@ -366,6 +471,11 @@ public sealed class IssueGraphViewModel : ObservableObject
         state.InCycle = state.Cycles.SelectMany(cycle => cycle).ToHashSet();
         if (state.Focus is { } focus && !graph.Nodes.ContainsKey(focus)) state.Focus = null;
     }
+
+    private IReadOnlyDictionary<IssueKey, IssueWorktreeLink> BuildLinks(string repository)
+        => _worktreeSource is { } source
+            ? IssueWorktreeLink.Build(repository, source.Worktrees)
+            : new Dictionary<IssueKey, IssueWorktreeLink>();
 
     public bool IsLoading => _state?.IsLoading == true;
 
@@ -675,7 +785,8 @@ public sealed class IssueGraphViewModel : ObservableObject
                 graph.OpenBlockers(issue.Key),
                 state.InCycle.Contains(issue.Key),
                 Color(issue),
-                Meta(issue)))
+                Meta(issue),
+                WorktreeFor(issue.Key)?.Tooltip))
             .Where(item => !_onlyFree || item.IsFree)
             .OrderByDescending(item => item.Reach)
             .ThenBy(item => item.OpenBlockers)
@@ -782,7 +893,8 @@ public sealed class IssueGraphViewModel : ObservableObject
                 !node.IsOpen,
                 node.IsExternal,
                 state.InCycle.Contains(key),
-                state.Focus == key));
+                state.Focus == key,
+                node.IsLocalOpen ? WorktreeFor(key)?.Tooltip : null));
         }
 
         GraphEdges = shown.Edges

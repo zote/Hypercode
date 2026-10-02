@@ -90,7 +90,7 @@ public sealed class MainViewModel : ObservableObject
         if (repository is not null) repository.IsSelected = true;
 
         RaisePropertyChanged(nameof(SelectedRepository));
-        Issues.SetRepository(repository?.RepositoryPath, repository?.DisplayName);
+        Issues.SetRepository(repository);
 
         // Só a aba da frente conta como janela ativa para o agendador: as outras seguem
         // monitoradas, na cadência de segundo plano.
