@@ -66,6 +66,10 @@
       <Setter Property="Opacity" Value="0.55" />
       <Setter Property="Background" Value="{DynamicResource Brush.Background.ContentAlternate}" />
     </Style>
+    <!-- Fechada (#146): riscada, para não se confundir com a ponta aberta de outro repositório. -->
+    <Style Selector="Border.card.closed TextBlock.callout">
+      <Setter Property="TextDecorations" Value="Strikethrough" />
+    </Style>
     <Style Selector="Border.card.focused">
       <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
       <Setter Property="BorderThickness" Value="2" />
@@ -95,6 +99,8 @@
                 ItemsSource="{Binding TypeOptions}" SelectedItem="{Binding SelectedType, Mode=TwoWay}" />
       <CheckBox Content="Só as livres" Margin="0,0,8,6" IsChecked="{Binding OnlyFree, Mode=TwoWay}"
                 ToolTip.Tip="Abertas sem nenhum bloqueador aberto: dá para pegar agora." />
+      <CheckBox Name="ShowClosedFilter" Content="Mostrar fechadas" Margin="0,0,8,6" IsChecked="{Binding ShowClosed, Mode=TwoWay}"
+                ToolTip.Tip="Desenha no grafo as issues fechadas que ainda aparecem como dependência. Só muda o desenho: livre e alcance contam apenas bloqueadores abertos, marcado ou não." />
       <StackPanel Orientation="Horizontal" Margin="0,0,0,6" Spacing="{DynamicResource Space.XS}">
         <ToggleButton Name="ListModeButton" Content="Lista" IsChecked="{Binding ShowsList, Mode=OneWay}" Click="OnShowListClick"
                       ToolTip.Tip="Ordenada pelo alcance: quantas issues, somando todos os níveis, cada uma destrava." />
@@ -175,7 +181,7 @@
               <DataTemplate>
                 <Border Classes="card" Width="{Binding Width}" Height="{Binding Height}"
                         Classes.free="{Binding IsFree}" Classes.cycle="{Binding IsInCycle}"
-                        Classes.stub="{Binding IsStub}" Classes.focused="{Binding IsFocused}"
+                        Classes.stub="{Binding IsStub}" Classes.closed="{Binding IsClosed}" Classes.focused="{Binding IsFocused}"
                         PointerPressed="OnCardPointerPressed">
                   <ToolTip.Tip>
                     <StackPanel MaxWidth="360">

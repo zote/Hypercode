@@ -106,8 +106,9 @@ Duplo-clique, no cartão ou na linha, abre a issue no navegador. Os filtros de *
 repositório não tem tipos (são da organização: conta pessoal não tem). O alcance conta todas as
 abertas do repositório, não só as do filtro.
 
-- Bloqueador **fechado** não segura mais nada: aparece apagado, com a aresta tracejada, e não
-  conta para o "presa por". Dependência de **outro repositório** vira um cartão cinza
+- Bloqueador **fechado** não segura mais nada e não conta para o "presa por" nem para o alcance.
+  Por padrão some do grafo, com as arestas dele; **Mostrar fechadas** (lembrado entre sessões) o
+  desenha apagado, com o título riscado e a aresta tracejada — só o desenho muda. Dependência de **outro repositório** vira um cartão cinza
   `owner/repo#N`; aberta, segura.
 - O GitHub não impede **ciclo** de dependência: as issues do ciclo dividem a coluna, a aresta
   entre elas contorna pela direita na cor de aviso, e o painel diz quais são — nenhuma delas fica
