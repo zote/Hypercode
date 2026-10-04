@@ -660,6 +660,34 @@ public sealed class ActionsQueueTests
     }
 
     [Fact]
+    public async Task CicloSemMudancaMantemOsItensDaTela()
+    {
+        var settings = new Settings { ActionsPanelOpen = true };
+        settings.ActionsRepositories.Add("Zimps/a");
+        var api = new FakeApi();
+        api.Runs("Zimps/a", "queued");
+        api.Runs("Zimps/a", "in_progress");
+        api.Groups("Zimps", new { id = 4, name = "zimps-arm64" });
+        api.GroupRunners("Zimps", 4, RunnerJson(1, "mini-1", busy: false), RunnerJson(2, "mini-2", busy: false));
+
+        var now = Start;
+        var viewModel = new ActionsQueueViewModel(settings, () => { }, api.GetAsync, () => now);
+        await viewModel.CheckAsync();
+        var group = viewModel.RunnerGroups.Single();
+        var runner = group.Runners[0];
+        var changes = 0;
+        viewModel.RunnerGroups.CollectionChanged += (_, _) => changes++;
+
+        // O tick entre leituras refaz as listas para os tempos andarem; o que não mudou fica (#153).
+        now = Start.AddSeconds(5);
+        await viewModel.CheckAsync();
+
+        Assert.Equal(0, changes);
+        Assert.Same(group, viewModel.RunnerGroups.Single());
+        Assert.Same(runner, viewModel.RunnerGroups.Single().Runners[0]);
+    }
+
+    [Fact]
     public async Task FecharOPainelEAJanelaParaDeChamar()
     {
         var (viewModel, api, settings) = ViewModel(panelOpen: true, "Zimps/a");
