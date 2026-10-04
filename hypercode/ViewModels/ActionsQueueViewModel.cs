@@ -661,25 +661,44 @@ public sealed class ActionsQueueViewModel : ObservableObject
             => HashCode.Combine(key.Id, StringComparer.OrdinalIgnoreCase.GetHashCode(key.Repository));
     }
 
-    /// <summary>Refaz as listas a partir da última leitura. Runner que sumiu entre dois ciclos só sai da lista.</summary>
+    /// <summary>
+    /// Leva as listas à última leitura, mexendo só no item que mudou — o que não mudou fica, e o
+    /// tooltip aberto sobre ele não pisca (#153). Runner que sumiu entre dois ciclos só sai da lista.
+    /// </summary>
     private void Rebuild(DateTimeOffset now)
     {
-        RunnerGroups.Clear();
-        Lanes.Clear();
-        WaitingRuns.Clear();
-        HeldRuns.Clear();
+        IReadOnlyList<RunnerGroupItem> groups = Array.Empty<RunnerGroupItem>();
+        IReadOnlyList<LaneItem> lanes = Array.Empty<LaneItem>();
+        IReadOnlyList<HeldRunItem> heldRuns = Array.Empty<HeldRunItem>();
+        IReadOnlyList<WaitingRunItem> waitingRuns = Array.Empty<WaitingRunItem>();
 
         if (_snapshot is { } snapshot)
         {
             var targets = Targets(snapshot);
             var held = HeldKeys.Of(snapshot);
-            foreach (var group in BuildRunnerGroups(snapshot, now, targets)) RunnerGroups.Add(group);
-            foreach (var lane in BuildLanes(snapshot, now, targets, _durations)) Lanes.Add(lane);
-            foreach (var item in BuildHeld(snapshot, now, targets)) HeldRuns.Add(item);
-            foreach (var run in snapshot.WaitingRuns.Where(run => !held.Runs.Contains((run.Repository, run.Id))).OrderBy(run => run.CreatedAt))
-                WaitingRuns.Add(new WaitingRunItem(
-                    run.Workflow, Origin(run.Repository, run.Branch, run.PullRequest), Waiting(now - run.CreatedAt), targets(run.Repository, run.Id)));
+            groups = BuildRunnerGroups(snapshot, now, targets);
+            lanes = BuildLanes(snapshot, now, targets, _durations);
+            heldRuns = BuildHeld(snapshot, now, targets);
+            waitingRuns = snapshot.WaitingRuns
+                .Where(run => !held.Runs.Contains((run.Repository, run.Id)))
+                .OrderBy(run => run.CreatedAt)
+                .Select(run => new WaitingRunItem(
+                    run.Workflow, Origin(run.Repository, run.Branch, run.PullRequest), Waiting(now - run.CreatedAt), targets(run.Repository, run.Id)))
+                .ToList();
         }
+
+        CollectionSync.ApplyGroups(
+            RunnerGroups, groups,
+            group => group.Runners,
+            (group, runners) => group with { Runners = runners },
+            (shown, fresh) => shown.Name == fresh.Name && shown.Summary == fresh.Summary);
+        CollectionSync.ApplyGroups(
+            Lanes, lanes,
+            lane => lane.Jobs,
+            (lane, jobs) => lane with { Jobs = jobs },
+            (shown, fresh) => shown.Labels == fresh.Labels && shown.Summary == fresh.Summary);
+        CollectionSync.Apply(HeldRuns, heldRuns);
+        CollectionSync.Apply(WaitingRuns, waitingRuns);
 
         RaisePropertyChanged(nameof(HasSnapshot));
         RaisePropertyChanged(nameof(HasNoRunners));

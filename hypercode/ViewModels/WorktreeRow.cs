@@ -12,10 +12,20 @@ public sealed class WorktreeRow : ObservableObject
     private bool _hasClaudeSession;
     private TerminalPresence _terminal = TerminalPresence.None;
 
+    // O que a interface mostra fica guardado e só é trocado (e avisado) quando o conteúdo muda:
+    // uma lista nova a cada leitura faz o ItemsControl recriar os badges, e o tooltip aberto
+    // sobre um deles fecha e reabre — pisca no ritmo do monitoramento (#153).
+    private IReadOnlyList<StatusBadge> _gitBadges = Array.Empty<StatusBadge>();
+    private IReadOnlyList<StatusBadge> _pullRequestBadges = Array.Empty<StatusBadge>();
+    private string _tags = string.Empty;
+    private string? _tagsTooltip;
+    private string? _pullRequestTooltip;
+
     public WorktreeRow(WorktreeInfo worktree)
     {
         Worktree = worktree;
         _hasClaudeSession = ClaudeSessions.Exist(worktree.FullPath);
+        RefreshTags();
     }
 
     public WorktreeInfo Worktree { get; }
@@ -36,7 +46,7 @@ public sealed class WorktreeRow : ObservableObject
             if (SetProperty(ref _pullRequest, value))
             {
                 RaisePropertyChanged(nameof(PullRequestLabel));
-                RaisePropertyChanged(nameof(PullRequestTooltip));
+                SetProperty(ref _pullRequestTooltip, BuildPullRequestTooltip(), nameof(PullRequestTooltip));
                 RaisePropertyChanged(nameof(HasPullRequest));
                 RaisePropertyChanged(nameof(BaseBranch));
                 RaisePropertyChanged(nameof(CanUpdateFromBase));
@@ -103,21 +113,22 @@ public sealed class WorktreeRow : ObservableObject
 
     public string PullRequestLabel => _pullRequest is null ? string.Empty : $"#{_pullRequest.Number}";
 
-    public string? PullRequestTooltip => _pullRequest is null
+    public string? PullRequestTooltip => _pullRequestTooltip;
+
+    private string? BuildPullRequestTooltip() => _pullRequest is null
         ? null
         : $"{_pullRequest.Title}\n{_pullRequest.State}{(_pullRequest.IsDraft ? " (draft)" : string.Empty)}\n{_pullRequest.Url}";
 
     /// <summary>Etiquetas curtas mostradas abaixo do nome.</summary>
-    public string Tags => string.Join(" · ", ActiveTags());
+    public string Tags => _tags;
 
     /// <summary>Explicação de cada etiqueta presente nesta linha, para o tooltip.</summary>
-    public string? TagsTooltip
+    public string? TagsTooltip => _tagsTooltip;
+
+    private string? BuildTagsTooltip()
     {
-        get
-        {
-            var explanations = ActiveTags().Select(ExplainTag).ToList();
-            return explanations.Count == 0 ? null : string.Join("\n\n", explanations);
-        }
+        var explanations = ActiveTags().Select(ExplainTag).ToList();
+        return explanations.Count == 0 ? null : string.Join("\n\n", explanations);
     }
 
     /// <summary>
@@ -186,122 +197,120 @@ public sealed class WorktreeRow : ObservableObject
     }
 
     /// <summary>Ícones do estado local do worktree (coluna ESTADO).</summary>
-    public IReadOnlyList<StatusBadge> GitBadges
+    public IReadOnlyList<StatusBadge> GitBadges => _gitBadges;
+
+    private List<StatusBadge> BuildGitBadges()
     {
-        get
+        var badges = new List<StatusBadge>();
+
+        if (TerminalBadge() is { } terminal) badges.Add(terminal);
+
+        if (_status.PendingOperation is { } operation)
+            badges.Add(new StatusBadge(
+                BadgeKind.OperationPending,
+                $"{operation} em andamento neste worktree — conclua com git {operation} --continue ou desfaça com --abort."));
+
+        if (_status.HasUnmergedPaths)
+            badges.Add(new StatusBadge(BadgeKind.Conflicted, "Arquivos em conflito ainda não resolvidos."));
+        else if (_status.HasUncommittedChanges)
+            badges.Add(new StatusBadge(
+                BadgeKind.Dirty,
+                "Alterações não commitadas. A limpeza não remove worktree sujo — o git recusa sem --force."));
+
+        if (_status.IsKnown && Worktree.Branch is not null)
         {
-            var badges = new List<StatusBadge>();
-
-            if (TerminalBadge() is { } terminal) badges.Add(terminal);
-
-            if (_status.PendingOperation is { } operation)
+            if (!_status.HasUpstream)
+                badges.Add(new StatusBadge(BadgeKind.NeverPushed, "A branch não tem upstream — nunca foi pushada."));
+            else if (_status.IsUpstreamGone)
                 badges.Add(new StatusBadge(
-                    BadgeKind.OperationPending,
-                    $"{operation} em andamento neste worktree — conclua com git {operation} --continue ou desfaça com --abort."));
-
-            if (_status.HasUnmergedPaths)
-                badges.Add(new StatusBadge(BadgeKind.Conflicted, "Arquivos em conflito ainda não resolvidos."));
-            else if (_status.HasUncommittedChanges)
+                    BadgeKind.UpstreamGone,
+                    "A branch remota foi apagada (upstream \"gone\"), normalmente depois do merge do PR. "
+                    + (_status.ContainedInBase is { } baseRef
+                        ? $"O HEAD já está contido em {baseRef}, então o worktree entra em Limpar concluídos."
+                        : "O HEAD não está contido na base remota (ou foi squash/rebase merge): só entra em "
+                          + "Limpar concluídos se o PR mergeado for encontrado. Senão, remova pelo menu.")));
+            else if (_status.IsDiverged)
                 badges.Add(new StatusBadge(
-                    BadgeKind.Dirty,
-                    "Alterações não commitadas. A limpeza não remove worktree sujo — o git recusa sem --force."));
-
-            if (_status.IsKnown && Worktree.Branch is not null)
-            {
-                if (!_status.HasUpstream)
-                    badges.Add(new StatusBadge(BadgeKind.NeverPushed, "A branch não tem upstream — nunca foi pushada."));
-                else if (_status.IsUpstreamGone)
-                    badges.Add(new StatusBadge(
-                        BadgeKind.UpstreamGone,
-                        "A branch remota foi apagada (upstream \"gone\"), normalmente depois do merge do PR. "
-                        + (_status.ContainedInBase is { } baseRef
-                            ? $"O HEAD já está contido em {baseRef}, então o worktree entra em Limpar concluídos."
-                            : "O HEAD não está contido na base remota (ou foi squash/rebase merge): só entra em "
-                              + "Limpar concluídos se o PR mergeado for encontrado. Senão, remova pelo menu.")));
-                else if (_status.IsDiverged)
-                    badges.Add(new StatusBadge(
-                        BadgeKind.Diverged,
-                        $"Divergiu: {_status.Ahead} à frente e {_status.Behind} atrás do upstream. Precisa merge ou rebase."));
-                else if (_status.Ahead > 0)
-                    badges.Add(new StatusBadge(BadgeKind.Ahead, $"{_status.Ahead} commit(s) esperando push."));
-                else if (_status.Behind > 0)
-                    badges.Add(new StatusBadge(BadgeKind.Behind, $"{_status.Behind} commit(s) esperando pull."));
-            }
-
-            if (IsCompleted)
-                badges.Add(new StatusBadge(
-                    BadgeKind.Removable,
-                    $"Pode ser removido — {CompletionReason}."
-                    + (_status.HasUncommittedChanges ? " Mas há alterações não commitadas: o git vai recusar." : string.Empty)
-                    + WithCleanupNote()));
-
-            return badges;
+                    BadgeKind.Diverged,
+                    $"Divergiu: {_status.Ahead} à frente e {_status.Behind} atrás do upstream. Precisa merge ou rebase."));
+            else if (_status.Ahead > 0)
+                badges.Add(new StatusBadge(BadgeKind.Ahead, $"{_status.Ahead} commit(s) esperando push."));
+            else if (_status.Behind > 0)
+                badges.Add(new StatusBadge(BadgeKind.Behind, $"{_status.Behind} commit(s) esperando pull."));
         }
+
+        if (IsCompleted)
+            badges.Add(new StatusBadge(
+                BadgeKind.Removable,
+                $"Pode ser removido — {CompletionReason}."
+                + (_status.HasUncommittedChanges ? " Mas há alterações não commitadas: o git vai recusar." : string.Empty)
+                + WithCleanupNote()));
+
+        return badges;
     }
 
     /// <summary>Ícones do PR (coluna PR), ao lado do número.</summary>
-    public IReadOnlyList<StatusBadge> PullRequestBadges
+    public IReadOnlyList<StatusBadge> PullRequestBadges => _pullRequestBadges;
+
+    private List<StatusBadge> BuildPullRequestBadges()
     {
-        get
+        var badges = new List<StatusBadge>();
+
+        // Sem PR a coluna fica vazia — nada de marcador de ausência.
+        if (_pullRequest is not { } pullRequest) return badges;
+
+        if (_pullRequestChanges.Count > 0)
+            badges.Add(new StatusBadge(
+                BadgeKind.PrChanged,
+                $"Mudou desde a última olhada:\n• {string.Join("\n• ", _pullRequestChanges)}\n\nBotão direito → Marcar como visto."));
+
+        badges.Add(pullRequest.State.ToUpperInvariant() switch
         {
-            var badges = new List<StatusBadge>();
+            "MERGED" => new StatusBadge(BadgeKind.PrMerged, $"PR #{pullRequest.Number} mergeado.{WithCleanupNote()}"),
+            "CLOSED" => new StatusBadge(BadgeKind.PrClosed, $"PR #{pullRequest.Number} fechado sem merge.{WithCleanupNote()}"),
+            _ => pullRequest.IsDraft
+                ? new StatusBadge(BadgeKind.PrDraft, $"PR #{pullRequest.Number} aberto como rascunho.")
+                : new StatusBadge(BadgeKind.PrOpen, $"PR #{pullRequest.Number} aberto."),
+        });
 
-            // Sem PR a coluna fica vazia — nada de marcador de ausência.
-            if (_pullRequest is not { } pullRequest) return badges;
+        // Checks, review e mergeabilidade só fazem sentido enquanto o PR está aberto.
+        if (!pullRequest.IsOpen) return badges;
 
-            if (_pullRequestChanges.Count > 0)
+        if (pullRequest.HasConflicts)
+            badges.Add(new StatusBadge(BadgeKind.NeedsRebase, "Conflito com a base — precisa rebase ou merge antes de integrar."));
+        else if (pullRequest.IsBehindBase)
+            badges.Add(new StatusBadge(BadgeKind.NeedsRebase, BehindBaseTooltip(pullRequest)));
+
+        switch (pullRequest.Checks)
+        {
+            case ChecksState.Passing:
+                badges.Add(new StatusBadge(BadgeKind.ChecksPassing, "Todos os checks passaram."));
+                break;
+            case ChecksState.Failing:
+                var failing = pullRequest.FailingChecksSummary;
                 badges.Add(new StatusBadge(
-                    BadgeKind.PrChanged,
-                    $"Mudou desde a última olhada:\n• {string.Join("\n• ", _pullRequestChanges)}\n\nBotão direito → Marcar como visto."));
-
-            badges.Add(pullRequest.State.ToUpperInvariant() switch
-            {
-                "MERGED" => new StatusBadge(BadgeKind.PrMerged, $"PR #{pullRequest.Number} mergeado.{WithCleanupNote()}"),
-                "CLOSED" => new StatusBadge(BadgeKind.PrClosed, $"PR #{pullRequest.Number} fechado sem merge.{WithCleanupNote()}"),
-                _ => pullRequest.IsDraft
-                    ? new StatusBadge(BadgeKind.PrDraft, $"PR #{pullRequest.Number} aberto como rascunho.")
-                    : new StatusBadge(BadgeKind.PrOpen, $"PR #{pullRequest.Number} aberto."),
-            });
-
-            // Checks, review e mergeabilidade só fazem sentido enquanto o PR está aberto.
-            if (!pullRequest.IsOpen) return badges;
-
-            if (pullRequest.HasConflicts)
-                badges.Add(new StatusBadge(BadgeKind.NeedsRebase, "Conflito com a base — precisa rebase ou merge antes de integrar."));
-            else if (pullRequest.IsBehindBase)
-                badges.Add(new StatusBadge(BadgeKind.NeedsRebase, BehindBaseTooltip(pullRequest)));
-
-            switch (pullRequest.Checks)
-            {
-                case ChecksState.Passing:
-                    badges.Add(new StatusBadge(BadgeKind.ChecksPassing, "Todos os checks passaram."));
-                    break;
-                case ChecksState.Failing:
-                    var failing = pullRequest.FailingChecksSummary;
-                    badges.Add(new StatusBadge(
-                        BadgeKind.ChecksFailing,
-                        string.IsNullOrEmpty(failing) ? "Há checks falhando." : $"Checks falhando: {failing}"));
-                    break;
-                case ChecksState.Pending:
-                    badges.Add(new StatusBadge(BadgeKind.ChecksPending, "Checks ainda rodando."));
-                    break;
-            }
-
-            switch (pullRequest.Review)
-            {
-                case ReviewState.Approved:
-                    badges.Add(new StatusBadge(BadgeKind.ReviewApproved, "Review aprovado."));
-                    break;
-                case ReviewState.ChangesRequested:
-                    badges.Add(new StatusBadge(BadgeKind.ReviewChangesRequested, "Review pediu mudanças."));
-                    break;
-                case ReviewState.Required:
-                    badges.Add(new StatusBadge(BadgeKind.ReviewRequired, "Aguardando review."));
-                    break;
-            }
-
-            return badges;
+                    BadgeKind.ChecksFailing,
+                    string.IsNullOrEmpty(failing) ? "Há checks falhando." : $"Checks falhando: {failing}"));
+                break;
+            case ChecksState.Pending:
+                badges.Add(new StatusBadge(BadgeKind.ChecksPending, "Checks ainda rodando."));
+                break;
         }
+
+        switch (pullRequest.Review)
+        {
+            case ReviewState.Approved:
+                badges.Add(new StatusBadge(BadgeKind.ReviewApproved, "Review aprovado."));
+                break;
+            case ReviewState.ChangesRequested:
+                badges.Add(new StatusBadge(BadgeKind.ReviewChangesRequested, "Review pediu mudanças."));
+                break;
+            case ReviewState.Required:
+                badges.Add(new StatusBadge(BadgeKind.ReviewRequired, "Aguardando review."));
+                break;
+        }
+
+        return badges;
     }
 
     /// <summary>
@@ -383,10 +392,21 @@ public sealed class WorktreeRow : ObservableObject
 
     private string WithCleanupNote() => _cleanupNote is null ? string.Empty : $"\n\n{_cleanupNote}";
 
+    /// <summary>
+    /// Recalcula os badges e só avisa a interface da lista que mudou de conteúdo. <see cref="StatusBadge"/>
+    /// é record: a comparação item a item já é por valor.
+    /// </summary>
     private void RefreshBadges()
     {
-        RaisePropertyChanged(nameof(GitBadges));
-        RaisePropertyChanged(nameof(PullRequestBadges));
+        SetBadges(ref _gitBadges, BuildGitBadges(), nameof(GitBadges));
+        SetBadges(ref _pullRequestBadges, BuildPullRequestBadges(), nameof(PullRequestBadges));
+    }
+
+    private void SetBadges(ref IReadOnlyList<StatusBadge> field, IReadOnlyList<StatusBadge> value, string propertyName)
+    {
+        if (field.SequenceEqual(value)) return;
+        field = value;
+        RaisePropertyChanged(propertyName);
     }
 
     /// <summary>
@@ -491,10 +511,10 @@ public sealed class WorktreeRow : ObservableObject
         }
     }
 
-    public void RefreshTags()
+    private void RefreshTags()
     {
-        RaisePropertyChanged(nameof(Tags));
-        RaisePropertyChanged(nameof(TagsTooltip));
+        SetProperty(ref _tags, string.Join(" · ", ActiveTags()), nameof(Tags));
+        SetProperty(ref _tagsTooltip, BuildTagsTooltip(), nameof(TagsTooltip));
         RaisePropertyChanged(nameof(IsCompleted));
         RaisePropertyChanged(nameof(CompletionReason));
         RefreshBadges();

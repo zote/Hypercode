@@ -17,6 +17,7 @@ public sealed class RepositoryViewModel : ObservableObject
     private EffectiveSettings _effective;
     private bool _isSelected;
     private bool _hasUnseenChanges;
+    private string? _shownCleanupToolTip;
     private bool _isClosed;
     private CancellationTokenSource? _loadCancellation;
     private RepositoryWatcher? _watcher;
@@ -505,13 +506,22 @@ public sealed class RepositoryViewModel : ObservableObject
         }
     }
 
+    /// <summary>Avisa só se o texto mudou: avisar com o tooltip aberto o faz fechar e reabrir (#153).</summary>
+    private void RaiseCleanupToolTip()
+    {
+        var tooltip = CleanupToolTip;
+        if (tooltip == _shownCleanupToolTip) return;
+        _shownCleanupToolTip = tooltip;
+        RaisePropertyChanged(nameof(CleanupToolTip));
+    }
+
     private void RaiseCleanupState()
     {
         RaisePropertyChanged(nameof(CompletedCount));
         RaisePropertyChanged(nameof(HasCompleted));
         RaisePropertyChanged(nameof(CleanupButtonLabel));
         RaisePropertyChanged(nameof(CanCleanupManually));
-        RaisePropertyChanged(nameof(CleanupToolTip));
+        RaiseCleanupToolTip();
         RefreshCleanupNotes();
         RaiseTabState();
     }
@@ -901,8 +911,6 @@ public sealed class RepositoryViewModel : ObservableObject
             {
                 row.PullRequestChanges = Array.Empty<string>();
             }
-
-            row.RefreshTags();
         }
 
         _pullRequestMemory.Save();
@@ -1299,7 +1307,7 @@ public sealed class RepositoryViewModel : ObservableObject
         parts.AddRange(kept);
 
         if (parts.Count > 0) StatusMessage = "Limpeza automática: " + string.Join(" · ", parts);
-        RaisePropertyChanged(nameof(CleanupToolTip));
+        RaiseCleanupToolTip();
         RefreshCleanupNotes();
     }
 
