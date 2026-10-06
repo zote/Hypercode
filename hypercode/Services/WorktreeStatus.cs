@@ -51,12 +51,12 @@ public static class WorktreeStatusReader
             var statusTask = ProcessRunner.RunAsync(
                 git,
                 new[] { "-C", worktreePath, "status", "--porcelain=v2", "--branch" },
-                worktreePath, TimeSpan.FromSeconds(25), cancellationToken);
+                worktreePath, TimeSpan.FromSeconds(25), cancellationToken: cancellationToken);
 
             var gitDirTask = ProcessRunner.RunAsync(
                 git,
                 new[] { "-C", worktreePath, "rev-parse", "--absolute-git-dir" },
-                worktreePath, TimeSpan.FromSeconds(15), cancellationToken);
+                worktreePath, TimeSpan.FromSeconds(15), cancellationToken: cancellationToken);
 
             await Task.WhenAll(statusTask, gitDirTask).ConfigureAwait(false);
 

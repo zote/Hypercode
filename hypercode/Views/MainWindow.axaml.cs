@@ -323,7 +323,7 @@ public partial class MainWindow : Window
         _isClosingApp = true;
         _issueGraphWindow?.Close();
         _actionsWindow?.Close();
-        Shell?.Actions.Stop();
+        Shell?.Actions.Dispose();
         base.OnClosed(e);
     }
 
@@ -585,6 +585,7 @@ public partial class MainWindow : Window
 
         // O checkbox vale como preferência mesmo se o usuário cancelar depois de mexer nele.
         shell.OpenTerminalAfterCreate = dialogViewModel.OpenTerminal;
+        dialogViewModel.Dispose();
 
         if (result is not null)
             await viewModel.CompleteCreationAsync(result, shell.OpenTerminalAfterCreate);

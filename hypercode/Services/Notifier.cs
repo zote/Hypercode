@@ -15,7 +15,7 @@ public static class Notifier
 
         try
         {
-            await ProcessRunner.RunAsync("/usr/bin/osascript", new[] { "-e", script }, null, TimeSpan.FromSeconds(10), cancellationToken)
+            await ProcessRunner.RunAsync("/usr/bin/osascript", new[] { "-e", script }, null, TimeSpan.FromSeconds(10), cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)

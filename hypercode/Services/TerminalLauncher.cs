@@ -115,7 +115,7 @@ public static class TerminalLauncher
             _ => ("/usr/bin/open", BuildOpenArguments(terminal, Installed.GetValueOrDefault(terminal.Id) ?? terminal.Bundles[0], directory, shellCommand, title, LoginShell())),
         };
 
-        var result = await ProcessRunner.RunAsync(fileName, arguments, null, TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
+        var result = await ProcessRunner.RunAsync(fileName, arguments, null, TimeSpan.FromSeconds(30), cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (!result.Success) throw new InvalidOperationException(DescribeFailure(terminal, result.FirstErrorLine));
     }
@@ -131,10 +131,10 @@ public static class TerminalLauncher
 
     /// <summary>Abre a pasta no Finder.</summary>
     public static Task RevealInFinderAsync(string directory, CancellationToken cancellationToken = default)
-        => ProcessRunner.RunAsync("/usr/bin/open", new[] { directory }, null, TimeSpan.FromSeconds(10), cancellationToken);
+        => ProcessRunner.RunAsync("/usr/bin/open", new[] { directory }, null, TimeSpan.FromSeconds(10), cancellationToken: cancellationToken);
 
     public static Task OpenUrlAsync(string url, CancellationToken cancellationToken = default)
-        => ProcessRunner.RunAsync("/usr/bin/open", new[] { url }, null, TimeSpan.FromSeconds(10), cancellationToken);
+        => ProcessRunner.RunAsync("/usr/bin/open", new[] { url }, null, TimeSpan.FromSeconds(10), cancellationToken: cancellationToken);
 
     /// <summary>
     /// Variáveis que o Claude Code usa para marcar uma sessão como filha de outra. O iTerm2 as

@@ -1,16 +1,30 @@
 #!/usr/bin/env bash
 # Gera dist/Hypercode.app — um bundle macOS autocontido (não precisa do .NET instalado
-# na máquina que for rodar).  Uso:  ./build-app.sh [osx-arm64|osx-x64]
+# na máquina que for rodar). Uso:
+#
+#   ./build-app.sh [osx-arm64|osx-x64] [versão]
+#
+# A versão (SemVer: 1.2.0, 1.2.0-beta.1, com ou sem "v") vem do argumento, de $VERSION ou,
+# sem nenhum dos dois, do <Version> do Hypercode.csproj. O assembly (-p:Version) leva a
+# versão completa, que é a que a janela Sobre exibe; o Info.plist só aceita números, então
+# CFBundleShortVersionString e CFBundleVersion recebem X.Y.Z sem o sufixo de pré-release.
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
 APP_NAME="Hypercode"
 BUNDLE_ID="app.zimps.hypercode"
-# A versão mora no Hypercode.csproj (é a mesma que a janela Sobre exibe).
-VERSION="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Hypercode.csproj)"
 
 RID="${1:-}"
+VERSION="${2:-${VERSION:-$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Hypercode.csproj)}}"
+VERSION="${VERSION#v}"
+
+if ! [[ "$VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+  echo "✗ versão inválida: '$VERSION' (esperado SemVer, ex.: 1.2.0 ou 1.2.0-beta.1)" >&2
+  exit 1
+fi
+BUNDLE_VERSION="${BASH_REMATCH[1]}"
+
 if [ -z "$RID" ]; then
   case "$(uname -m)" in
     arm64) RID="osx-arm64" ;;
@@ -21,7 +35,7 @@ fi
 DIST="dist"
 APP="$DIST/$APP_NAME.app"
 
-echo "▸ publicando para ${RID}…"
+echo "▸ publicando ${VERSION} para ${RID}…"
 rm -rf "$DIST"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
@@ -31,6 +45,7 @@ dotnet publish Hypercode.csproj \
   --self-contained true \
   -p:DebugType=None \
   -p:DebugSymbols=false \
+  -p:Version="$VERSION" \
   -o "$APP/Contents/MacOS"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -45,8 +60,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIconName</key>        <string>Hypercode</string>
   <key>CFBundleIconFile</key>        <string>icon</string>
   <key>CFBundlePackageType</key>     <string>APPL</string>
-  <key>CFBundleShortVersionString</key> <string>$VERSION</string>
-  <key>CFBundleVersion</key>         <string>$VERSION</string>
+  <key>CFBundleShortVersionString</key> <string>$BUNDLE_VERSION</string>
+  <key>CFBundleVersion</key>         <string>$BUNDLE_VERSION</string>
   <key>CFBundleInfoDictionaryVersion</key> <string>6.0</string>
   <key>LSMinimumSystemVersion</key>  <string>11.0</string>
   <key>NSHighResolutionCapable</key> <true/>

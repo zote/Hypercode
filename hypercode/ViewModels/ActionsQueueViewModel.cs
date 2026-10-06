@@ -89,7 +89,7 @@ public sealed record HeldRunItem(string Title, string Origin, string Wait, strin
 /// janela própria — as duas views mostram o mesmo estado. Com as duas fechadas, não busca nada.
 /// A cadência é a do <see cref="MonitorScheduler"/>: perfil global, janela e recuo pela cota REST.
 /// </summary>
-public sealed class ActionsQueueViewModel : ObservableObject
+public sealed class ActionsQueueViewModel : ObservableObject, IDisposable
 {
     /// <summary>Quanto o laço espera entre uma pergunta e outra ao agendador — só conta em memória.</summary>
     private static readonly TimeSpan Tick = TimeSpan.FromSeconds(10);
@@ -301,7 +301,7 @@ public sealed class ActionsQueueViewModel : ObservableObject
 
     public bool HasNoQueue => _snapshot is not null && Lanes.Count == 0 && QueueProblem is null;
 
-    public string? RunnerProblem => _snapshot?.RunnerProblems.FirstOrDefault() ?? _loadProblem;
+    public string? RunnerProblem => _snapshot is { RunnerProblems: [var first, ..] } ? first : _loadProblem;
 
     public bool HasRunnerProblem => RunnerProblem is not null;
 
@@ -357,6 +357,14 @@ public sealed class ActionsQueueViewModel : ObservableObject
         _loop?.Cancel();
         _loop = null;
         _load?.Cancel();
+    }
+
+    /// <summary>O mesmo que <see cref="Stop"/>, e ainda solta o token do laço. O do carregamento é solto por quem o criou.</summary>
+    public void Dispose()
+    {
+        var loop = _loop;
+        Stop();
+        loop?.Dispose();
     }
 
     private async Task LoopAsync(CancellationToken cancellationToken)

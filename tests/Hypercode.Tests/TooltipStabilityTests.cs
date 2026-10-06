@@ -77,7 +77,10 @@ public sealed class TooltipStabilityTests
 
         row.PullRequest = new PullRequestInfo
         {
-            Number = 7, State = "OPEN", Title = "Feature", HeadRefName = "feature",
+            Number = 7,
+            State = "OPEN",
+            Title = "Feature",
+            HeadRefName = "feature",
             StatusCheckRollup = new List<CheckEntry> { new() { Name = "build", Conclusion = "FAILURE", Status = "COMPLETED" } },
         };
 

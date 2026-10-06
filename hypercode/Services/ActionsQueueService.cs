@@ -90,7 +90,7 @@ public static class ActionsQueueService
 
         try
         {
-            var result = await ProcessRunner.RunAsync(gh, arguments, null, TimeSpan.FromSeconds(30), cancellationToken)
+            var result = await ProcessRunner.RunAsync(gh, arguments, null, TimeSpan.FromSeconds(30), cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             return ApiResponse.Parse(result.StandardOutput, result.FirstErrorLine);
         }

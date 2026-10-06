@@ -129,7 +129,7 @@ public static class GitService
             new[] { "-C", repositoryPath, "worktree", "list", "--porcelain" },
             repositoryPath,
             TimeSpan.FromSeconds(20),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
             throw new InvalidOperationException(result.FirstErrorLine);
@@ -259,7 +259,7 @@ public static class GitService
             arguments,
             repositoryPath,
             TimeSpan.FromSeconds(30),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -400,7 +400,7 @@ public static class GitService
             arguments,
             repositoryPath,
             TimeSpan.FromSeconds(30),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Destrava um worktree — o `remove` recusa enquanto houver lock.</summary>
@@ -416,7 +416,7 @@ public static class GitService
             new[] { "-C", repositoryPath, "worktree", "unlock", worktreePath },
             repositoryPath,
             TimeSpan.FromSeconds(30),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Limpa os metadados de worktrees órfãos (aqueles cuja pasta sumiu).</summary>
@@ -431,7 +431,7 @@ public static class GitService
             new[] { "-C", repositoryPath, "worktree", "prune" },
             repositoryPath,
             TimeSpan.FromSeconds(30),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -480,8 +480,8 @@ public static class GitService
             },
             repositoryPath,
             TimeSpan.FromSeconds(120),
-            cancellationToken,
-            new Dictionary<string, string> { ["GIT_TERMINAL_PROMPT"] = "0" }).ConfigureAwait(false);
+            new Dictionary<string, string> { ["GIT_TERMINAL_PROMPT"] = "0" },
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Roda `git -C &lt;repo&gt; ...` e devolve o resultado sem interpretar.</summary>
@@ -501,7 +501,7 @@ public static class GitService
             fullArguments,
             repositoryPath,
             timeout ?? TimeSpan.FromSeconds(30),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Branches locais e remotas (ex.: main, origin/main), sem os ponteiros HEAD.</summary>
@@ -608,7 +608,7 @@ public static class GitService
                 new[] { "-C", path, "rev-parse", "--show-toplevel" },
                 path,
                 TimeSpan.FromSeconds(10),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             if (!result.Success) return null;
 

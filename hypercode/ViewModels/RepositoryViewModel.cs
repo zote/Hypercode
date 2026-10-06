@@ -10,7 +10,7 @@ namespace Hypercode.ViewModels;
 /// todos os repositórios (preferências, memória dos PRs, vez de falar com o remoto) vem do
 /// <see cref="RepositoryHub"/>.
 /// </summary>
-public sealed class RepositoryViewModel : ObservableObject
+public sealed class RepositoryViewModel : ObservableObject, IDisposable
 {
     private readonly RepositoryHub _hub;
     private readonly PullRequestMemory _pullRequestMemory;
@@ -303,30 +303,10 @@ public sealed class RepositoryViewModel : ObservableObject
         ApplyView();
     }
 
-    /// <summary>
-    /// Refaz <see cref="VisibleWorktrees"/>. O principal fica sempre no topo, seja qual for
-    /// a ordenação; linhas sem PR vão para o fim quando a ordenação é por PR.
-    /// </summary>
+    /// <summary>Refaz <see cref="VisibleWorktrees"/> a partir do filtro e da ordenação atuais.</summary>
     private void ApplyView()
     {
-        var terms = _filterText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-        var rows = Worktrees.Where(row => terms.All(row.Matches));
-
-        var comparer = StringComparer.CurrentCultureIgnoreCase;
-        IOrderedEnumerable<WorktreeRow> ordered = rows.OrderBy(row => row.Worktree.IsMain ? 0 : 1);
-
-        ordered = _sortColumn switch
-        {
-            SortColumn.Branch => ThenByText(ordered, row => row.Branch, comparer),
-            SortColumn.PullRequest => ordered
-                .ThenBy(row => row.PullRequest is null ? 1 : 0)
-                .Then(row => row.PullRequest?.Number ?? 0, _sortDescending),
-            SortColumn.Path => ThenByText(ordered, row => row.FullPath, comparer),
-            _ => ThenByText(ordered, row => row.Name, comparer),
-        };
-
-        var result = ordered.ToList();
+        var result = WorktreeListView.Arrange(Worktrees, _filterText, _sortColumn, _sortDescending);
 
         if (!result.SequenceEqual(VisibleWorktrees))
         {
@@ -342,12 +322,6 @@ public sealed class RepositoryViewModel : ObservableObject
         RaisePropertyChanged(nameof(HasHiddenRows));
         RaisePropertyChanged(nameof(FilterSummary));
     }
-
-    private IOrderedEnumerable<WorktreeRow> ThenByText(
-        IOrderedEnumerable<WorktreeRow> source,
-        Func<WorktreeRow, string> key,
-        IComparer<string> comparer)
-        => _sortDescending ? source.ThenByDescending(key, comparer) : source.ThenBy(key, comparer);
 
     private static SortColumn ParseSortColumn(string? value)
         => Enum.TryParse<SortColumn>(value, ignoreCase: true, out var column) ? column : SortColumn.Name;
@@ -2461,6 +2435,15 @@ public sealed class RepositoryViewModel : ObservableObject
         SaveAutoCleanup();
     }
 
+    /// <summary>O mesmo que <see cref="Close"/>, e ainda solta o token do carregamento.</summary>
+    public void Dispose()
+    {
+        if (!_isClosed) Close();
+
+        _loadCancellation?.Dispose();
+        _loadCancellation = null;
+    }
+
     private static bool PathsEqual(string left, string? right) => MainViewModel.PathsEqual(left, right);
 }
 
@@ -2514,12 +2497,3 @@ public sealed record BaseUpdatePlan(BaseDistance? Distance, string? Error)
 
 /// <summary>Resumo para o rodapé e, quando há algo a explicar, o texto de um diálogo.</summary>
 public sealed record BaseUpdateOutcome(bool Success, string Summary, string? Details);
-
-internal static class OrderingExtensions
-{
-    public static IOrderedEnumerable<T> Then<T, TKey>(
-        this IOrderedEnumerable<T> source,
-        Func<T, TKey> key,
-        bool descending)
-        => descending ? source.ThenByDescending(key) : source.ThenBy(key);
-}

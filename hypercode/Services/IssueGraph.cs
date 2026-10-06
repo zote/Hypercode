@@ -248,7 +248,7 @@ public sealed class IssueGraph
                 if (edges.MoveNext())
                 {
                     var to = edges.Current;
-                    if (!index.ContainsKey(to))
+                    if (!index.TryGetValue(to, out var toIndex))
                     {
                         index[to] = low[to] = counter++;
                         stack.Push(to);
@@ -257,7 +257,7 @@ public sealed class IssueGraph
                     }
                     else if (onStack.Contains(to))
                     {
-                        low[node] = Math.Min(low[node], index[to]);
+                        low[node] = Math.Min(low[node], toIndex);
                     }
 
                     continue;

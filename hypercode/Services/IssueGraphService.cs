@@ -67,7 +67,7 @@ public static class IssueGraphService
             ProcessResult result;
             try
             {
-                result = await ProcessRunner.RunAsync(gh, arguments, repositoryPath, TimeSpan.FromSeconds(60), cancellationToken)
+                result = await ProcessRunner.RunAsync(gh, arguments, repositoryPath, TimeSpan.FromSeconds(60), cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
             }
             catch (TimeoutException)

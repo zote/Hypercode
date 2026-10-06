@@ -219,7 +219,7 @@ public static class TerminalSessions
             new[] { "-e", script },
             null,
             TimeSpan.FromSeconds(15),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
             throw new InvalidOperationException($"Não consegui ir para o {session.AppName}: {result.FirstErrorLine}");
@@ -552,7 +552,7 @@ public static class TerminalSessions
                 new[] { "-e", BuildITerm2NamesScript() },
                 null,
                 TimeSpan.FromSeconds(10),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return result.Success ? ParseSessionNames(result.StandardOutput) : new Dictionary<string, string>();
         }

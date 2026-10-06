@@ -1,0 +1,122 @@
+# Validação de PR: é o gate do merge para a main (os jobs abaixo são checks obrigatórios
+# na proteção da branch). Os nomes dos jobs são o que a proteção referencia — renomear
+# aqui exige atualizar a proteção.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  validate:
+    name: Build, format, testes e vulnerabilidades
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Restore (locked mode)
+        run: |
+          dotnet restore Hypercode.sln --locked-mode
+          dotnet tool restore
+
+      - name: Build (avisos são erro)
+        run: dotnet build Hypercode.sln -c Release --no-restore -warnaserror
+
+      - name: Formatação (whitespace, style e analyzers)
+        run: dotnet format Hypercode.sln --verify-no-changes --no-restore --verbosity diagnostic
+
+      - name: Testes com cobertura
+        run: >
+          dotnet test Hypercode.sln -c Release --no-build
+          --collect "XPlat Code Coverage"
+          --results-directory "$GITHUB_WORKSPACE/artifacts/test-results"
+
+      - name: Resumo da cobertura
+        if: ${{ !cancelled() }}
+        run: |
+          dotnet tool run reportgenerator \
+            '-reports:artifacts/test-results/**/*.cobertura*.xml' \
+            -targetdir:artifacts/coverage \
+            -reporttypes:'MarkdownSummaryGithub;Cobertura'
+          cat artifacts/coverage/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publica a cobertura
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: artifacts/coverage
+          if-no-files-found: ignore
+
+      - name: Pacotes vulneráveis (falha se houver)
+        run: |
+          dotnet list Hypercode.sln package --vulnerable --include-transitive --format json > vulnerable.json
+          count=$(jq '[.projects[].frameworks[]? | (.topLevelPackages[]?, .transitivePackages[]?) | select(.vulnerabilities)] | length' vulnerable.json)
+          if [ "$count" -gt 0 ]; then
+            echo "::error::$count pacote(s) com vulnerabilidade conhecida"
+            dotnet list Hypercode.sln package --vulnerable --include-transitive
+            exit 1
+          fi
+          echo "Nenhum pacote vulnerável."
+
+      - name: Pacotes desatualizados (informativo)
+        continue-on-error: true
+        run: |
+          {
+            echo '### Pacotes desatualizados'
+            echo '```'
+            dotnet list Hypercode.sln package --outdated
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  app:
+    name: App (${{ matrix.rid }})
+    runs-on: macos-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-arm64, osx-x64]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Gera o .app
+        env:
+          VERSION: 0.0.0-pr.${{ github.event.pull_request.number || github.run_number }}
+        run: hypercode/build-app.sh ${{ matrix.rid }}
+
+      - name: Compacta
+        run: ditto -c -k --keepParent hypercode/dist/Hypercode.app "Hypercode-${{ matrix.rid }}.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Hypercode-${{ matrix.rid }}
+          path: Hypercode-${{ matrix.rid }}.zip
+          retention-days: 14

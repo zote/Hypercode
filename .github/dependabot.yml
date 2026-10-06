@@ -1,0 +1,36 @@
+version: 2
+updates:
+  # Pacotes NuGet (Directory.Packages.props) e ferramentas locais (.config/dotnet-tools.json).
+  # O Dependabot atualiza os packages.lock.json junto, e o PR passa pelo mesmo CI de qualquer
+  # outro.
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      # Os pacotes do Avalonia precisam estar todos na mesma versão: um PR para o grupo.
+      avalonia:
+        patterns: ["Avalonia*"]
+      testes:
+        patterns: ["xunit*", "coverlet*"]
+
+  # SDK fixado no global.json.
+  - package-ecosystem: dotnet-sdk
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(deps)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]
