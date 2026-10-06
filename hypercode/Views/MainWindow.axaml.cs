@@ -1,9 +1,11 @@
 using System.ComponentModel;
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Hypercode.Services;
 using Hypercode.ViewModels;
@@ -16,6 +18,9 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         Opened += OnOpened;
+
+        WorktreeMenu = new WorktreeMenu(this, () => ViewModel, MenuTargets);
+        WorktreeList.ContextMenu = WorktreeMenu.Menu;
 
         // O monitoramento desacelera com a janela em segundo plano e pausa minimizada.
         Activated += (_, _) => ReportActivity();
@@ -44,6 +49,80 @@ public partial class MainWindow : Window
         TabStrip.AddHandler(PointerMovedEvent, OnTabStripPointerMoved, RoutingStrategies.Bubble, handledEventsToo: true);
         TabStrip.AddHandler(PointerReleasedEvent, OnTabStripPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
         TabStrip.AddHandler(PointerCaptureLostEvent, (_, _) => _draggedTab = null, RoutingStrategies.Bubble, handledEventsToo: true);
+
+        // Ao abrir e ao trocar de aba o foco vai para a lista (#100): as linhas chegam depois,
+        // então a entrega espera a linha selecionada existir.
+        _listFocusPending = true;
+        DataContextChanged += (_, _) => WatchShell();
+        WorktreeList.LayoutUpdated += (_, _) => DeliverListFocus();
+        WorktreeList.SelectionChanged += (_, _) => DeliverListFocus();
+    }
+
+    private MainViewModel? _watchedShell;
+    private bool _listFocusPending;
+
+    private void WatchShell()
+    {
+        if (_watchedShell is not null)
+        {
+            _watchedShell.PropertyChanged -= OnShellPropertyChanged;
+            _watchedShell.Issues.PropertyChanged -= OnIssuesPropertyChanged;
+            _watchedShell.Issues.WorktreeRequested -= OnIssueWorktreeRequested;
+        }
+
+        _watchedShell = Shell;
+        if (_watchedShell is not null)
+        {
+            _watchedShell.PropertyChanged += OnShellPropertyChanged;
+            _watchedShell.Issues.PropertyChanged += OnIssuesPropertyChanged;
+            _watchedShell.Issues.WorktreeRequested += OnIssueWorktreeRequested;
+        }
+    }
+
+    /// <summary>Desligar o grafo nas configurações fecha a janela própria dele — mas ela volta se ligar de novo.</summary>
+    private void OnIssuesPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(IssueGraphViewModel.IsEnabled) || Shell is not { } shell) return;
+
+        if (!shell.Issues.IsEnabled && _issueGraphWindow is { } window)
+        {
+            _keepIssueGraphWindowState = true;
+            window.Close();
+            _keepIssueGraphWindowState = false;
+        }
+        else if (shell.Issues.IsEnabled && shell.Issues.IsWindowOpen)
+        {
+            ShowIssueGraphWindow();
+        }
+    }
+
+    private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MainViewModel.SelectedRepository)) return;
+        _listFocusPending = true;
+        Dispatcher.UIThread.Post(DeliverListFocus, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// Põe o foco na linha selecionada — com a lista em foco a seleção fica na accent e as setas,
+    /// o Enter e o menu já agem nela. Só toma o foco de ninguém ou da faixa de abas: no filtro
+    /// (⌘F) ou em outro controle, ele fica onde o usuário o pôs.
+    /// </summary>
+    private void DeliverListFocus()
+    {
+        if (!_listFocusPending) return;
+
+        var focused = FocusManager?.GetFocusedElement();
+        if (focused is not null && !ReferenceEquals(focused, this) && !TabStrip.IsKeyboardFocusWithin)
+        {
+            _listFocusPending = false;
+            return;
+        }
+
+        if (!WorktreeList.IsEffectivelyVisible || WorktreeList.SelectedIndex < 0) return;
+        if (WorktreeList.ContainerFromIndex(WorktreeList.SelectedIndex) is not { } row) return;
+
+        _listFocusPending = !row.Focus();
     }
 
     private void UpdateTitleBarInset()
@@ -98,8 +177,154 @@ public partial class MainWindow : Window
 
     private async void OnOpened(object? sender, EventArgs e)
     {
+        if (Shell is not { } shell) return;
+
+        // A janela da fila volta se estava aberta ao sair; a do grafo também, se ele está ligado.
+        if (shell.Actions.IsWindowOpen) ShowActionsWindow();
+        if (shell.Issues.IsEnabled && shell.Issues.IsWindowOpen) ShowIssueGraphWindow();
+
         // As abas da última sessão: a da frente carrega primeiro.
-        if (Shell is { } shell) await shell.OpenSavedAsync();
+        await shell.OpenSavedAsync();
+    }
+
+    // ── Fila do GitHub Actions (#130) ───────────────────────────────────────
+
+    private ActionsQueueWindow? _actionsWindow;
+
+    /// <summary>A janela própria da fila, se aberta.</summary>
+    internal ActionsQueueWindow? ActionsWindow => _actionsWindow;
+    private bool _isClosingApp;
+
+    private void OnToggleActionsPanelClick(object? sender, RoutedEventArgs e) => ToggleActionsPanel();
+
+    private void OnCloseActionsPanelClick(object? sender, RoutedEventArgs e)
+    {
+        if (Shell is { } shell) shell.Actions.IsPanelOpen = false;
+    }
+
+    /// <summary>
+    /// ⇧⌘A e o botão da barra. Com a janela própria aberta e o painel recolhido, traz a janela
+    /// para a frente em vez de abrir uma segunda view ao lado.
+    /// </summary>
+    private void ToggleActionsPanel()
+    {
+        if (Shell is not { } shell) return;
+
+        if (!shell.Actions.IsPanelOpen && _actionsWindow is not null)
+        {
+            _actionsWindow.Activate();
+            return;
+        }
+
+        shell.Actions.IsPanelOpen = !shell.Actions.IsPanelOpen;
+    }
+
+    /// <summary>Destacar: a fila vai para a janela própria e o painel recolhe.</summary>
+    private void OnDetachActionsClick(object? sender, RoutedEventArgs e)
+    {
+        if (Shell is not { } shell) return;
+
+        ShowActionsWindow();
+        shell.Actions.IsPanelOpen = false;
+    }
+
+    /// <summary>
+    /// Abre a janela da fila, ou a traz para a frente. Sem dono: num segundo monitor ela não
+    /// flutua sobre a principal nem minimiza junto. Fechar a janela é o que a tira do estado
+    /// salvo; fechar o app, não — ela volta na próxima sessão.
+    /// </summary>
+    internal void ShowActionsWindow()
+    {
+        if (Shell is not { } shell) return;
+
+        if (_actionsWindow is not null)
+        {
+            _actionsWindow.Activate();
+            return;
+        }
+
+        var window = new ActionsQueueWindow { DataContext = shell.Actions };
+        window.Closed += (_, _) =>
+        {
+            _actionsWindow = null;
+            if (!_isClosingApp) shell.Actions.IsWindowOpen = false;
+        };
+
+        _actionsWindow = window;
+        shell.Actions.IsWindowOpen = true;
+        window.Show();
+    }
+
+    // ── Grafo de issues (#144) ──────────────────────────────────────────────
+
+    private IssueGraphWindow? _issueGraphWindow;
+
+    /// <summary>Fechando a janela do grafo por desligar o recurso: ela fica guardada como aberta.</summary>
+    private bool _keepIssueGraphWindowState;
+
+    /// <summary>A janela própria do grafo, se aberta.</summary>
+    internal IssueGraphWindow? IssueGraphWindow => _issueGraphWindow;
+
+    private void OnToggleIssueGraphPanelClick(object? sender, RoutedEventArgs e) => ToggleIssueGraphPanel();
+
+    private void OnCloseIssueGraphPanelClick(object? sender, RoutedEventArgs e)
+    {
+        if (Shell is { } shell) shell.Issues.IsPanelOpen = false;
+    }
+
+    /// <summary>⇧⌘G e o botão da barra; como na fila, com a janela própria aberta e o painel recolhido, traz a janela.</summary>
+    private void ToggleIssueGraphPanel()
+    {
+        if (Shell is not { } shell || !shell.Issues.IsEnabled) return;
+
+        if (!shell.Issues.IsPanelOpen && _issueGraphWindow is not null)
+        {
+            _issueGraphWindow.Activate();
+            return;
+        }
+
+        shell.Issues.IsPanelOpen = !shell.Issues.IsPanelOpen;
+    }
+
+    private void OnDetachIssueGraphClick(object? sender, RoutedEventArgs e)
+    {
+        if (Shell is not { } shell) return;
+
+        ShowIssueGraphWindow();
+        shell.Issues.IsPanelOpen = false;
+    }
+
+    /// <summary>Abre a janela do grafo, ou a traz para a frente. Sem dono, como a da fila.</summary>
+    internal void ShowIssueGraphWindow()
+    {
+        if (Shell is not { } shell || !shell.Issues.IsEnabled) return;
+
+        if (_issueGraphWindow is not null)
+        {
+            _issueGraphWindow.Activate();
+            return;
+        }
+
+        var window = new IssueGraphWindow { DataContext = shell.Issues };
+        window.Closed += (_, _) =>
+        {
+            _issueGraphWindow = null;
+            if (!_isClosingApp && !_keepIssueGraphWindowState) shell.Issues.IsWindowOpen = false;
+        };
+
+        _issueGraphWindow = window;
+        shell.Issues.IsWindowOpen = true;
+        window.Show();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        // As janelas da fila e do grafo sozinhas não seguram o app aberto.
+        _isClosingApp = true;
+        _issueGraphWindow?.Close();
+        _actionsWindow?.Close();
+        Shell?.Actions.Dispose();
+        base.OnClosed(e);
     }
 
     private async void OnAddRepositoryClick(object? sender, RoutedEventArgs e)
@@ -156,6 +381,16 @@ public partial class MainWindow : Window
             case Key.W when ViewModel is { } repository:
                 e.Handled = true;
                 _ = ConfirmCloseTabAsync(repository);
+                break;
+
+            case Key.A when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
+                e.Handled = true;
+                ToggleActionsPanel();
+                break;
+
+            case Key.G when e.KeyModifiers.HasFlag(KeyModifiers.Shift) && Shell is { Issues.IsEnabled: true }:
+                e.Handled = true;
+                ToggleIssueGraphPanel();
                 break;
 
             case >= Key.D1 and <= Key.D9:
@@ -272,6 +507,16 @@ public partial class MainWindow : Window
         }
     }
 
+    // O X do filtro: limpa e deixa o cursor no campo, como o NSSearchField — mesmo quando o
+    // foco estava na lista, já que o botão não recebe foco.
+    private void OnClearFilterClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } viewModel) return;
+
+        viewModel.FilterText = string.Empty;
+        this.FindControl<TextBox>("FilterBox")?.Focus();
+    }
+
     private void FocusSelectedRow()
     {
         if (this.FindControl<ListBox>("WorktreeList") is not { } list) return;
@@ -289,23 +534,58 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnCreateWorktreeClick(object? sender, RoutedEventArgs e)
+    private async void OnCreateWorktreeClick(object? sender, RoutedEventArgs e) => await CreateWorktreeAsync(this);
+
+    /// <summary>
+    /// Do menu do grafo de issues (#147): o mesmo diálogo, já com o número. Pedido da janela
+    /// destacada, o diálogo abre sobre ela; o grafo fica como estava, para continuar a escolha.
+    /// </summary>
+    private async void OnIssueWorktreeRequested(int number)
+        => await CreateWorktreeAsync(_issueGraphWindow is { IsActive: true } detached ? detached : this, number);
+
+    /// <summary>O diálogo aberto agora, se houver: a janela do grafo não é modal à principal, e daria para abrir dois.</summary>
+    internal CreateWorktreeWindow? CreateWorktreeDialog { get; private set; }
+
+    /// <summary>
+    /// Novo worktree no repositório da aba da frente, com o contexto dele: raiz, barras, comando,
+    /// autoatribuição e os worktrees de hoje. Com <paramref name="issueNumber"/>, a tela já nasce
+    /// com ele no campo, e o setter busca a issue como se tivesse sido digitado.
+    /// </summary>
+    internal async Task CreateWorktreeAsync(Window owner, int? issueNumber = null)
     {
         if (Shell is not { } shell || ViewModel is not { } viewModel || viewModel.MainWorktreePath is not { } mainPath) return;
-
-        var dialog = new CreateWorktreeWindow
+        if (CreateWorktreeDialog is { } open)
         {
-            DataContext = new CreateWorktreeViewModel(mainPath, shell.OpenTerminalAfterCreate, viewModel.EffectiveCommand, viewModel.AssignIssueOnCreate),
-        };
+            open.Activate();
+            return;
+        }
 
-        var result = await dialog.ShowDialog<WorktreeCreationResult?>(this);
+        var dialogViewModel = new CreateWorktreeViewModel(
+            mainPath,
+            shell.OpenTerminalAfterCreate,
+            viewModel.EffectiveCommand,
+            viewModel.AssignIssueOnCreate,
+            viewModel.Effective.WorktreesRoot,
+            viewModel.Effective.WorktreeFolderKeepsSlashes,
+            viewModel.Worktrees.Select(row => row.Worktree).ToList(),
+            viewModel.RememberWorktreeLayout);
+        if (issueNumber is { } number) dialogViewModel.IssueNumberText = number.ToString(CultureInfo.InvariantCulture);
+
+        var dialog = new CreateWorktreeWindow { DataContext = dialogViewModel };
+        CreateWorktreeDialog = dialog;
+        WorktreeCreationResult? result;
+        try
+        {
+            result = await dialog.ShowDialog<WorktreeCreationResult?>(owner);
+        }
+        finally
+        {
+            CreateWorktreeDialog = null;
+        }
 
         // O checkbox vale como preferência mesmo se o usuário cancelar depois de mexer nele.
-        if (dialog.DataContext is CreateWorktreeViewModel dialogViewModel)
-        {
-            shell.OpenTerminalAfterCreate = dialogViewModel.OpenTerminal;
-            dialogViewModel.Dispose();
-        }
+        shell.OpenTerminalAfterCreate = dialogViewModel.OpenTerminal;
+        dialogViewModel.Dispose();
 
         if (result is not null)
             await viewModel.CompleteCreationAsync(result, shell.OpenTerminalAfterCreate);
@@ -320,7 +600,7 @@ public partial class MainWindow : Window
     {
         if (e.Key is not (Key.Enter or Key.Return)) return;
         e.Handled = true;
-        if (ViewModel is { } viewModel) await viewModel.LaunchAsync(viewModel.SelectedWorktree);
+        if (ViewModel is { } viewModel) await viewModel.OpenOrFocusAsync(viewModel.SelectedWorktree);
     }
 
     private async void OnRowDoubleTapped(object? sender, TappedEventArgs e)
@@ -329,7 +609,7 @@ public partial class MainWindow : Window
 
         e.Handled = true;
         viewModel.SelectedWorktree = row;
-        await viewModel.LaunchAsync(row);
+        await viewModel.OpenOrFocusAsync(row);
     }
 
     private async void OnHelpClick(object? sender, RoutedEventArgs e)
@@ -407,309 +687,13 @@ public partial class MainWindow : Window
         if (ViewModel is { } viewModel) await viewModel.LaunchAsync(viewModel.SelectedWorktree);
     }
 
-    // O menu é da lista, não da linha: age sobre a seleção inteira. Com uma linha só, cada
-    // item segue o caminho de sempre; com várias, vira lote e termina num relatório.
+    // O menu é da lista, não da linha: age sobre a seleção inteira (#148: a mesma classe serve
+    // ao grafo de issues).
+
+    /// <summary>O menu de contexto da lista de worktrees.</summary>
+    internal WorktreeMenu WorktreeMenu { get; }
 
     /// <summary>Linhas-alvo do menu, na ordem da lista.</summary>
     private IReadOnlyList<WorktreeRow> MenuTargets()
         => ViewModel?.SelectedRowsInViewOrder() ?? Array.Empty<WorktreeRow>();
-
-    private void OnListContextMenuOpening(object? sender, CancelEventArgs e)
-    {
-        var rows = MenuTargets();
-        if (rows.Count == 0)
-        {
-            e.Cancel = true;
-            return;
-        }
-
-        Configure(LaunchMenuItem, "Abrir no iTerm2 rodando o comando", rows, row => row.CanLaunch);
-        Configure(ShellMenuItem, "Abrir o terminal", rows, row => row.CanLaunch);
-        Configure(ResumeClaudeMenuItem, "Retomar a sessão do claude", rows, row => row.HasClaudeSession);
-        Configure(RevealMenuItem, "Revelar no Finder", rows, _ => true);
-        Configure(OpenPullRequestMenuItem, "Abrir PR no navegador", rows, row => row.HasPullRequest);
-        Configure(MarkSeenMenuItem, "Marcar como visto", rows, row => row.HasPullRequestChanges);
-        MarkSeenMenuItem.IsVisible = MarkSeenMenuItem.IsEnabled;
-        Configure(RerunFailedChecksMenuItem, "Rodar novamente os checks que falharam", rows, row => row.CanRerunFailedChecks);
-        RerunFailedChecksMenuItem.IsVisible = RerunFailedChecksMenuItem.IsEnabled;
-        Configure(UpdateBranchMenuItem, "Puxar do remoto (pull)", rows, row => row.CanUpdateBranch);
-        Configure(RemoveMenuItem, rows.Count > 1 ? "Apagar os worktrees…" : "Apagar o worktree…", rows, row => row.CanRemove);
-
-        // Cada item só aparece se alguma linha estiver no estado que ele muda: travar some
-        // quando tudo já está travado, destravar some quando nada está.
-        Configure(LockMenuItem, rows.Count > 1 ? "Travar os worktrees…" : "Travar o worktree…", rows, row => row.CanLock);
-        LockMenuItem.IsVisible = LockMenuItem.IsEnabled;
-
-        // Destravar passa por uma confirmação com os dados daquela trava: não vira lote.
-        UnlockMenuItem.Header = "Destravar o worktree…";
-        UnlockMenuItem.IsVisible = rows.Any(row => row.CanUnlock);
-        UnlockMenuItem.IsEnabled = rows is [{ CanUnlock: true }];
-
-        // Merge ou rebase é uma escolha por worktree, feita num diálogo: não vira lote.
-        UpdateFromBaseMenuItem.Header = "Atualizar a partir da base…";
-        UpdateFromBaseMenuItem.IsEnabled = rows.Count == 1 && rows[0].CanUpdateFromBase;
-    }
-
-    /// <summary>Com várias linhas, o rótulo diz em quantas a ação vale; basta uma para habilitar.</summary>
-    private static void Configure(MenuItem item, string label, IReadOnlyList<WorktreeRow> rows, Func<WorktreeRow, bool> supports)
-    {
-        var count = rows.Count(supports);
-        item.Header = rows.Count > 1 ? $"{label} ({count})" : label;
-        item.IsEnabled = count > 0;
-    }
-
-    private async Task ShowBatchReportAsync(BatchOutcome outcome)
-        => await ConfirmWindow.Notice(
-            outcome.Action,
-            outcome.Summary,
-            outcome.Report).ShowDialog<bool>(this);
-
-    /// <summary>Uma janela por worktree: acima do limite, pergunta antes de abrir todas.</summary>
-    private async Task<bool> ConfirmWindowsAsync(string what, IReadOnlyList<WorktreeRow> rows, Func<WorktreeRow, bool> supports)
-    {
-        var targets = rows.Where(supports).ToList();
-        if (targets.Count <= RepositoryViewModel.WindowConfirmationThreshold) return true;
-
-        return await new ConfirmWindow(
-            what,
-            $"Abrir {targets.Count} janelas de uma vez?",
-            string.Join("\n", targets.Select(row => $"{row.Name}  —  {row.Branch}")),
-            $"Abrir {targets.Count}").ShowDialog<bool>(this);
-    }
-
-    /// <summary>Abrir janelas em lote: só há relatório se algo falhou ou ficou de fora.</summary>
-    private async Task OpenManyAsync(
-        string what,
-        IReadOnlyList<WorktreeRow> rows,
-        Func<WorktreeRow, bool> supports,
-        Func<IReadOnlyList<WorktreeRow>, Task<BatchOutcome>> open)
-    {
-        if (!await ConfirmWindowsAsync(what, rows, supports)) return;
-
-        var outcome = await open(rows);
-        if (outcome.HasProblems) await ShowBatchReportAsync(outcome);
-    }
-
-    private async void OnOpenTerminalMenuClick(object? sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel) return;
-
-        var rows = MenuTargets();
-        if (rows.Count == 1) await viewModel.LaunchAsync(rows[0]);
-        else await OpenManyAsync("Abrir no iTerm2", rows, row => row.CanLaunch, viewModel.LaunchManyAsync);
-    }
-
-    private async void OnOpenShellMenuClick(object? sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel) return;
-
-        var rows = MenuTargets();
-        if (rows.Count == 1) await viewModel.OpenShellAsync(rows[0]);
-        else await OpenManyAsync("Abrir o terminal", rows, row => row.CanLaunch, viewModel.OpenShellManyAsync);
-    }
-
-    private async void OnResumeClaudeMenuClick(object? sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel) return;
-
-        var rows = MenuTargets();
-        if (rows.Count == 1) await viewModel.ResumeClaudeAsync(rows[0]);
-        else await OpenManyAsync("Retomar a sessão do claude", rows, row => row.HasClaudeSession, viewModel.ResumeClaudeManyAsync);
-    }
-
-    private async void OnUpdateBranchMenuClick(object? sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel) return;
-
-        var rows = MenuTargets();
-        if (rows.Count == 1)
-        {
-            await viewModel.UpdateBranchAsync(rows[0]);
-            return;
-        }
-
-        await ShowBatchReportAsync(await viewModel.UpdateBranchesAsync(rows));
-    }
-
-    // Fetch e checagens primeiro, para o diálogo mostrar a base e quantos commits vêm; só
-    // então a escolha entre merge e rebase. Recusa e conflito viram diálogo, não só rodapé.
-    private async void OnUpdateFromBaseMenuClick(object? sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel || MenuTargets() is not [var row]) return;
-        if (!row.CanUpdateFromBase) return;
-
-        var plan = await viewModel.PrepareBaseUpdateAsync(row);
-
-        if (plan.Distance is not { } distance)
-        {
-            viewModel.StatusMessage = $"{row.Name} não foi atualizado";
-            await ConfirmWindow.Notice(
-                "Atualizar a partir da base",
-                $"Não dá para atualizar {row.Name} agora.",
-                plan.Error ?? string.Empty).ShowDialog<bool>(this);
-            return;
-        }
-
-        if (distance.Behind == 0)
-        {
-            viewModel.StatusMessage = $"{row.Branch} já contém {distance.Ref} — nada a trazer";
-            return;
-        }
-
-        var strategy = await new UpdateFromBaseWindow(row, distance).ShowDialog<BaseUpdateStrategy?>(this);
-        if (strategy is not { } chosen)
-        {
-            viewModel.StatusMessage = $"Atualização de {row.Branch} cancelada";
-            return;
-        }
-
-        var outcome = await viewModel.UpdateFromBaseAsync(row, distance, chosen);
-        if (outcome.Details is null) return;
-
-        await ConfirmWindow.Notice(
-            "Atualizar a partir da base",
-            outcome.Summary,
-            outcome.Details).ShowDialog<bool>(this);
-    }
-
-    // Duas etapas: remove sem --force; se o git recusar (alteração não commitada, arquivo
-    // não versionado), explica o motivo e só então oferece forçar — o que descarta o trabalho.
-    private async void OnRemoveWorktreeMenuClick(object? sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel) return;
-
-        var rows = MenuTargets();
-        if (rows.Count > 1)
-        {
-            await RemoveManyAsync(viewModel, rows);
-            return;
-        }
-
-        if (rows is not [var row] || !row.CanRemove) return;
-
-        var confirmed = await new ConfirmWindow(
-            "Apagar o worktree",
-            $"Apagar o worktree {row.Name}? A branch local não é tocada, só o worktree.",
-            RepositoryViewModel.BuildRemovalSummary(row),
-            "Apagar",
-            ConfirmStyle.Destructive).ShowDialog<bool>(this);
-
-        if (!confirmed) return;
-
-        var error = await viewModel.RemoveWorktreeAsync(row);
-        if (error is null || row.Worktree.IsPrunable || row.Worktree.IsLocked) return;
-
-        var forced = await new ConfirmWindow(
-            "Forçar a remoção",
-            $"O git recusou apagar {row.Name}. Forçar descarta de vez as alterações não commitadas e os arquivos não versionados da pasta.",
-            $"{error}\n\n{row.FullPath}",
-            "Forçar e apagar",
-            ConfirmStyle.Destructive).ShowDialog<bool>(this);
-
-        if (forced) await viewModel.RemoveWorktreeAsync(row, force: true);
-    }
-
-    // Em lote é uma confirmação só, sem a segunda etapa de forçar: quem o git recusar fica,
-    // e o relatório diz por quê.
-    private async Task RemoveManyAsync(RepositoryViewModel viewModel, IReadOnlyList<WorktreeRow> rows)
-    {
-        var targets = rows.Where(row => row.CanRemove).ToList();
-        if (targets.Count == 0) return;
-
-        var headline = $"Apagar {targets.Count} worktree(s)? A branch local não é tocada, só o worktree."
-                       + (targets.Count < rows.Count ? $" O principal e o bare ficam de fora ({rows.Count - targets.Count})." : string.Empty);
-
-        var confirmed = await new ConfirmWindow(
-            "Apagar os worktrees",
-            headline,
-            RepositoryViewModel.BuildBatchRemovalSummary(targets),
-            $"Apagar {targets.Count}",
-            ConfirmStyle.Destructive).ShowDialog<bool>(this);
-
-        if (!confirmed) return;
-
-        await ShowBatchReportAsync(await viewModel.RemoveWorktreesAsync(rows));
-    }
-
-    // Um motivo só, digitado uma vez, vale para todas as linhas da seleção que aceitam a trava.
-    private async void OnLockMenuClick(object? sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel) return;
-
-        var targets = MenuTargets().Where(row => row.CanLock).ToList();
-        if (targets.Count == 0) return;
-
-        var headline = targets is [var single]
-            ? $"Travar o worktree {single.Name}?"
-            : $"Travar {targets.Count} worktrees?";
-
-        var reason = await new LockWorktreeWindow(
-            headline,
-            targets.Count == 1 ? "Travar" : $"Travar {targets.Count}").ShowDialog<string?>(this);
-
-        if (reason is null) return;
-
-        if (targets is [var row])
-        {
-            if (await viewModel.LockWorktreeAsync(row, reason) is { } error)
-                await ShowLockErrorAsync("Travar o worktree", $"O git recusou travar {row.Name}.", error, row);
-            return;
-        }
-
-        var outcome = await viewModel.LockWorktreesAsync(MenuTargets(), reason);
-        if (outcome.Failed.Count > 0) await ShowBatchReportAsync(outcome);
-    }
-
-    // Sempre com confirmação, e com Cancelar como padrão: a trava pode ser de outra ferramenta.
-    private async void OnUnlockMenuClick(object? sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel || MenuTargets() is not [var row] || !row.CanUnlock) return;
-
-        var confirmed = await new ConfirmWindow(
-            "Destravar o worktree",
-            row.Worktree.IsToolLock
-                ? $"Destravar {row.Name}? A trava é do {row.Worktree.LockOwner}."
-                : $"Destravar {row.Name}?",
-            RepositoryViewModel.BuildUnlockSummary(row),
-            "Destravar",
-            ConfirmStyle.CancelIsDefault).ShowDialog<bool>(this);
-
-        if (!confirmed) return;
-
-        if (await viewModel.UnlockWorktreeAsync(row) is { } error)
-            await ShowLockErrorAsync("Destravar o worktree", $"O git recusou destravar {row.Name}.", error, row);
-    }
-
-    private async Task ShowLockErrorAsync(string title, string headline, string error, WorktreeRow row)
-        => await ConfirmWindow.Notice(title, headline, $"{error}\n\n{row.FullPath}").ShowDialog<bool>(this);
-
-    private void OnMarkSeenMenuClick(object? sender, RoutedEventArgs e)
-        => ViewModel?.MarkPullRequestChangesSeen(MenuTargets());
-
-    private async void OnRerunFailedChecksMenuClick(object? sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel) return;
-
-        var rows = MenuTargets();
-        if (rows.Count == 1) await viewModel.RerunFailedChecksAsync(rows[0]);
-        else await ShowBatchReportAsync(await viewModel.RerunFailedChecksManyAsync(rows));
-    }
-
-    private async void OnRevealMenuClick(object? sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel) return;
-
-        var rows = MenuTargets();
-        if (rows.Count == 1) await viewModel.RevealAsync(rows[0]);
-        else if (await viewModel.RevealManyAsync(rows) is { HasProblems: true } outcome) await ShowBatchReportAsync(outcome);
-    }
-
-    private async void OnOpenPullRequestMenuClick(object? sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel) return;
-
-        var rows = MenuTargets();
-        if (rows.Count == 1) await viewModel.OpenPullRequestAsync(rows[0]);
-        else await OpenManyAsync("Abrir PR no navegador", rows, row => row.HasPullRequest, viewModel.OpenPullRequestsAsync);
-    }
 }

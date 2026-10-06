@@ -3,8 +3,7 @@ namespace Hypercode.ViewModels;
 public sealed record LegendEntry(StatusBadge Badge, string Title, string Description)
 {
     public string IconKey => Badge.IconKey;
-    public string LightColorHex => Badge.LightColorHex;
-    public string DarkColorHex => Badge.DarkColorHex;
+    public string BrushKey => Badge.BrushKey;
 }
 
 /// <summary>
@@ -18,6 +17,12 @@ public sealed class HelpViewModel
 
     public IReadOnlyList<LegendEntry> WorktreeLegend { get; } = new[]
     {
+        Entry(BadgeKind.TerminalOpen, "Terminal aberto",
+            "Há uma sessão de terminal com a pasta de trabalho dentro do worktree (lsof). O tooltip diz qual — no iTerm2, com o nome da sessão. O duplo-clique vai para ela em vez de abrir outra; para abrir outra de propósito, use o menu de contexto."),
+        Entry(BadgeKind.ProcessOpen, "Pasta em uso",
+            "Há processo com a pasta aberta, mas sem sessão de terminal — um dotnet watch, por exemplo. Não há para onde ir: o duplo-clique abre um terminal novo."),
+        Entry(BadgeKind.MultiplexerSession, "Sessão de multiplexador",
+            "Há uma sessão de zmx (a do supacode), tmux, screen ou zellij com a pasta dentro do worktree, mas nenhuma janela de terminal que o Hypercode saiba trazer para a frente: ela está desanexada ou dentro de outro app. O duplo-clique abre um terminal novo. Se houver também um terminal de verdade, vale o ícone de terminal aberto."),
         Entry(BadgeKind.Dirty, "Alterações não commitadas",
             "Há arquivos modificados, novos ou removidos na árvore de trabalho. A limpeza não remove um worktree assim: o git recusa sem --force."),
         Entry(BadgeKind.Conflicted, "Conflito não resolvido",

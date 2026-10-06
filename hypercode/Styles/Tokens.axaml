@@ -38,6 +38,15 @@
       <SolidColorBrush x:Key="Brush.Status.Danger" Color="#FF3B30" />
       <SolidColorBrush x:Key="Brush.Status.Warning" Color="#FF9500" />
       <SolidColorBrush x:Key="Brush.Status.Success" Color="#28CD41" />
+
+      <!-- Etiquetas de estado de worktree, PR, checks e review: os fg.* do Primer, a mesma
+           cor que o GitHub usa para a mesma informação (#103). Ícone, não texto. -->
+      <SolidColorBrush x:Key="Brush.Badge.Success" Color="#1A7F37" />
+      <SolidColorBrush x:Key="Brush.Badge.Danger" Color="#D1242F" />
+      <SolidColorBrush x:Key="Brush.Badge.Done" Color="#8250DF" />
+      <SolidColorBrush x:Key="Brush.Badge.Attention" Color="#9A6700" />
+      <SolidColorBrush x:Key="Brush.Badge.Accent" Color="#0969DA" />
+      <SolidColorBrush x:Key="Brush.Badge.Muted" Color="#59636E" />
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="Dark">
@@ -66,6 +75,13 @@
       <SolidColorBrush x:Key="Brush.Status.Danger" Color="#FF453A" />
       <SolidColorBrush x:Key="Brush.Status.Warning" Color="#FF9F0A" />
       <SolidColorBrush x:Key="Brush.Status.Success" Color="#32D74B" />
+
+      <SolidColorBrush x:Key="Brush.Badge.Success" Color="#3FB950" />
+      <SolidColorBrush x:Key="Brush.Badge.Danger" Color="#F85149" />
+      <SolidColorBrush x:Key="Brush.Badge.Done" Color="#AB7DF8" />
+      <SolidColorBrush x:Key="Brush.Badge.Attention" Color="#D29922" />
+      <SolidColorBrush x:Key="Brush.Badge.Accent" Color="#4493F8" />
+      <SolidColorBrush x:Key="Brush.Badge.Muted" Color="#9198A1" />
     </ResourceDictionary>
 
   </ResourceDictionary.ThemeDictionaries>
@@ -73,8 +89,11 @@
   <!-- Destaque e seleção seguem a accent color do sistema, que o FluentTheme lê do macOS (#64). -->
   <SolidColorBrush x:Key="Brush.Accent" Color="{DynamicResource SystemAccentColor}" />
   <SolidColorBrush x:Key="Brush.Selection.Active" Color="{DynamicResource SystemAccentColorDark1}" />
-  <SolidColorBrush x:Key="Brush.Accent.Pressed" Color="{DynamicResource SystemAccentColorDark2}" />
-  <!-- Anel de foco do teclado: a accent a 50%, por fora do controle -->
+  <!-- O pressionado não usa o SystemAccentColorDark2: na accent vermelha ele sai igual ao
+       Dark1 (#135). A cor vem do App, que escurece a de Brush.Selection.Active
+       (Views/AccentPressed.cs); a daqui, o pressionado do azul padrão, só vale até lá. -->
+  <SolidColorBrush x:Key="Brush.Accent.Pressed" Color="#004B9D" />
+  <!-- Anel de foco (Tab, e clique no campo de texto): a accent a 50%, por fora do controle -->
   <SolidColorBrush x:Key="Brush.Focus" Color="{DynamicResource SystemAccentColor}" Opacity="0.5" />
   <SolidColorBrush x:Key="Brush.Text.OnAccent" Color="#FFFFFF" />
 
@@ -115,6 +134,8 @@
   <Thickness x:Key="Padding.Box">12</Thickness>
   <!-- Botão sem borda: o fundo só aparece sob o mouse, então o padding é menor -->
   <Thickness x:Key="Padding.Borderless">6,3</Thickness>
+  <!-- Botão de limpar dentro do campo: afasta o X da borda direita do TextBox -->
+  <Thickness x:Key="Padding.ClearButton">4,0,6,0</Thickness>
   <!-- Recuo do item de menu e da linha de lista estilo tabela, para o destaque arredondado
        não encostar nas bordas -->
   <Thickness x:Key="Margin.MenuItem">5,0</Thickness>
@@ -170,11 +191,15 @@
   <x:Double x:Key="Size.Icon.Medium">14</x:Double>
   <x:Double x:Key="Size.Icon.Large">18</x:Double>
 
-  <!-- Raios de canto -->
+  <!-- Raios de canto, medidos nos controles do AppKit no macOS 27 (#97): botão, campo e
+       pop-up 6; NSBox e menu 12; destaque do item de menu 7; janela e sheet 16 -->
   <CornerRadius x:Key="Radius.Small">4</CornerRadius>
   <CornerRadius x:Key="Radius.Control">6</CornerRadius>
-  <CornerRadius x:Key="Radius.Group">10</CornerRadius>
-  <CornerRadius x:Key="Radius.Window">12</CornerRadius>
+  <CornerRadius x:Key="Radius.Group">12</CornerRadius>
+  <CornerRadius x:Key="Radius.Window">16</CornerRadius>
+  <!-- Radius.Group menos o recuo do item (Margin.MenuItem, 5): o destaque fica concêntrico
+       ao menu -->
+  <CornerRadius x:Key="Radius.MenuItem">7</CornerRadius>
   <!-- Aba: só os cantos de cima, para a aba selecionada se encaixar no conteúdo abaixo -->
   <CornerRadius x:Key="Radius.Tab">6,6,0,0</CornerRadius>
   <!-- Radius.Control + a espessura do anel (3), para o anel acompanhar a curva do controle -->

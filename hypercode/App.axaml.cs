@@ -19,6 +19,8 @@ public partial class App : Application
         // :focus-within).
         Window.IsActiveProperty.Changed.AddClassHandler<Window>(
             (window, _) => window.Classes.Set("inactive", !window.IsActive));
+
+        AccentPressed.Acompanhar(this);
     }
 
     public override void OnFrameworkInitializationCompleted()

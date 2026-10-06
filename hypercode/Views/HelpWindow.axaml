@@ -38,8 +38,7 @@
                   Data="{Binding IconKey, Converter={x:Static views:BadgeConverter.ToGeometry}}">
           <PathIcon.Foreground>
             <MultiBinding Converter="{x:Static views:BadgeBrushConverter.Instance}">
-              <Binding Path="LightColorHex" />
-              <Binding Path="DarkColorHex" />
+              <Binding Path="BrushKey" />
               <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource Self}" />
             </MultiBinding>
           </PathIcon.Foreground>
@@ -100,8 +99,21 @@
         <TextBlock Classes="p" Text="Opção das configurações, desligada por padrão. Ligada, o botão vira Limpeza automática e fica desabilitado: o monitor remove sozinho, pelo mesmo critério e sem --force, os concluídos que passaram da carência (10 min por padrão). O rodapé informa cada remoção e o tooltip do botão guarda o histórico da sessão." />
         <TextBlock Classes="p" Text="O git worktree remove apaga junto os arquivos ignorados pelo .gitignore — .env, appsettings.Development.json, banco local. Sem um humano lendo a lista, a limpeza automática pula o worktree que tem arquivo ignorado fora de bin/ e obj/, o que tem um terminal ou processo aberto dentro (lsof) e o travado, inclusive por ferramenta — esses ficam listados no tooltip, para o menu Apagar o worktree…. Com a janela minimizada, pausa." />
 
+        <TextBlock Classes="h2" Text="Fila do GitHub Actions" />
+        <TextBlock Classes="p" Text="O botão de colunas na barra (⇧⌘A) abre, ao lado da lista, os runners self-hosted da organização dos repositórios escolhidos nas configurações — por grupo, ocupado, livre ou offline, e o job que cada ocupado roda quando é de um repositório acompanhado — e o que espera por eles, uma fila por conjunto de labels. Destacar leva a mesma view para uma janela própria, para deixar num segundo monitor." />
+        <TextBlock Classes="p" Text="A ordem da fila é estimada pelo horário de entrada: o GitHub não expõe posição, e jobs de repositórios não acompanhados disputam os mesmos runners sem aparecer. Job que espera um needs nem chega à API, então o que está na fila espera mesmo um runner. Anda na cadência do monitoramento e recua pela cota REST; recolhido e com a janela fechada, não consulta nada. Ver os runners pede o escopo admin:org no gh; sem ele, a fila continua." />
+        <TextBlock Classes="p" Text="Clique direito num runner ocupado, num job da fila ou num run sem job: Cancelar o run inteiro… e Forçar cancelamento…, cada um com confirmação. O GitHub só cancela o run todo — não existe cancelar um job sozinho. Forçar pula os passos com if: always() e a limpeza do workflow; é para o run que não para com o cancelamento comum. Depois do pedido, o painel relê em poucos segundos. Sem escrita no repositório, ou com o token do gh sem o escopo repo, os itens aparecem desabilitados com o motivo." />
+        <TextBlock Classes="p" Text="Reordenar a fila não existe: a API do GitHub não tem prioridade nem posição. O único jeito de alguém entrar antes é cancelar o que está na frente." />
+
+        <TextBlock Classes="h2" Text="Grafo de issues" />
+        <TextBlock Classes="p" Text="Opção das configurações, desligada por padrão. Ligada, o botão de grafo na barra (⇧⌘G) abre as issues abertas do repositório da aba: a lista ordenada por quantas issues cada uma destrava, somando todos os níveis de Blocked by / Blocking, com livre (sem bloqueador aberto) ou presa por N; e o grafo em camadas, em que cada coluna é um nível de dependência a mais. Filtros de milestone, label e tipo — o de tipo some sem tipos na organização." />
+        <TextBlock Classes="p" Text="Clicar num cartão isola o que o segura e o que ele destrava; Ver tudo ou Esc volta. Duplo-clique abre a issue no navegador. Bloqueador fechado aparece apagado e não segura mais; o de outro repositório vira um cartão cinza. Ciclo de dependência vira aviso. Lê o GitHub ao abrir e ao trocar de aba, uma consulta GraphQL por 50 issues; recolhido ou desligado, não lê nada." />
+        <TextBlock Classes="p" Text="Clique direito numa linha da lista ou num cartão: Focar no grafo, Abrir a issue no navegador e Criar worktree para esta issue, que abre o Novo worktree já com o número, o título e a branch sugerida. O grafo fica como estava, para seguir escolhendo. Issue de outro repositório tem o item desabilitado: o worktree é deste." />
+        <TextBlock Classes="p" Text="Issue que já tem worktree ganha o ícone de branch antes do número, e o clique direito nela abre o mesmo menu da lista de worktrees — terminal, claude, PR, atualizar, travar, apagar —, com os itens da issue no fim. A ligação vem do PR do worktree, quando ele declara que fecha a issue (Closes #12); sem isso, do número no nome da branch: claude/issue-12-…, feat/12-… ou codex/12-…. O tooltip do ícone diz qual das duas, e avisa se mais de um worktree aponta para a mesma issue." />
+
         <TextBlock Classes="h2" Text="Abrir no terminal" />
-        <TextBlock Classes="p" Text="Duplo-clique ou Enter abre uma janela nova do iTerm2 na pasta do worktree e roda o Comando das configurações, ⌘, (por padrão claude). Sem iTerm2 instalado, usa o Terminal.app. Na primeira vez o macOS pede permissão de automação." />
+        <TextBlock Classes="p" Text="Duplo-clique ou Enter abre uma janela nova do terminal na pasta do worktree e roda o Comando das configurações, ⌘, (por padrão claude). O terminal também se escolhe lá: iTerm2, Terminal.app, Ghostty, WezTerm, Alacritty ou kitty, entre os instalados. No padrão do sistema, o iTerm2 se instalado e, senão, o Terminal.app. Na primeira vez o macOS pede permissão de automação; com o worktree num disco externo, o terminal escolhido também precisa da de Volumes removíveis." />
+        <TextBlock Classes="p" Text="Se o worktree já tem terminal aberto — o ícone de terminal na linha —, o duplo-clique e o Enter trazem esse terminal para a frente em vez de abrir outro; havendo vários, o mais recente. Funciona com o iTerm2 e com o Terminal.app; os demais terminais não expõem as janelas, e com eles o duplo-clique sempre abre uma nova. Para abrir outro de propósito, use Abrir no terminal rodando o comando ou Abrir o terminal, no menu de contexto; Ir para o terminal aberto faz só o foco." />
 
       </StackPanel>
     </ScrollViewer>

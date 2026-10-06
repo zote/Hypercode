@@ -26,7 +26,17 @@ public partial class ConfirmWindow : Window
         InitializeComponent();
     }
 
-    public ConfirmWindow(string title, string headline, string body, string confirmLabel, ConfirmStyle style = ConfirmStyle.Default)
+    /// <param name="dismissLabel">
+    /// O rótulo do botão que desiste, quando "Cancelar" confundiria — confirmar o cancelamento
+    /// de algo não pode ficar ao lado de um botão Cancelar que faz o contrário.
+    /// </param>
+    public ConfirmWindow(
+        string title,
+        string headline,
+        string body,
+        string confirmLabel,
+        ConfirmStyle style = ConfirmStyle.Default,
+        string? dismissLabel = null)
         : this()
     {
         Title = title;
@@ -34,6 +44,7 @@ public partial class ConfirmWindow : Window
         BodyText.Text = body;
         BodyBox.IsVisible = !string.IsNullOrWhiteSpace(body);
         ConfirmButton.Content = confirmLabel;
+        if (dismissLabel is not null) CancelButton.Content = dismissLabel;
 
         if (style == ConfirmStyle.Destructive)
             ConfirmButton.Classes.Add("destructive");

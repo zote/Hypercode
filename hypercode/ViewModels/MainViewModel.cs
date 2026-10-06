@@ -18,15 +18,26 @@ public sealed class MainViewModel : ObservableObject
     private bool _isWindowMinimized;
 
     public MainViewModel()
-        : this(SettingsStore.Load(), SettingsStore.Save, PullRequestMemory.Load(), AutoCleanupStore.Default)
+        : this(SettingsStore.Load(), SettingsStore.Save, PullRequestMemory.Load(), AutoCleanupStore.Default, ActionsDurationStore.Default)
     {
     }
 
-    public MainViewModel(Settings settings, Action<Settings> save, PullRequestMemory pullRequests, AutoCleanupStore autoCleanupStore)
+    /// <param name="actionsDurations">O cache das durações da fila do Actions. Sem ele, a fila fica sem estimativa de início e nada é coletado.</param>
+    /// <param name="loadIssues">A leitura das issues do grafo. Sem ela, o gh de verdade.</param>
+    public MainViewModel(
+        Settings settings,
+        Action<Settings> save,
+        PullRequestMemory pullRequests,
+        AutoCleanupStore autoCleanupStore,
+        ActionsDurationStore? actionsDurations = null,
+        Func<string, CancellationToken, Task<IssueGraphData>>? loadIssues = null)
     {
         _settings = settings;
         _save = save;
+        TerminalLauncher.Configure(settings.Terminal);
         _hub = new RepositoryHub(settings, pullRequests, autoCleanupStore, SaveSettings, () => Repositories);
+        Actions = new ActionsQueueViewModel(settings, SaveSettings, durations: actionsDurations);
+        Issues = new IssueGraphViewModel(settings, SaveSettings, loadIssues);
 
         foreach (var path in settings.Repositories)
             Repositories.Add(new RepositoryViewModel(path, _hub));
@@ -43,6 +54,12 @@ public sealed class MainViewModel : ObservableObject
         get => _selectedRepository;
         set => Select(value, persist: true);
     }
+
+    /// <summary>A fila do GitHub Actions: o painel ao lado da lista e a janela própria mostram esta mesma.</summary>
+    public ActionsQueueViewModel Actions { get; }
+
+    /// <summary>O grafo de issues da aba da frente: o painel e a janela própria mostram este mesmo.</summary>
+    public IssueGraphViewModel Issues { get; }
 
     public bool HasRepositories => Repositories.Count > 0;
 
@@ -73,6 +90,7 @@ public sealed class MainViewModel : ObservableObject
         if (repository is not null) repository.IsSelected = true;
 
         RaisePropertyChanged(nameof(SelectedRepository));
+        Issues.SetRepository(repository);
 
         // Só a aba da frente conta como janela ativa para o agendador: as outras seguem
         // monitoradas, na cadência de segundo plano.
@@ -98,6 +116,9 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     public async Task OpenSavedAsync()
     {
+        Actions.Start();
+        Issues.Start();
+
         if (_settings.LegacyRepository is { } legacy)
         {
             _settings.LegacyRepository = null;
@@ -236,6 +257,8 @@ public sealed class MainViewModel : ObservableObject
         _isWindowActive = isActive;
         _isWindowMinimized = isMinimized;
         ReportActivity();
+        Actions.SetMainWindowActivity(isActive, isMinimized);
+        Issues.SetMainWindowActivity(isActive, isMinimized);
     }
 
     private void ReportActivity()
@@ -247,7 +270,10 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Depois de a tela de configurações mudar algo: cada aba relê o que vale para ela.</summary>
     public void ApplySettingsChanged()
     {
+        TerminalLauncher.Configure(_settings.Terminal);
         foreach (var repository in Repositories) repository.RefreshSettings();
+        Actions.RefreshSettings();
+        Issues.RefreshSettings();
     }
 
     public void SaveSettings() => _save(_settings);

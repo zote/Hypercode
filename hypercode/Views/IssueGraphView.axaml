@@ -1,0 +1,232 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Hypercode.ViewModels"
+             xmlns:views="clr-namespace:Hypercode.Views"
+             x:Class="Hypercode.Views.IssueGraphView">
+
+  <!-- O grafo de issues do repositório da aba da frente (#144). DataContext é o
+       IssueGraphViewModel, o mesmo no painel da janela principal e na janela própria — o que é
+       do lugar (destacar, recolher) fica com quem hospeda. Duas vistas do mesmo conjunto: a
+       lista por impacto, que decide mais rápido, e o grafo em camadas, que explica o porquê.
+       Clique num cartão foca a vizinhança dele; duplo-clique (no cartão ou na linha) abre a
+       issue no navegador. Issue que já tem worktree ganha o ícone de branch e, no botão
+       direito, o menu do worktree (#148). -->
+  <UserControl.Styles>
+    <Style Selector="TextBlock.meta">
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TextBlock.wrap">
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="TextTrimming" Value="None" />
+    </Style>
+    <Style Selector="TextBlock.problem">
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Warning}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- Livre ou presa: a cor reforça, o texto diz. -->
+    <Style Selector="TextBlock.state">
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Subheadline}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
+    </Style>
+    <Style Selector="TextBlock.state.free">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Success}" />
+    </Style>
+    <Style Selector="TextBlock.state.blocked">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Warning}" />
+    </Style>
+    <Style Selector="ComboBox.filter">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MaxWidth" Value="180" />
+      <Setter Property="FontSize" Value="{DynamicResource Font.Size.Callout}" />
+    </Style>
+
+    <!-- Os cartões no Canvas: a posição vem do layout em camadas, calculado no view-model. -->
+    <Style Selector="ItemsControl#GraphCards > ContentPresenter">
+      <Setter Property="Canvas.Left" Value="{Binding X}" />
+      <Setter Property="Canvas.Top" Value="{Binding Y}" />
+    </Style>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource Brush.Background.Content}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Separator}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Radius.Control}" />
+      <Setter Property="ClipToBounds" Value="True" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Border.card.free">
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Text.Success}" />
+    </Style>
+    <Style Selector="Border.card.cycle">
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Text.Warning}" />
+    </Style>
+    <!-- Ponta fechada ou de outro repositório: está no desenho só para a aresta ter onde chegar. -->
+    <Style Selector="Border.card.stub">
+      <Setter Property="Opacity" Value="0.55" />
+      <Setter Property="Background" Value="{DynamicResource Brush.Background.ContentAlternate}" />
+    </Style>
+    <!-- Fechada (#146): riscada, para não se confundir com a ponta aberta de outro repositório. -->
+    <Style Selector="Border.card.closed TextBlock.callout">
+      <Setter Property="TextDecorations" Value="Strikethrough" />
+    </Style>
+    <!-- Já tem worktree (#148): a marca é o ícone de branch antes do número, na cor accent; o
+         tooltip diz o worktree e por onde a ligação foi feita. -->
+    <Style Selector="Border.worktree">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.worktree PathIcon">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+    <Style Selector="Border.card.focused">
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+      <Setter Property="BorderThickness" Value="2" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,Auto,Auto,*">
+
+    <!-- Estado da leitura e Atualizar -->
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="{DynamicResource Padding.Bar}">
+      <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center" Text="{Binding StatusLine}" />
+      <Button Grid.Column="1" Classes="borderless" Content="Atualizar" Click="OnRefreshClick"
+              IsEnabled="{Binding HasRepository}"
+              ToolTip.Tip="Lê as issues abertas e as dependências agora. Sem isso, relê ao trocar de aba ou ao voltar à janela, se a leitura tiver mais de 10 minutos." />
+    </Grid>
+
+    <!-- Filtros e a troca entre lista e grafo. 16: o recuo lateral do Padding.Bar, para alinhar
+         com a linha de cima; 8 e 6: o respiro entre os controles quando a WrapPanel quebra a linha. -->
+    <WrapPanel Grid.Row="1" Margin="16,0,16,8" IsVisible="{Binding HasData}">
+      <ComboBox Name="MilestoneFilter" Classes="filter" Margin="0,0,8,6"
+                ItemsSource="{Binding MilestoneOptions}" SelectedItem="{Binding SelectedMilestone, Mode=TwoWay}"
+                ToolTip.Tip="Milestone. Sem uma escolhida, num repositório grande, o grafo tende a virar teia." />
+      <ComboBox Name="LabelFilter" Classes="filter" Margin="0,0,8,6"
+                ItemsSource="{Binding LabelOptions}" SelectedItem="{Binding SelectedLabel, Mode=TwoWay}" />
+      <!-- Tipo é da organização: conta pessoal não tem, e o seletor some em vez de ficar morto. -->
+      <ComboBox Name="TypeFilter" Classes="filter" Margin="0,0,8,6" IsVisible="{Binding HasTypes}"
+                ItemsSource="{Binding TypeOptions}" SelectedItem="{Binding SelectedType, Mode=TwoWay}" />
+      <CheckBox Content="Só as livres" Margin="0,0,8,6" IsChecked="{Binding OnlyFree, Mode=TwoWay}"
+                ToolTip.Tip="Abertas sem nenhum bloqueador aberto: dá para pegar agora." />
+      <CheckBox Name="ShowClosedFilter" Content="Mostrar fechadas" Margin="0,0,8,6" IsChecked="{Binding ShowClosed, Mode=TwoWay}"
+                ToolTip.Tip="Desenha no grafo as issues fechadas que ainda aparecem como dependência. Só muda o desenho: livre e alcance contam apenas bloqueadores abertos, marcado ou não." />
+      <StackPanel Orientation="Horizontal" Margin="0,0,0,6" Spacing="{DynamicResource Space.XS}">
+        <ToggleButton Name="ListModeButton" Content="Lista" IsChecked="{Binding ShowsList, Mode=OneWay}" Click="OnShowListClick"
+                      ToolTip.Tip="Ordenada pelo alcance: quantas issues, somando todos os níveis, cada uma destrava." />
+        <ToggleButton Name="GraphModeButton" Content="Grafo" IsChecked="{Binding ShowsGraph, Mode=OneWay}" Click="OnShowGraphClick"
+                      ToolTip.Tip="Em camadas, da esquerda para a direita: cada coluna é um nível de dependência a mais. Clique num cartão para focar a vizinhança dele." />
+      </StackPanel>
+    </WrapPanel>
+
+    <!-- Avisos: o que impede ler, ciclo, corte, repositório sem dependência, foco. -->
+    <StackPanel Grid.Row="2" Margin="16,0,16,8" Spacing="{DynamicResource Space.S}">
+      <StackPanel Spacing="{DynamicResource Spacing.Related}" IsVisible="{Binding HasNoRepository}">
+        <TextBlock Classes="body emphasized" Text="Nenhum repositório aberto" />
+        <TextBlock Classes="callout meta wrap" Text="O grafo é das issues do repositório da aba da frente. Abra um repositório pela aba +." />
+      </StackPanel>
+      <TextBlock Classes="problem" Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
+      <TextBlock Name="CycleWarning" Classes="problem" Text="{Binding CycleWarning}" IsVisible="{Binding HasCycles}" />
+      <TextBlock Classes="meta wrap" Text="{Binding TruncatedNotice}" IsVisible="{Binding IsTruncated}" />
+      <TextBlock Name="NoDependencies" Classes="meta wrap" Text="{x:Static vm:IssueGraphViewModel.NoDependenciesText}"
+                 IsVisible="{Binding HasNoDependencies}" />
+      <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsFocused}">
+        <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center" Text="{Binding FocusTitle}" />
+        <Button Grid.Column="1" Name="ClearFocusButton" Classes="borderless" Content="Ver tudo" Click="OnClearFocusClick"
+                ToolTip.Tip="Volta ao grafo inteiro, com os filtros (Esc)." />
+      </Grid>
+    </StackPanel>
+
+    <!-- Lista por impacto -->
+    <Grid Grid.Row="3" RowDefinitions="Auto,*" IsVisible="{Binding ShowsList}">
+      <TextBlock Grid.Row="0" Classes="meta wrap" Margin="16,0,16,6" Text="Nenhuma issue aberta no filtro."
+                 IsVisible="{Binding HasNoItems}" />
+      <ListBox Grid.Row="1" Name="ImpactList" ItemsSource="{Binding Items}" Background="Transparent">
+        <ListBox.ItemTemplate>
+          <DataTemplate>
+            <!-- O menu vem do ContextRequested: o do worktree, se a issue já tem um (#148);
+                 senão, o curto da issue, com o Criar worktree (#147). -->
+            <Grid ColumnDefinitions="4,*,Auto" Background="Transparent"
+                  DoubleTapped="OnItemDoubleTapped" ContextRequested="OnItemContextRequested"
+                  ToolTip.Tip="{x:Static vm:IssueGraphViewModel.ReachTip}">
+              <Border Grid.Column="0" CornerRadius="2" Margin="0,2"
+                      Background="{Binding Color, Converter={x:Static views:HexBrushConverter.Instance}}" />
+              <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Space.XS}">
+                  <!-- O tooltip do ícone diz de onde veio a ligação: o PR ou o nome da branch. -->
+                  <Border Classes="worktree" IsVisible="{Binding HasWorktree}" ToolTip.Tip="{Binding WorktreeTip}">
+                    <PathIcon Classes="small" Data="{StaticResource Icon.GitBranch}" />
+                  </Border>
+                  <TextBlock Classes="callout" TextTrimming="CharacterEllipsis">
+                    <Run Text="{Binding Label}" FontWeight="SemiBold" />
+                    <Run Text="{Binding Title}" />
+                  </TextBlock>
+                </StackPanel>
+                <TextBlock Classes="meta" Text="{Binding Meta}" IsVisible="{Binding HasMeta}" />
+              </StackPanel>
+              <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                <TextBlock Classes="state" HorizontalAlignment="Right" Text="{Binding ReachText}" />
+                <TextBlock Classes="state" HorizontalAlignment="Right"
+                           Classes.free="{Binding IsFree}" Classes.blocked="{Binding IsBlocked}" Text="{Binding State}" />
+              </StackPanel>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+
+    <!-- Grafo em camadas -->
+    <Grid Grid.Row="3" RowDefinitions="Auto,*" IsVisible="{Binding ShowsGraph}">
+      <TextBlock Grid.Row="0" Classes="meta wrap" Margin="16,0,16,6" Text="{Binding GraphNote}"
+                 IsVisible="{Binding GraphNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+        <Panel Name="GraphSurface" Width="{Binding GraphWidth}" Height="{Binding GraphHeight}" HorizontalAlignment="Left" VerticalAlignment="Top">
+          <views:IssueGraphEdges Edges="{Binding GraphEdges}"
+                                 Stroke="{DynamicResource Brush.Label.Tertiary}"
+                                 CycleStroke="{DynamicResource Brush.Text.Warning}" />
+          <ItemsControl Name="GraphCards" ItemsSource="{Binding GraphNodes}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <Canvas />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Classes="card" Width="{Binding Width}" Height="{Binding Height}"
+                        Classes.free="{Binding IsFree}" Classes.cycle="{Binding IsInCycle}"
+                        Classes.stub="{Binding IsStub}" Classes.closed="{Binding IsClosed}" Classes.focused="{Binding IsFocused}"
+                        PointerPressed="OnCardPointerPressed" ContextRequested="OnCardContextRequested">
+                  <ToolTip.Tip>
+                    <StackPanel MaxWidth="360">
+                      <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="{Binding Title}" />
+                      <TextBlock TextWrapping="Wrap" Text="{Binding Detail}" />
+                      <TextBlock TextWrapping="Wrap" Text="{Binding WorktreeTip}" IsVisible="{Binding HasWorktree}" />
+                      <TextBlock TextWrapping="Wrap" Classes="meta" Text="Clique foca a vizinhança; duplo-clique abre no navegador." />
+                    </StackPanel>
+                  </ToolTip.Tip>
+                  <Grid ColumnDefinitions="4,*">
+                    <Border Grid.Column="0" Background="{Binding Color, Converter={x:Static views:HexBrushConverter.Instance}}" />
+                    <StackPanel Grid.Column="1" Margin="8,6" VerticalAlignment="Center">
+                      <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Space.XS}">
+                        <Border Classes="worktree" IsVisible="{Binding HasWorktree}">
+                          <PathIcon Classes="small" Data="{StaticResource Icon.GitBranch}" />
+                        </Border>
+                        <TextBlock Classes="callout" TextTrimming="CharacterEllipsis">
+                          <Run Text="{Binding Label}" FontWeight="SemiBold" />
+                          <Run Text="{Binding Title}" />
+                        </TextBlock>
+                      </StackPanel>
+                      <TextBlock Classes="state" TextTrimming="CharacterEllipsis"
+                                 Classes.free="{Binding IsFree}" Classes.blocked="{Binding IsBlocked}" Text="{Binding Detail}" />
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Panel>
+      </ScrollViewer>
+    </Grid>
+
+  </Grid>
+</UserControl>

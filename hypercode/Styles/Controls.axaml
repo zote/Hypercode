@@ -124,6 +124,46 @@
     <Setter Property="BorderBrush" Value="Transparent" />
   </Style>
 
+  <!-- Limpar o campo: o X dentro do TextBox (InnerRightContent), como o do NSSearchField.
+       Só o ícone, em terciário, que escurece sob o mouse. Não recebe foco nem entra no Tab:
+       quem clica continua no campo, pronto para digitar de novo. A cor vai no PathIcon, e
+       não no botão: dentro do InnerRightContent o ícone herda o Foreground do TextBox. -->
+  <Style Selector="Button.clear">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Padding" Value="{DynamicResource Padding.ClearButton}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Cursor" Value="Arrow" />
+  </Style>
+  <Style Selector="Button.clear:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.clear:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.clear PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Tertiary}" />
+  </Style>
+  <Style Selector="Button.clear:pointerover PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Secondary}" />
+  </Style>
+  <Style Selector="Button.clear:pressed PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Label.Primary}" />
+  </Style>
+
+  <!-- Campo em foco: o mesmo anel do teclado, também no clique, como o NSTextField (#97). O
+       Fluent tira o adorner de foco do TextBox; o anel entra como adorner próprio, um por
+       campo (Template), só enquanto o campo tem o foco. -->
+  <Style Selector="TextBox:focus">
+    <Setter Property="AdornerLayer.Adorner">
+      <Template>
+        <Border AdornerLayer.IsClipEnabled="False" Margin="-3" BorderThickness="3"
+                BorderBrush="{DynamicResource Brush.Focus}"
+                CornerRadius="{DynamicResource Radius.FocusRing}" IsHitTestVisible="False" />
+      </Template>
+    </Setter>
+  </Style>
+
   <!-- Placeholder do campo: o Fluent o deixa na cor do texto a 50% de opacidade; aqui a
        opacidade é 1 (FluentOverrides) e a cor vem do token, igual em todos os estados. -->
   <Style Selector="TextBox /template/ TextBlock#PART_Watermark">
@@ -141,7 +181,7 @@
   <!-- Menu: itens recuados das bordas, com o destaque arredondado do macOS. -->
   <Style Selector="MenuItem">
     <Setter Property="Margin" Value="{DynamicResource Margin.MenuItem}" />
-    <Setter Property="CornerRadius" Value="{DynamicResource Radius.Small}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Radius.MenuItem}" />
   </Style>
   <Style Selector="Menu > MenuItem">
     <Setter Property="Margin" Value="0" />

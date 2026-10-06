@@ -66,6 +66,20 @@ public sealed class PullRequestInfo
     [JsonPropertyName("reviewDecision")] public string? ReviewDecision { get; set; }
     [JsonPropertyName("statusCheckRollup")] public List<CheckEntry>? StatusCheckRollup { get; set; }
 
+    /// <summary>
+    /// As issues que o PR fecha, declaradas no corpo com palavra-chave (Closes #12) ou ligadas
+    /// na barra lateral. Null quando a consulta não trouxe o campo (gh antigo); vazia quando o PR
+    /// não declara nenhuma.
+    /// </summary>
+    [JsonPropertyName("closingIssuesReferences")] public List<ClosingIssueReference>? ClosingIssuesReferences { get; set; }
+
+    /// <summary><see cref="ClosingIssuesReferences"/> como endereço de issue, tirado da URL de cada uma.</summary>
+    public IReadOnlyList<IssueKey>? ClosingIssues => ClosingIssuesReferences?
+        .Select(reference => reference.Key)
+        .OfType<IssueKey>()
+        .Distinct()
+        .ToList();
+
     public bool IsOpen => State.Equals("OPEN", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>OPEN &gt; MERGED &gt; CLOSED, para escolher o PR mais relevante de uma branch.</summary>
@@ -147,6 +161,19 @@ public sealed class PullRequestInfo
         : null;
 }
 
+/// <summary>Uma issue que o PR fecha. A URL dá o repositório nas duas leituras (GraphQL e pr list).</summary>
+public sealed class ClosingIssueReference
+{
+    [JsonPropertyName("number")] public int Number { get; set; }
+    [JsonPropertyName("url")] public string Url { get; set; } = string.Empty;
+
+    public IssueKey? Key => Uri.TryCreate(Url, UriKind.Absolute, out var uri)
+                            && uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries) is [var owner, var name, "issues", var number, ..]
+                            && int.TryParse(number, out var parsed)
+        ? new IssueKey($"{owner}/{name}", parsed)
+        : null;
+}
+
 /// <summary>O mínimo de um PR para criar um worktree a partir dele.</summary>
 public sealed class PullRequestHead
 {
@@ -189,7 +216,7 @@ public sealed record PullRequestLookup(
     IReadOnlyDictionary<string, PullRequestInfo> ByBranch,
     string? Warning,
     bool Failed = false,
-    GraphQLBudget? Budget = null)
+    ApiBudget? Budget = null)
 {
     public static PullRequestLookup Empty(string? warning = null) =>
         new(new Dictionary<string, PullRequestInfo>(StringComparer.OrdinalIgnoreCase), warning);
@@ -204,6 +231,9 @@ public static class GitHubService
     private const string RichFields =
         "number,headRefName,baseRefName,state,title,url,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup";
 
+    /// <summary>As issues que o PR fecha (#148): campo mais novo no gh, tentado antes do rico sozinho.</summary>
+    private const string ClosingFields = RichFields + ",closingIssuesReferences";
+
     private const string BasicFields = "number,headRefName,baseRefName,state,title,url,isDraft";
 
     /// <summary>Branches por consulta GraphQL — folga grande no limite de nós do GitHub.</summary>
@@ -212,6 +242,7 @@ public static class GitHubService
     private const string PullRequestFragment = """
         fragment F on PullRequest {
           number headRefName baseRefName state title url isDraft mergeable mergeStateStatus reviewDecision
+          closingIssues: closingIssuesReferences(first: 10) { nodes { number url } }
           commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
             __typename
             ... on CheckRun { name status conclusion checkSuite { workflowRun { databaseId } } }
@@ -239,8 +270,11 @@ public static class GitHubService
             return new PullRequestLookup(found.ByBranch, null, Budget: found.Budget);
 
         // Campos como mergeStateStatus e statusCheckRollup podem não existir em versões
-        // antigas do gh; se a consulta rica falhar, caímos para o conjunto básico.
-        var result = await TryListAsync(gh, repositoryPath, RichFields, cancellationToken).ConfigureAwait(false);
+        // antigas do gh; se a consulta rica falhar, caímos para o conjunto básico. Sem as issues
+        // fechadas, o grafo liga issue e worktree só pelo nome da branch.
+        var result = await TryListAsync(gh, repositoryPath, ClosingFields, cancellationToken).ConfigureAwait(false);
+        if (result is null || !result.Success)
+            result = await TryListAsync(gh, repositoryPath, RichFields, cancellationToken).ConfigureAwait(false);
         string? degraded = null;
 
         if (result is null || !result.Success)
@@ -294,14 +328,14 @@ public static class GitHubService
     /// com 40). O rateLimit vem junto, de graça: é a leitura da cota que o monitoramento usa
     /// para recuar. Null em qualquer falha — quem chama cai para o pr list.
     /// </summary>
-    private static async Task<(Dictionary<string, PullRequestInfo> ByBranch, GraphQLBudget? Budget)?> TryLoadByBranchAsync(
+    private static async Task<(Dictionary<string, PullRequestInfo> ByBranch, ApiBudget? Budget)?> TryLoadByBranchAsync(
         string gh,
         string repositoryPath,
         IReadOnlyCollection<string> branches,
         CancellationToken cancellationToken)
     {
         var byBranch = new Dictionary<string, PullRequestInfo>(StringComparer.OrdinalIgnoreCase);
-        GraphQLBudget? budget = null;
+        ApiBudget? budget = null;
 
         foreach (var chunk in branches.Distinct(StringComparer.Ordinal).Chunk(BranchesPerQuery))
         {
@@ -368,7 +402,7 @@ public static class GitHubService
         return (byBranch, budget);
     }
 
-    private static GraphQLBudget? ParseBudget(JsonElement data)
+    private static ApiBudget? ParseBudget(JsonElement data)
     {
         if (!data.TryGetProperty("rateLimit", out var rateLimit)
             || rateLimit.ValueKind != JsonValueKind.Object
@@ -379,13 +413,14 @@ public static class GitHubService
             || !DateTimeOffset.TryParse(resetAt.GetString(), out var reset))
             return null;
 
-        return new GraphQLBudget(limit.GetInt32(), used.GetInt32(), cost.GetInt32(), reset);
+        return new ApiBudget(limit.GetInt32(), used.GetInt32(), cost.GetInt32(), reset);
     }
 
     /// <summary>
     /// Nó de PR do GraphQL → o mesmo <see cref="PullRequestInfo"/> do pr list. Os checks vêm
     /// de commits.last.statusCheckRollup.contexts: CheckRun (Actions) tem name/status/conclusion,
-    /// StatusContext (status API antiga) tem context/state — os nomes que o pr list já usa.
+    /// StatusContext (status API antiga) tem context/state — os nomes que o pr list já usa. As
+    /// issues fechadas vêm com alias: no GraphQL são uma conexão (nodes), no pr list uma lista.
     /// </summary>
     internal static PullRequestInfo? ParseGraphNode(JsonElement node)
     {
@@ -410,6 +445,18 @@ public static class GitHubService
                 .Where(context => context.ValueKind == JsonValueKind.Object)
                 .Select(ParseGraphCheck)
                 .OfType<CheckEntry>()
+                .ToList();
+        }
+
+        if (node.TryGetProperty("closingIssues", out var closing)
+            && closing.TryGetProperty("nodes", out var closingNodes)
+            && closingNodes.ValueKind == JsonValueKind.Array)
+        {
+            pullRequest.ClosingIssuesReferences = closingNodes
+                .EnumerateArray()
+                .Where(issue => issue.ValueKind == JsonValueKind.Object)
+                .Select(issue => issue.Deserialize<ClosingIssueReference>(JsonOptions))
+                .OfType<ClosingIssueReference>()
                 .ToList();
         }
 

@@ -6,17 +6,24 @@ namespace Hypercode.Tests;
 
 /// <summary>
 /// Confere as cores de Styles/Tokens.axaml lendo o XAML direto: as duas variantes têm as
-/// mesmas chaves e todo token de texto passa em WCAG AA (4,5:1) sobre os fundos em que
-/// pode aparecer.
+/// mesmas chaves, todo token de texto passa em WCAG AA (4,5:1) e todo ícone de etiqueta em
+/// 3:1 (1.4.11, contraste não textual) sobre os fundos em que pode aparecer.
 /// </summary>
 public class TokensTests
 {
     private const double MinimoAA = 4.5;
+    private const double MinimoNaoTextual = 3.0;
 
     private static readonly string[] Textos =
     [
         "Brush.Label.Primary", "Brush.Label.Secondary", "Brush.Text.Link",
         "Brush.Text.Danger", "Brush.Text.Warning", "Brush.Text.Success",
+    ];
+
+    private static readonly string[] Etiquetas =
+    [
+        "Brush.Badge.Success", "Brush.Badge.Danger", "Brush.Badge.Done",
+        "Brush.Badge.Attention", "Brush.Badge.Accent", "Brush.Badge.Muted",
     ];
 
     private static readonly string[] Fundos =
@@ -48,6 +55,35 @@ public class TokensTests
             select $"{texto} sobre {fundo}: {razao:F2}";
 
         Assert.Empty(falhas);
+    }
+
+    // Brush.Selection.Inactive fica de fora: na linha selecionada a etiqueta não usa o
+    // Brush.Badge.*, e sim a cor do texto da seleção (MainWindow.axaml, #108).
+    [Theory]
+    [MemberData(nameof(Variantes))]
+    public void EtiquetaPassaEmContrasteNaoTextualSobreOsFundos(string variante)
+    {
+        var cores = Carregar()[variante];
+        var falhas =
+            from etiqueta in Etiquetas
+            from fundo in Fundos
+            let razao = Contraste(cores[etiqueta], cores[fundo])
+            where razao < MinimoNaoTextual
+            select $"{etiqueta} sobre {fundo}: {razao:F2}";
+
+        Assert.Empty(falhas);
+    }
+
+    // Sobre Brush.Selection.Active vai Brush.Text.OnAccent, que não dá para medir aqui: o
+    // fundo é a accent do sistema.
+    [Theory]
+    [MemberData(nameof(Variantes))]
+    public void EtiquetaNaLinhaSelecionadaPassaEmContrasteNaoTextual(string variante)
+    {
+        var cores = Carregar()[variante];
+        var razao = Contraste(cores["Brush.Label.Primary"], cores["Brush.Selection.Inactive"]);
+
+        Assert.True(razao >= MinimoNaoTextual, $"Brush.Label.Primary sobre Brush.Selection.Inactive: {razao:F2}");
     }
 
     [Theory]

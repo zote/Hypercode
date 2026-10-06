@@ -17,6 +17,7 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
     private EffectiveSettings _effective;
     private bool _isSelected;
     private bool _hasUnseenChanges;
+    private string? _shownCleanupToolTip;
     private bool _isClosed;
     private CancellationTokenSource? _loadCancellation;
     private RepositoryWatcher? _watcher;
@@ -42,6 +43,12 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
     /// A pergunta é só conta em memória; o custo está no que vence, não no tique.
     /// </summary>
     private static readonly TimeSpan MonitorTick = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// O mesmo, para os terminais: a sondagem mais curta é de 3 s, então o tique de 10 s não
+    /// serve. De novo, o custo está no que vence (<see cref="MonitorScheduler.TerminalCheckDue"/>).
+    /// </summary>
+    private static readonly TimeSpan TerminalTick = TimeSpan.FromSeconds(1);
 
     /// <summary>Quanto se espera o FSEvents subir antes de seguir sem watcher.</summary>
     private static readonly TimeSpan WatcherStartTimeout = TimeSpan.FromSeconds(15);
@@ -121,6 +128,9 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
     /// </summary>
     public void RefreshSettings()
     {
+        // O terminal é global e fica fora do EffectiveSettings: o rótulo muda mesmo sem o resto mudar.
+        RaisePropertyChanged(nameof(OpenTerminalLabel));
+
         var previous = _effective;
         _effective = EffectiveSettings.Resolve(_hub.Settings, RepositoryPath);
         if (previous == _effective) return;
@@ -470,13 +480,22 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>Avisa só se o texto mudou: avisar com o tooltip aberto o faz fechar e reabrir (#153).</summary>
+    private void RaiseCleanupToolTip()
+    {
+        var tooltip = CleanupToolTip;
+        if (tooltip == _shownCleanupToolTip) return;
+        _shownCleanupToolTip = tooltip;
+        RaisePropertyChanged(nameof(CleanupToolTip));
+    }
+
     private void RaiseCleanupState()
     {
         RaisePropertyChanged(nameof(CompletedCount));
         RaisePropertyChanged(nameof(HasCompleted));
         RaisePropertyChanged(nameof(CleanupButtonLabel));
         RaisePropertyChanged(nameof(CanCleanupManually));
-        RaisePropertyChanged(nameof(CleanupToolTip));
+        RaiseCleanupToolTip();
         RefreshCleanupNotes();
         RaiseTabState();
     }
@@ -701,6 +720,7 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
                     row.PullRequestChanges = old.PullRequestChanges;
                     row.Status = old.Status;
                     row.BaseDistance = old.BaseDistance;
+                    row.Terminal = old.Terminal;
                 }
 
                 Worktrees.Add(row);
@@ -760,7 +780,7 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
             if (background && changes is not null) StatusMessage = changes;
 
             // Só agora se sabe a base de cada PR, e com ela a distância até ela.
-            await Task.WhenAll(statusesTask, LoadBaseDistancesAsync(Worktrees.ToList(), cancellationToken))
+            await Task.WhenAll(statusesTask, LoadBaseDistancesAsync(Worktrees.ToList(), cancellationToken), RefreshTerminalsAsync())
                 .ConfigureAwait(true);
 
             if (!background)
@@ -802,29 +822,29 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
 
     private static IReadOnlyCollection<string> QueryNames(IEnumerable<WorktreeRow> rows)
         => rows
-            .SelectMany(row => new[] { row.Worktree.UpstreamBranch, row.Worktree.Branch })
+            .SelectMany(row => new[] { row.Worktree.UpstreamBranch, row.Worktree.TrackedBranch })
             .OfType<string>()
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
     /// <summary>Branches locais dos worktrees — a chave do agendador.</summary>
     private IReadOnlyCollection<string> LocalBranches()
-        => Worktrees.Select(row => row.Worktree.Branch).OfType<string>().ToList();
+        => Worktrees.Select(row => row.Worktree.TrackedBranch).OfType<string>().ToList();
 
     /// <summary>
     /// PR da linha: primeiro pelo nome da branch no remoto, depois pelo local. O upstream é
     /// ignorado quando é a branch local de outro worktree — branch criada de origin/main sem
     /// --no-track rastreia main, e o PR de main é da linha do main.
     /// </summary>
-    private static PullRequestInfo? FindPullRequest(WorktreeInfo worktree, PullRequestLookup lookup, ISet<string> localBranches)
+    internal static PullRequestInfo? FindPullRequest(WorktreeInfo worktree, PullRequestLookup lookup, ISet<string> localBranches)
     {
         if (worktree.UpstreamBranch is { } upstream
-            && upstream != worktree.Branch
+            && upstream != worktree.TrackedBranch
             && !localBranches.Contains(upstream)
             && lookup.ByBranch.TryGetValue(upstream, out var byUpstream))
             return byUpstream;
 
-        return worktree.Branch is { } branch && lookup.ByBranch.TryGetValue(branch, out var byBranch)
+        return worktree.TrackedBranch is { } branch && lookup.ByBranch.TryGetValue(branch, out var byBranch)
             ? byBranch
             : null;
     }
@@ -842,11 +862,11 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
         var matched = 0;
         var changed = new List<(WorktreeRow Row, PullRequestInfo PullRequest, IReadOnlyList<string> Transitions)>();
 
-        var localBranches = Worktrees.Select(row => row.Worktree.Branch).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var localBranches = Worktrees.Select(row => row.Worktree.TrackedBranch).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var row in Worktrees)
         {
-            if (scope is not null && (row.Worktree.Branch is not { } scoped || !scope.Contains(scoped))) continue;
+            if (scope is not null && (row.Worktree.TrackedBranch is not { } scoped || !scope.Contains(scoped))) continue;
 
             // PR mergeado ou fechado não deixa de existir: se a consulta não o trouxe (o gh pr list
             // devolve só os 100 mais recentes), vale o que já se sabia — senão a linha deixa de ser
@@ -865,8 +885,6 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
             {
                 row.PullRequestChanges = Array.Empty<string>();
             }
-
-            row.RefreshTags();
         }
 
         _pullRequestMemory.Save();
@@ -936,7 +954,14 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
         _scheduler.IsWindowMinimized = isMinimized;
 
         // Voltou para a frente: o que venceu enquanto estava fora é conferido já, sem esperar o tique.
-        if (isActive && !isMinimized) _ = CheckRemoteAsync();
+        // Inclusive a sessão do Claude Code que nasceu no terminal que o app abriu (#88), e o
+        // próprio terminal, aberto ou fechado enquanto a janela estava atrás (#94).
+        if (isActive && !isMinimized)
+        {
+            _ = CheckRemoteAsync();
+            _ = RefreshClaudeSessionsAsync();
+            _ = RefreshTerminalsAsync();
+        }
     }
 
     private void StartMonitoring()
@@ -945,6 +970,7 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
 
         _monitorCancellation = new CancellationTokenSource();
         _ = MonitorLoopAsync(_monitorCancellation.Token);
+        _ = TerminalLoopAsync(_monitorCancellation.Token);
     }
 
     private void StopMonitoring()
@@ -976,12 +1002,38 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// A releitura periódica dos terminais (#126): fechar ou abrir um terminal não mexe no git
+    /// dir, e com a janela já na frente nada mais avisaria. O agendador diz o que venceu — a
+    /// sondagem barata dos tty ou a varredura completa —, com a mesma regra de janela do resto.
+    /// Uma leitura de cada vez: com outra em andamento, o tique passa.
+    /// </summary>
+    private async Task TerminalLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TerminalTick);
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(true))
+            {
+                if (_isRefreshingTerminals) continue;
+
+                var check = _scheduler.TerminalCheckDue(DateTimeOffset.UtcNow);
+                if (check is not TerminalCheck.None) await RefreshTerminalsAsync(check, withNames: false).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Monitoramento parado.
+        }
+    }
+
     /// <summary>As branches dos worktrees com a faixa de cadência de cada uma, pelo estado de agora.</summary>
     private IEnumerable<ScheduledBranch> ScheduledBranches()
         => Worktrees
-            .Where(row => row.Worktree.Branch is not null && !row.Worktree.IsBare)
+            .Where(row => row.Worktree.TrackedBranch is not null && !row.Worktree.IsBare)
             .Select(row => new ScheduledBranch(
-                row.Worktree.Branch!,
+                row.Worktree.TrackedBranch!,
                 MonitorScheduler.Classify(row.PullRequest, row.Status, row.Worktree.IsMain),
                 row.PullRequest is not null));
 
@@ -1040,7 +1092,7 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
 
             // O agendador fala em branch local; a consulta leva também o nome no remoto.
             var scope = due.ToHashSet(StringComparer.Ordinal);
-            var rows = Worktrees.Where(row => row.Worktree.Branch is { } branch && scope.Contains(branch)).ToList();
+            var rows = Worktrees.Where(row => row.Worktree.TrackedBranch is { } branch && scope.Contains(branch)).ToList();
 
             var lookup = await GitHubService.LoadPullRequestsAsync(path, QueryNames(rows), cancellationToken).ConfigureAwait(true);
             if (cancellationToken.IsCancellationRequested || _loadedRepositoryPath != path) return;
@@ -1229,7 +1281,7 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
         parts.AddRange(kept);
 
         if (parts.Count > 0) StatusMessage = "Limpeza automática: " + string.Join(" · ", parts);
-        RaisePropertyChanged(nameof(CleanupToolTip));
+        RaiseCleanupToolTip();
         RefreshCleanupNotes();
     }
 
@@ -1432,12 +1484,155 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
             var cancellationToken = _loadCancellation?.Token ?? default;
             await Task.WhenAll(
                     LoadStatusesAsync(rows, cancellationToken),
-                    LoadBaseDistancesAsync(rows, cancellationToken))
+                    LoadBaseDistancesAsync(rows, cancellationToken),
+                    RefreshClaudeSessionsAsync(),
+                    RefreshTerminalsAsync())
                 .ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
             // Um carregamento completo começou e vai reler tudo.
+        }
+    }
+
+    /// <summary>
+    /// Relê se cada linha tem sessão do Claude Code. As sessões ficam fora do git dir vigiado,
+    /// então nada avisa quando uma nasce. A leitura sai da thread de UI: o volume pode ser lento (#52).
+    /// </summary>
+    private async Task RefreshClaudeSessionsAsync()
+    {
+        var rows = Worktrees.ToList();
+        var found = await Task.Run(() => rows.Select(row => ClaudeSessions.Exist(row.FullPath)).ToArray())
+            .ConfigureAwait(true);
+        for (var i = 0; i < rows.Count; i++) rows[i].HasClaudeSession = found[i];
+    }
+
+    private bool _isRefreshingTerminals;
+    private bool _isTerminalScanPending;
+
+    /// <summary>
+    /// Relê que linha tem terminal ou processo aberto dentro. Nada avisa quando um terminal abre
+    /// ou fecha: vai junto com o estado das linhas, com a janela voltando para a frente e com o
+    /// tique dos terminais (<see cref="TerminalLoopAsync"/>). Uma leitura de cada vez — o lsof e
+    /// o AppleScript dos nomes somam meio segundo. Um pedido com nomes que chega no meio de outra
+    /// leitura roda logo depois dela, uma vez só; o do tique, não: o próximo tique cobre. Se
+    /// falhar, as linhas ficam como estavam.
+    /// </summary>
+    private async Task RefreshTerminalsAsync(TerminalCheck check = TerminalCheck.Scan, bool withNames = true)
+    {
+        if (_isRefreshingTerminals)
+        {
+            _isTerminalScanPending |= withNames;
+            return;
+        }
+
+        _isRefreshingTerminals = true;
+
+        try
+        {
+            var rows = Worktrees.Where(row => row.CanLaunch).ToList();
+            if (check is TerminalCheck.Probe) await ProbeTerminalsAsync(rows).ConfigureAwait(true);
+            else if (check is TerminalCheck.Scan) await ScanTerminalsAsync(rows, withNames).ConfigureAwait(true);
+        }
+        finally
+        {
+            _isRefreshingTerminals = false;
+        }
+
+        if (_isTerminalScanPending)
+        {
+            _isTerminalScanPending = false;
+            await RefreshTerminalsAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Só o <c>ps -A -o tty=</c>: a sessão cujo tty não tem mais processo fechou, e sai da linha
+    /// na hora. Não enxerga terminal novo — isso é da varredura.
+    /// </summary>
+    private async Task ProbeTerminalsAsync(IReadOnlyList<WorktreeRow> rows)
+    {
+        // Marca antes de ler: um ps que falha não é repetido a cada tique.
+        _scheduler.MarkTerminalsProbed(DateTimeOffset.UtcNow);
+
+        var live = await TerminalSessions.ListLiveTtysAsync().ConfigureAwait(true);
+        if (live is null) return;
+
+        foreach (var row in rows) row.Terminal = TerminalSessions.Prune(row.Terminal, live);
+    }
+
+    /// <summary>
+    /// O <c>lsof -d cwd</c> e o <c>ps</c>. Sem <paramref name="withNames"/>, os nomes das sessões
+    /// do iTerm2 vêm da leitura anterior, e o AppleScript só roda se apareceu sessão nova.
+    /// </summary>
+    private async Task ScanTerminalsAsync(IReadOnlyList<WorktreeRow> rows, bool withNames)
+    {
+        _scheduler.MarkTerminalsScanned(DateTimeOffset.UtcNow);
+
+        var found = await TerminalSessions.DetectAsync(rows.Select(row => row.FullPath).ToList(), withNames: false)
+            .ConfigureAwait(true);
+        if (found is null) return;
+
+        var carried = TerminalSessions.CarryNames(found, rows.SelectMany(row => row.Terminal.Sessions), out var hasNewSession);
+        if (withNames || hasNewSession) carried = await TerminalSessions.NameITerm2SessionsAsync(carried).ConfigureAwait(true);
+
+        foreach (var row in rows)
+            row.Terminal = carried.GetValueOrDefault(row.FullPath) ?? TerminalPresence.None;
+    }
+
+    /// <summary>
+    /// O duplo-clique: com terminal já aberto no worktree, vai para ele em vez de abrir outro;
+    /// sem, abre como sempre. A detecção é refeita na hora — o ícone pode estar defasado — e,
+    /// se a sessão sumiu ou o foco falhou, também abre um novo.
+    /// </summary>
+    public async Task OpenOrFocusAsync(WorktreeRow? row)
+    {
+        if (row is null) return;
+        if (!await TryFocusTerminalAsync(row).ConfigureAwait(true)) await LaunchAsync(row).ConfigureAwait(true);
+    }
+
+    /// <summary>"Ir para o terminal aberto": só o foco. Sem sessão, diz no rodapé.</summary>
+    public async Task FocusTerminalAsync(WorktreeRow? row)
+    {
+        if (row is null) return;
+        if (!await TryFocusTerminalAsync(row).ConfigureAwait(true))
+            StatusMessage = row.FocusTerminalUnavailableReason is { } reason
+                ? $"{row.Name}: {reason}"
+                : $"Nenhum terminal do iTerm2 ou do Terminal aberto em {row.Name}";
+    }
+
+    private async Task<bool> TryFocusTerminalAsync(WorktreeRow row)
+    {
+        if (!row.CanLaunch) return false;
+
+        try
+        {
+            var found = await TerminalSessions.DetectAsync(new[] { row.FullPath }, withNames: false).ConfigureAwait(true);
+
+            // Sessão que a leitura de agora não achou fechou: sai da linha já, sem esperar a
+            // varredura do finally. Só tira — a leitura de um caminho só não sabe dos aninhados.
+            if (found is not null)
+            {
+                var alive = (found.GetValueOrDefault(row.FullPath)?.Sessions ?? Array.Empty<TerminalSession>())
+                    .Select(item => item.Tty)
+                    .ToHashSet(StringComparer.Ordinal);
+                row.Terminal = TerminalSessions.Prune(row.Terminal, alive);
+            }
+
+            if (found?.GetValueOrDefault(row.FullPath)?.Focusable is not { } session) return false;
+            if (!await TerminalSessions.FocusAsync(session).ConfigureAwait(true)) return false;
+
+            StatusMessage = $"{session.AppName}: terminal aberto em {row.Name} trazido para a frente";
+            return true;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            StatusMessage = exception.Message;
+            return false;
+        }
+        finally
+        {
+            _ = RefreshTerminalsAsync();
         }
     }
 
@@ -1447,8 +1642,24 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
 
     public bool CanCreateWorktree => MainWorktreePath is not null;
 
+    /// <summary>O botão do rodapé, com o nome do terminal escolhido.</summary>
+    public string OpenTerminalLabel => $"Abrir no {TerminalLauncher.TerminalName}";
+
     /// <summary>O comando do duplo-clique neste repositório: o override dele ou o global.</summary>
     public string EffectiveCommand => _effective.Command;
+
+    /// <summary>
+    /// "Usar sempre neste repositório", no diálogo de criação: grava a raiz dos worktrees (e as
+    /// barras da branch, quando a branch disse algo delas) no override deste repositório.
+    /// </summary>
+    public void RememberWorktreeLayout(string root, bool? keepSlashes)
+    {
+        var overrides = _hub.Settings.EnsureOverrides(RepositoryPath);
+        overrides.WorktreesRoot = root;
+        if (keepSlashes is { } slashes) overrides.WorktreeFolderKeepsSlashes = slashes;
+        _hub.SaveSettings();
+        RefreshSettings();
+    }
 
     /// <summary>Depois de criado: recarrega, seleciona o novo e, se pedido, abre o terminal nele.</summary>
     public async Task CompleteCreationAsync(WorktreeCreationResult result, bool openTerminal)
@@ -1485,9 +1696,10 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
         try
         {
             await TerminalLauncher.LaunchAsync(row.FullPath, command, TerminalTitle(row)).ConfigureAwait(true);
-            StatusMessage = command is null
+            var opened = command is null
                 ? $"{TerminalLauncher.TerminalName} aberto em {row.Name}"
                 : $"{TerminalLauncher.TerminalName} aberto em {row.Name} · {command}";
+            StatusMessage = TerminalLauncher.Current.Notice is { } notice ? $"{opened} · {notice}" : opened;
         }
         catch (Exception exception)
         {
@@ -1843,7 +2055,7 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
     private const int BatchConcurrency = 8;
 
     public Task<BatchOutcome> LaunchManyAsync(IReadOnlyList<WorktreeRow> rows)
-        => LaunchManyAsync("Abrir no iTerm2", rows, row => row.CanLaunch, EffectiveCommand);
+        => LaunchManyAsync($"Abrir no {TerminalLauncher.TerminalName}", rows, row => row.CanLaunch, EffectiveCommand);
 
     public Task<BatchOutcome> OpenShellManyAsync(IReadOnlyList<WorktreeRow> rows)
         => LaunchManyAsync("Abrir o terminal", rows, row => row.CanLaunch, command: null);
@@ -1950,7 +2162,7 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
         if (rows.Count == 0 || _loadedRepositoryPath is not { } path) return;
 
         var now = DateTimeOffset.UtcNow;
-        var branches = rows.Select(row => row.Worktree.Branch).OfType<string>().ToList();
+        var branches = rows.Select(row => row.Worktree.TrackedBranch).OfType<string>().ToList();
         foreach (var branch in branches) _scheduler.Promote(branch, MonitorScheduler.RerunPromotion, now);
 
         var cancellationToken = _monitorCancellation?.Token ?? default;
@@ -2197,14 +2409,14 @@ public sealed class RepositoryViewModel : ObservableObject, IDisposable
     /// Cota lida por este repositório. A cota GraphQL é da conta inteira, não do repositório:
     /// passa para as outras abas, que recuam juntas.
     /// </summary>
-    private void RecordBudget(GraphQLBudget? budget)
+    private void RecordBudget(ApiBudget? budget)
     {
         ObserveBudget(budget);
         _hub.ShareBudget(this, budget);
     }
 
     /// <summary>Cota lida por este ou por outro repositório.</summary>
-    public void ObserveBudget(GraphQLBudget? budget)
+    public void ObserveBudget(ApiBudget? budget)
     {
         _scheduler.RecordBudget(budget);
         UpdateMonitorNotice();

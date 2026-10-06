@@ -9,6 +9,9 @@
   só enxerga os tokens da mesma variante, por isso a lista se repete (o teste
   FluentOverridesTests garante que Light e Dark não divergem). Chave do Fluent que não
   aparece aqui continua com o valor dele.
+
+  Gerado por Styles/tools/gen_overrides.py: para mudar um alias, mude a regra lá e gere de
+  novo (Styles/tools/README.md), em vez de editar este arquivo à mão.
 -->
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
@@ -18,11 +21,16 @@
   <StaticResource x:Key="ControlCornerRadius" ResourceKey="Radius.Control" />
   <StaticResource x:Key="OverlayCornerRadius" ResourceKey="Radius.Group" />
 
-  <!-- Medidas próximas às do macOS: botão e campo com ~24pt de altura, menu com itens de ~22pt -->
+  <!-- Medidas do AppKit no macOS 27 (#97): botão e campo com 24pt de altura e 12pt de padding
+       lateral no botão; menu com 5pt em cima e embaixo, itens de 24pt com o texto a 14pt da
+       borda do menu e separador de 11pt com a linha recuada 16pt (1 de borda + 15) -->
   <Thickness x:Key="ButtonPadding">12,3</Thickness>
   <Thickness x:Key="TextControlThemePadding">6,3</Thickness>
   <Thickness x:Key="MenuFlyoutPresenterThemePadding">0,5</Thickness>
-  <Thickness x:Key="MenuFlyoutItemThemePaddingNarrow">10,3</Thickness>
+  <Thickness x:Key="MenuFlyoutItemThemePaddingNarrow">8,4</Thickness>
+  <Thickness x:Key="MenuFlyoutSeparatorThemePadding">15,5</Thickness>
+  <!-- O campo em foco mantém a borda de 1px e ganha o anel externo (Controls.axaml) -->
+  <Thickness x:Key="TextControlBorderThemeThicknessFocused">1</Thickness>
   <x:Double x:Key="TextControlPlaceholderOpacity">1</x:Double>
   <StaticResource x:Key="ToolTipContentThemeFontSize" ResourceKey="Font.Size.Subheadline" />
   <Thickness x:Key="ToolTipBorderThemePadding">6,3</Thickness>
@@ -79,7 +87,7 @@
       <StaticResource x:Key="TextControlBackground" ResourceKey="Brush.Background.Content" />
       <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="Brush.Background.Content" />
       <StaticResource x:Key="TextControlBackgroundDisabled" ResourceKey="Brush.Background.Content" />
-      <StaticResource x:Key="TextControlBorderBrushFocused" ResourceKey="Brush.Accent" />
+      <StaticResource x:Key="TextControlBorderBrushFocused" ResourceKey="Brush.Border.Control" />
       <StaticResource x:Key="TextControlBorderBrushDisabled" ResourceKey="Brush.Separator" />
       <StaticResource x:Key="TextControlPlaceholderForeground" ResourceKey="Brush.Label.Secondary" />
       <StaticResource x:Key="TextControlPlaceholderForegroundPointerOver" ResourceKey="Brush.Label.Secondary" />
@@ -272,7 +280,7 @@
       <StaticResource x:Key="TextControlBackground" ResourceKey="Brush.Background.Content" />
       <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="Brush.Background.Content" />
       <StaticResource x:Key="TextControlBackgroundDisabled" ResourceKey="Brush.Background.Content" />
-      <StaticResource x:Key="TextControlBorderBrushFocused" ResourceKey="Brush.Accent" />
+      <StaticResource x:Key="TextControlBorderBrushFocused" ResourceKey="Brush.Border.Control" />
       <StaticResource x:Key="TextControlBorderBrushDisabled" ResourceKey="Brush.Separator" />
       <StaticResource x:Key="TextControlPlaceholderForeground" ResourceKey="Brush.Label.Secondary" />
       <StaticResource x:Key="TextControlPlaceholderForegroundPointerOver" ResourceKey="Brush.Label.Secondary" />

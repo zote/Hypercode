@@ -94,6 +94,23 @@ dotnet_diagnostic.CA1861.severity = none
 # interface na assinatura diz o que o método promete (só leitura). Fica como sugestão na IDE.
 dotnet_diagnostic.CA1859.severity = suggestion
 
+# CA1822 (marcar como static): só para membros privados e internos. Os públicos dos view
+# models são lidos por binding no XAML, que precisa de propriedade de instância mesmo quando
+# ela não usa estado.
+dotnet_code_quality.CA1822.api_surface = private, internal
+
+# CA1711: ActionsQueue é a fila do GitHub Actions — o sufixo descreve o que a classe é.
+dotnet_code_quality.CA1711.allowed_suffixes = Queue
+
 [tests/**.cs]
 # CA1707: nomes de teste no formato Metodo_Cenario_Resultado usam sublinhado.
 dotnet_diagnostic.CA1707.severity = none
+
+# Regras de desempenho e de cultura que, em teste, só geram ruído: o teste roda uma vez, com
+# dados fixos, e a clareza vale mais que cachear opções de JSON (CA1869), indexar em vez de
+# First() (CA1826), passar cultura ao int.Parse de um literal (CA1305) ou marcar helper como
+# static (CA1822).
+dotnet_diagnostic.CA1305.severity = none
+dotnet_diagnostic.CA1822.severity = none
+dotnet_diagnostic.CA1826.severity = none
+dotnet_diagnostic.CA1869.severity = none

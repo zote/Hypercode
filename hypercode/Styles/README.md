@@ -15,6 +15,9 @@ sistema) e os motivos estão na #64.
 | `Typography.axaml` | classes de texto (`title1`, `body`, `headline`…) | `Application.Styles`, depois do `FluentTheme` |
 | `Controls.axaml` | variantes e estados que o Fluent não tem (botão destrutivo, lista `table`, anel de foco…) | `Application.Styles`, depois do `FluentTheme` |
 
+`FluentOverrides.axaml` e `Icons.axaml` não se editam à mão: são gerados pelos scripts de
+`tools/` (uso em `tools/README.md`).
+
 Para ver tudo em claro e escuro lado a lado, abra a galeria de controles:
 
 ```bash
@@ -80,15 +83,20 @@ texto passa em WCAG AA (4,5:1) sobre os fundos.
 | Token | Uso |
 |---|---|
 | `Brush.Status.Danger` / `Warning` / `Success` | ícone, ponto e borda de status — **não para texto** |
-| `Brush.Accent` | destaque: borda do campo em foco, ícone ativo |
+| `Brush.Badge.Success` / `Danger` / `Done` / `Attention` / `Accent` / `Muted` | ícone das etiquetas de estado de worktree, PR, checks e review — **não para texto** |
+| `Brush.Accent` | a cor de destaque do sistema |
 | `Brush.Accent.Pressed` | botão de destaque e checkbox marcado, pressionados |
-| `Brush.Focus` | anel de foco do teclado (a accent a 50%) |
+| `Brush.Focus` | anel de foco — Tab, e clique no campo de texto (a accent a 50%) |
 
 `Brush.Accent`, `Brush.Accent.Pressed`, `Brush.Focus` e `Brush.Selection.Active` seguem
 a accent color escolhida em Ajustes do Sistema (o `FluentTheme` lê do macOS e expõe como `SystemAccentColor`). Por isso não têm
 versão clara/escura nem entram no teste. Com o azul padrão, o branco dá 6,1:1 sobre
 `Brush.Selection.Active` mas só 4,0:1 sobre `Brush.Accent`: texto sobre destaque vai
 sobre `Selection.Active`.
+
+`Brush.Accent.Pressed` não vem do `SystemAccentColorDark2` do Fluent, que na accent vermelha
+sai igual ao solto (#135): o App o deriva de `Brush.Selection.Active`, escurecendo em HSV
+(`Views/AccentPressed.cs`), e o `AccentPressedTests` confere que escurece em toda accent.
 
 ### Onde os valores diferem dos da Apple
 
@@ -103,6 +111,24 @@ fica no token de status (ícone, ponto):
 | `Brush.Text.Danger` | `#FF3B30` / `#FF453A` | `#B3221A` / `#FF8A84` | legível também dentro da caixa de erro |
 | `Brush.Text.Warning` (claro) | `#FF9500` | `#8A5A00` | laranja do sistema dá 1,9:1 |
 | `Brush.Text.Success` (claro) | `#28CD41` | `#157031` | verde do sistema dá 1,8:1 |
+
+### Etiquetas de estado: a paleta do GitHub
+
+As etiquetas de estado mostram informação do GitHub, e a regra do app é mostrá-la com o
+ícone e a cor que o GitHub usa. Por isso os `Brush.Badge.*` não usam as cores do macOS:
+são os `fg.*` do [Primer](https://primer.style/foundations/color) em claro e escuro
+(`fg.success`, `fg.danger`, `fg.done`, `fg.attention`, `fg.accent`, `fg.muted`). Ficam nos
+tokens, e não no código, para ter uma fonte só de cor e para o `TokensTests` conferir o
+contraste delas (#103). O papel de cada etiqueta fica em `BadgeVisuals.Tone`, que devolve
+a chave do token, e o `BadgeBrushConverter` busca o pincel na variante de tema do controle.
+
+Como etiqueta é ícone, o mínimo é 3:1 (WCAG 1.4.11), não o 4,5:1 de texto. Todas passam
+sobre os fundos de janela, conteúdo, linha alternada e overlay. Na linha selecionada da
+tabela, não: sobre `Brush.Selection.Active` nenhum tom passa (de 1,0 a 2,5:1 nas accents
+do macOS) e sobre `Brush.Selection.Inactive` o `Danger` escuro dá 2,8:1. Por isso, ali, a
+etiqueta toma a cor do texto da seleção, como os ícones do Finder: `Brush.Text.OnAccent`
+com a lista em foco e `Brush.Label.Primary` sem foco (#108). O estado continua no ícone e
+no tooltip.
 
 ## Tipografia
 
@@ -151,10 +177,22 @@ Da janela principal (faixa de abas, barras e tabela): `Padding.TabStrip`, `Paddi
 `Padding.TableCell` e `Size.TableRow.TwoLine` para a tabela. `Padding.TableCell` soma
 com `Margin.TableRow` para o conteúdo da linha cair no mesmo recuo (16) do cabeçalho.
 
-Raios: `Radius.Small` (4, etiqueta, tooltip, item de menu e linha de lista),
-`Radius.Control` (6, botão e campo), `Radius.Group` (10, cartão, grupo e menu),
-`Radius.Window` (12, sheet e popover) e `Radius.FocusRing` (9, o anel de foco em volta de
-um controle).
+Raios: `Radius.Small` (4, etiqueta, tooltip e linha de lista), `Radius.Control` (6, botão
+e campo), `Radius.Group` (12, cartão, grupo e menu), `Radius.MenuItem` (7, destaque do item
+de menu), `Radius.Window` (16, sheet) e `Radius.FocusRing` (9, o anel de foco em volta de
+um controle). `Radius.FocusRing` é `Radius.Control` + 3 (a espessura do anel) e
+`Radius.MenuItem` é `Radius.Group` − 5 (o recuo do item), para as curvas ficarem
+concêntricas; o `RadiusTests` confere as duas contas.
+
+### De onde vêm as medidas
+
+Raios, alturas e recuos foram medidos nos controles do próprio AppKit no macOS 27 (#97),
+instanciados num script Swift e renderizados em bitmap 2x — não no UI Kit do Figma. Do
+AppKit: botão, campo, pop-up e segmentado com 24pt de altura e raio 6; botão com 12pt de
+padding lateral; `NSBox` e menu com raio 12; menu com 5pt em cima e embaixo, itens de 24pt,
+texto a 14pt da borda e separador de 11pt com a linha recuada 16pt; destaque do item recuado
+5pt, raio 7; janela e sheet com raio 16; anel de foco de 3pt na accent a 50%. Do lado do
+Avalonia, a galeria renderizada sem tela (Skia, com a Inter) dá as mesmas medidas.
 
 ## Controles
 
@@ -172,6 +210,7 @@ aparece lá continua com o valor do Fluent.
 | `Classes="accent"` | igual ao padrão | destaque sem ser o botão padrão |
 | `Classes="destructive"` | botão comum com o rótulo em vermelho | remover, descartar; vence o `IsDefault` |
 | `Classes="borderless"` | só o conteúdo; fundo discreto sob o mouse | barra de ferramentas, ação dentro de linha |
+| `Classes="clear"` | só o ícone, terciário; escurece sob o mouse; sem foco nem Tab | o X de limpar dentro do campo (`InnerRightContent`), com `Icon.ClearField` |
 
 Em janela fora de foco o botão padrão perde o destaque, como no macOS: o `App` põe a
 classe `inactive` na janela que perde o foco, e `Controls.axaml` a usa.
@@ -181,10 +220,17 @@ com o destaque arredondado, sem destaque sob o mouse, seleção na accent com a 
 foco e cinza quando o foco está em outro lugar ou a janela está inativa. É opcional porque
 o `ListBox` também serve de barra de abas (`MainWindow`), que não deve ganhar esse visual.
 
-**Foco** — Tab mostra um anel na accent a 50% por fora do controle. O campo de texto em
-foco troca a borda pela accent (o Fluent não mostra anel nele).
+**Foco** — Tab mostra um anel na accent a 50% por fora do controle. O campo de texto mostra
+o mesmo anel também no foco por clique, como o `NSTextField`, e mantém a borda de repouso
+(decisão de #97: o Fluent trocava a borda pela accent em 2px e não mostrava anel). No
+`NumericUpDown` o anel envolve só a parte de texto, não as setas — como o campo e o
+`NSStepper` separados do macOS.
 
 ### Como mexer em `FluentOverrides.axaml`
+
+O arquivo é gerado por `tools/gen_overrides.py`, a partir das chaves do Fluent e de uma
+lista de regras (chave → token); não edite à mão: mude a regra e rode
+`tools/regenerar.sh`, que também é o caminho ao atualizar o Avalonia (`tools/README.md`).
 
 Os aliases se repetem em `Light` e `Dark`: um `StaticResource` dentro de um dicionário de
 tema só encontra os tokens da mesma variante. O teste `FluentOverridesTests` garante que
@@ -202,6 +248,14 @@ HIG ([Alerts](https://developer.apple.com/design/human-interface-guidelines/aler
 negrito (`Headline`), mensagem de apoio na cor secundária (`Message`, opcional), o
 conteúdo e, embaixo, os botões alinhados à direita, com `Margin.Window` em volta. A janela
 usa `Brush.Background.Window` de fundo.
+
+O espaço entre as partes se ajusta ao que existe: sem título nem mensagem (um formulário),
+o conteúdo começa direto na `Margin.Window`, sem a `Margin.DialogContent`; com o conteúdo
+nulo ou escondido (`IsVisible="False"`), os botões ficam a `Margin.DialogButtons` do texto.
+
+O diálogo não é redimensionável: a altura acompanha o conteúdo (`SizeToContent="Height"`),
+e o que pode crescer sem limite rola dentro de uma caixa de altura máxima, como o detalhe
+do `ConfirmWindow`.
 
 ```xml
 <Window … Width="540" SizeToContent="Height" CanResize="False"
@@ -249,7 +303,7 @@ largura fixa, campo à direita e a dica embaixo do campo, em `subheadline` secun
 dica embaixo, o rótulo alinha ao topo com `Margin.FieldLabel`.
 
 O detalhe aparece numa caixa em `Font.Mono` que rola a partir de `Size.DialogDetail.MaxHeight`;
-detalhe vazio esconde a caixa.
+detalhe vazio esconde a caixa e o espaço dela.
 
 ## Ícones
 
@@ -276,9 +330,9 @@ Duas famílias, com papéis diferentes:
 - **Octicons** (GitHub, MIT) nas etiquetas de estado de worktree, PR, checks e review:
   sempre que o GitHub mostra a mesma informação, o app usa o mesmo ícone e a mesma cor
   que ele. O view-model escolhe a etiqueta pela chave do ícone (`StatusBadge.IconKey`), e
-  o `BadgeConverter.ToGeometry` busca o recurso.
+  o `BadgeConverter.ToGeometry` busca o recurso; a cor vem dos `Brush.Badge.*`.
 - **Phosphor** (MIT, peso regular) nos comandos do próprio app (nova aba, fechar, ajuda,
-  configurações, informação, ordenação). É o conjunto aberto mais parecido com o SF
+  configurações, informação, ordenação, limpar o campo, grafo de issues). É o conjunto aberto mais parecido com o SF
   Symbols.
 
 **Por que não o SF Symbols:** a licença só permite usá-los em interfaces de apps para
@@ -286,8 +340,9 @@ plataformas Apple, e a Apple os trata como imagens fornecidas pelo sistema; copi
 desenhos para este repositório, público e com licença própria, seria redistribuir arte da
 Apple. Decisão registrada na issue #67.
 
-Para acrescentar um ícone do Phosphor: pegue `assets/regular/<nome>.svg` de
-`@phosphor-icons/core`, copie o `d` do único `path` para um `PathGeometry` com
-`Figures="F1 <d>"` e `Transform="0.0625,0,0,0.0625,0,0"` (de 256 para 16 — o `Transform`
-não aceita a sintaxe `scale()` do CSS). O `F1` é a regra de preenchimento NonZero do SVG;
-sem ele o Avalonia usa EvenOdd e alguns desenhos saem vazados.
+`Icons.axaml` é gerado por `tools/gen_icons.py`. Para acrescentar um ícone, some uma
+linha na lista `OCTICONS` ou `PHOSPHORS` do script e rode `tools/regenerar.sh`
+(`tools/README.md`). O script copia o `d` do SVG para a geometria com o prefixo `F1` — a
+regra de preenchimento NonZero do SVG; sem ele o Avalonia usa EvenOdd e alguns desenhos
+saem vazados — e, no Phosphor, põe o `Transform="0.0625,0,0,0.0625,0,0"` que reduz de 256
+para 16 (o `Transform` não aceita a sintaxe `scale()` do CSS).

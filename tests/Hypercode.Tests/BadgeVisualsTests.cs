@@ -1,47 +1,22 @@
-using System.Text.RegularExpressions;
 using Hypercode.ViewModels;
 
 namespace Hypercode.Tests;
 
-public partial class BadgeVisualsTests
+// As cores de verdade (hex nos dois temas) são conferidas no BadgeColorsTests, contra os
+// brushes do Tokens.axaml. Aqui fica só o mapeamento de cada tipo para o papel e o ícone.
+public class BadgeVisualsTests
 {
-    public static TheoryData<BadgeKind> AllKinds => new(Enum.GetValues<BadgeKind>());
-
-    [GeneratedRegex("^#[0-9A-F]{6}$")]
-    private static partial Regex HexColor();
-
     [Theory]
-    [MemberData(nameof(AllKinds))]
-    public void Tone_TodoIconeTemCorNosDoisTemas(BadgeKind kind)
+    [InlineData(BadgeKind.PrOpen, BadgeVisuals.Success)]
+    [InlineData(BadgeKind.PrMerged, BadgeVisuals.Done)]
+    [InlineData(BadgeKind.PrClosed, BadgeVisuals.Danger)]
+    [InlineData(BadgeKind.PrDraft, BadgeVisuals.Muted)]
+    [InlineData(BadgeKind.ChecksFailing, BadgeVisuals.Danger)]
+    [InlineData(BadgeKind.ChecksPending, BadgeVisuals.Attention)]
+    [InlineData(BadgeKind.Ahead, BadgeVisuals.Accent)]
+    public void Tone_SegueOsPapeisDoPrimer(BadgeKind kind, string brushKey)
     {
-        var tone = BadgeVisuals.Tone(kind);
-
-        Assert.Matches(HexColor(), tone.Light);
-        Assert.Matches(HexColor(), tone.Dark);
-        Assert.NotEqual(tone.Light, tone.Dark);
-    }
-
-    [Theory]
-    [InlineData(BadgeKind.PrOpen, "Success")]
-    [InlineData(BadgeKind.PrMerged, "Done")]
-    [InlineData(BadgeKind.PrClosed, "Danger")]
-    [InlineData(BadgeKind.PrDraft, "Muted")]
-    [InlineData(BadgeKind.ChecksFailing, "Danger")]
-    [InlineData(BadgeKind.ChecksPending, "Attention")]
-    [InlineData(BadgeKind.Ahead, "Accent")]
-    public void Tone_SegueOsPapeisDoPrimer(BadgeKind kind, string role)
-    {
-        var expected = role switch
-        {
-            "Success" => BadgeVisuals.Success,
-            "Done" => BadgeVisuals.Done,
-            "Danger" => BadgeVisuals.Danger,
-            "Attention" => BadgeVisuals.Attention,
-            "Accent" => BadgeVisuals.Accent,
-            _ => BadgeVisuals.Muted,
-        };
-
-        Assert.Equal(expected, BadgeVisuals.Tone(kind));
+        Assert.Equal(brushKey, BadgeVisuals.Tone(kind));
     }
 
     [Fact]
@@ -52,12 +27,11 @@ public partial class BadgeVisualsTests
     }
 
     [Fact]
-    public void StatusBadge_ExpoeDesenhoECoresDoTipo()
+    public void StatusBadge_ExpoeIconeECorDoTipo()
     {
         var badge = new StatusBadge(BadgeKind.PrMerged, "mergeado");
 
         Assert.Equal(BadgeVisuals.IconKey(BadgeKind.PrMerged), badge.IconKey);
-        Assert.Equal(BadgeVisuals.Done.Light, badge.LightColorHex);
-        Assert.Equal(BadgeVisuals.Done.Dark, badge.DarkColorHex);
+        Assert.Equal(BadgeVisuals.Done, badge.BrushKey);
     }
 }

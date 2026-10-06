@@ -25,10 +25,12 @@
 
   <ItemGroup>
     <!-- TokensTests, FluentOverridesTests e IconsTests leem o XAML para conferir contraste, paridade das
-         variantes e os aliases das chaves do Fluent -->
+         variantes e os aliases das chaves do Fluent; IconsTests lê também o gerador e a galeria -->
     <None Include="..\..\hypercode\Styles\Tokens.axaml" Link="Tokens.axaml" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\hypercode\Styles\FluentOverrides.axaml" Link="FluentOverrides.axaml" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\hypercode\Styles\Icons.axaml" Link="Icons.axaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\hypercode\Styles\tools\gen_icons.py" Link="gen_icons.py" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\hypercode\Views\ControlGallerySample.axaml" Link="ControlGallerySample.axaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -31,13 +31,23 @@
               </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
           </ItemsControl>
-          <ContentPresenter Margin="{DynamicResource Margin.DialogContent}"
+          <ContentPresenter Name="PART_ContentPresenter"
+                            Margin="{DynamicResource Margin.DialogContent}"
                             Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}"
-                            IsVisible="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                            ContentTemplate="{TemplateBinding ContentTemplate}" />
         </DockPanel>
       </ControlTemplate>
     </Setter>
+
+    <!-- Sem título nem mensagem (um formulário), o conteúdo começa na margem da janela, como
+         o texto dos outros diálogos. Sem conteúdo visível (aviso sem detalhe), os botões
+         ficam a Margin.DialogButtons do texto, sem a margem do conteúdo no meio. -->
+    <Style Selector="^:untitled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Margin" Value="0" />
+    </Style>
+    <Style Selector="^:no-content /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
 
     <!-- Botões da barra com largura mínima, como os do macOS: "OK" não fica do tamanho da
          palavra ao lado de "Cancelar". -->

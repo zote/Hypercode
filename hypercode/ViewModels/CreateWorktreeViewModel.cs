@@ -5,7 +5,9 @@ namespace Hypercode.ViewModels;
 /// <summary>
 /// Diálogo "Novo worktree": branch nova a partir de uma base, a branch de um PR, ou a branch
 /// de trabalho de uma issue (claude/issue-&lt;n&gt;-&lt;slug&gt;, sugerida pelo título).
-/// A pasta é sugerida em &lt;repo&gt;.worktrees/&lt;branch&gt; até o usuário editá-la.
+/// A pasta é sugerida sob a raiz configurada para o repositório (por padrão
+/// &lt;repo&gt;.worktrees/&lt;branch&gt;) até o usuário editá-la. Sem raiz configurada, segue onde os
+/// worktrees que já existem moram. A pasta editada pode virar a configuração do repositório.
 /// </summary>
 public sealed class CreateWorktreeViewModel : ObservableObject, IDisposable
 {
@@ -13,6 +15,7 @@ public sealed class CreateWorktreeViewModel : ObservableObject, IDisposable
 
     private readonly string _mainWorktreePath;
     private readonly bool _assignIssue;
+    private readonly Action<string, bool?>? _rememberLayout;
 
     private CreateMode _mode;
     private string? _remote;
@@ -30,6 +33,12 @@ public sealed class CreateWorktreeViewModel : ObservableObject, IDisposable
     private bool _issueBranchExistsLocally;
     private string _worktreePath = string.Empty;
     private bool _pathEditedByUser;
+    private string _configuredRoot;
+    private bool _configuredKeepsSlashes;
+    private string _suggestionRoot;
+    private bool _suggestionKeepsSlashes;
+    private string? _layoutHint;
+    private string? _worktreePathWarning;
     private bool _openTerminal;
     private string? _errorMessage;
     private string? _progressMessage;
@@ -37,12 +46,42 @@ public sealed class CreateWorktreeViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _lookupCancellation;
     private CancellationTokenSource? _issueLookupCancellation;
     private CancellationTokenSource? _branchCheckCancellation;
+    private CancellationTokenSource? _ignoreCheckCancellation;
 
-    public CreateWorktreeViewModel(string mainWorktreePath, bool openTerminal, string command, bool assignIssue)
+    /// <param name="worktreesRoot">A raiz configurada (null = padrão), como nas configurações.</param>
+    /// <param name="existingWorktrees">Os worktrees do repositório, para seguir onde eles moram se nada foi configurado.</param>
+    /// <param name="rememberLayout">Grava a raiz (no formato da configuração) e as barras (null = não mexe) no repositório.</param>
+    public CreateWorktreeViewModel(
+        string mainWorktreePath,
+        bool openTerminal,
+        string command,
+        bool assignIssue,
+        string? worktreesRoot = null,
+        bool keepSlashes = false,
+        IEnumerable<WorktreeInfo>? existingWorktrees = null,
+        Action<string, bool?>? rememberLayout = null)
     {
         _mainWorktreePath = mainWorktreePath;
         _openTerminal = openTerminal;
         _assignIssue = assignIssue;
+        _rememberLayout = rememberLayout;
+
+        _configuredRoot = WorktreeCreator.WorktreesRoot(mainWorktreePath, worktreesRoot);
+        _configuredKeepsSlashes = keepSlashes;
+        _suggestionRoot = _configuredRoot;
+        _suggestionKeepsSlashes = keepSlashes;
+
+        // Nada configurado e os worktrees de hoje moram em outro lugar: a convenção do repositório
+        // vence o padrão do app — senão nasce uma segunda pasta de worktrees ao lado da que já existe.
+        if (worktreesRoot is null
+            && existingWorktrees is not null
+            && WorktreeCreator.DetectLayout(existingWorktrees) is { } detected
+            && (detected.Root != _configuredRoot || (detected.KeepsSlashes is { } slashes && slashes != keepSlashes)))
+        {
+            _suggestionRoot = detected.Root;
+            _suggestionKeepsSlashes = detected.KeepsSlashes ?? keepSlashes;
+            _layoutHint = "Sugerida pela pasta onde a maioria dos worktrees deste repositório já mora.";
+        }
 
         // Todo trabalho nasce de uma issue (AGENTS.md). Explícito, para não depender da ordem do enum.
         _mode = CreateMode.Issue;
@@ -72,7 +111,53 @@ public sealed class CreateWorktreeViewModel : ObservableObject, IDisposable
 
     public string Command { get; }
 
-    public string WorktreesRoot => WorktreeCreator.WorktreesRoot(_mainWorktreePath);
+    public string WorktreesRoot => _suggestionRoot;
+
+    /// <summary>De onde veio a sugestão da pasta, quando não é da configuração; ou o que foi gravado.</summary>
+    public string? LayoutHint
+    {
+        get => _layoutHint;
+        private set => SetProperty(ref _layoutHint, value);
+    }
+
+    /// <summary>A pasta cai dentro do repositório sem estar ignorada pelo git.</summary>
+    public string? WorktreePathWarning
+    {
+        get => _worktreePathWarning;
+        private set => SetProperty(ref _worktreePathWarning, value);
+    }
+
+    /// <summary>
+    /// A pasta do campo implica uma raiz (ou um tratamento das barras) diferente do configurado:
+    /// dá para gravá-la como a do repositório, para as próximas criações.
+    /// </summary>
+    public bool CanRememberLayout => _rememberLayout is not null && PendingLayout() is not null;
+
+    public string RememberLayoutLabel => "Usar sempre neste repositório";
+
+    private WorktreeLayoutGuess? PendingLayout()
+    {
+        var path = MainViewModel.ExpandHome(_worktreePath.Trim());
+        if (!Path.IsPathRooted(path) || WorktreeCreator.InferLayout(path, CurrentBranch ?? string.Empty) is not { } guess) return null;
+
+        var differs = guess.Root != _configuredRoot || (guess.KeepsSlashes is { } slashes && slashes != _configuredKeepsSlashes);
+        return differs ? guess : null;
+    }
+
+    /// <summary>Grava no repositório a raiz (e as barras, se a branch disser) que a pasta do campo implica.</summary>
+    public void RememberLayout()
+    {
+        if (_rememberLayout is null || PendingLayout() is not { } layout) return;
+
+        var setting = WorktreeCreator.RootSetting(_mainWorktreePath, layout.Root);
+        _rememberLayout(setting, layout.KeepsSlashes);
+
+        _configuredRoot = _suggestionRoot = layout.Root;
+        _configuredKeepsSlashes = _suggestionKeepsSlashes = layout.KeepsSlashes ?? _configuredKeepsSlashes;
+        RaisePropertyChanged(nameof(WorktreesRoot));
+        RaisePropertyChanged(nameof(CanRememberLayout));
+        LayoutHint = $"Gravado: os próximos worktrees deste repositório vão para {setting}. Muda em Configurações.";
+    }
 
     public string IncludeSummary { get; }
 
@@ -198,7 +283,7 @@ public sealed class CreateWorktreeViewModel : ObservableObject, IDisposable
 
             // Apagar a pasta devolve a sugestão automática.
             _pathEditedByUser = _worktreePath.Trim().Length > 0;
-            if (!_pathEditedByUser) SuggestPath();
+            SuggestPath();
             RaiseCanCreate();
         }
     }
@@ -344,19 +429,66 @@ public sealed class CreateWorktreeViewModel : ObservableObject, IDisposable
         }
     }
 
+    private string? CurrentBranch => _mode switch
+    {
+        CreateMode.PullRequest => _pullRequest?.HeadRefName,
+        CreateMode.Issue => _issueBranchName.Trim(),
+        _ => _branchName.Trim(),
+    };
+
+    /// <summary>Refaz a sugestão (se a pasta ainda é nossa) e reavalia o que depende dela.</summary>
     private void SuggestPath()
     {
-        if (_pathEditedByUser) return;
-
-        var branch = _mode switch
+        if (!_pathEditedByUser)
         {
-            CreateMode.PullRequest => _pullRequest?.HeadRefName,
-            CreateMode.Issue => _issueBranchName.Trim(),
-            _ => _branchName.Trim(),
-        };
-        var suggestion = string.IsNullOrEmpty(branch) ? string.Empty : WorktreeCreator.SuggestPath(_mainWorktreePath, branch);
+            var branch = CurrentBranch;
+            var suggestion = string.IsNullOrEmpty(branch)
+                ? string.Empty
+                : WorktreeCreator.SuggestPathUnder(_suggestionRoot, branch, _suggestionKeepsSlashes);
 
-        if (SetProperty(ref _worktreePath, suggestion, nameof(WorktreePath))) RaiseCanCreate();
+            if (SetProperty(ref _worktreePath, suggestion, nameof(WorktreePath))) RaiseCanCreate();
+        }
+
+        RaisePropertyChanged(nameof(CanRememberLayout));
+        _ = CheckPathIgnoredAsync();
+    }
+
+    /// <summary>
+    /// Pasta dentro do repositório tem de estar ignorada: senão o worktree aparece como lixo não
+    /// rastreado no principal, e um git clean -fd desavisado o apaga. É aviso, não bloqueio.
+    /// </summary>
+    private async Task CheckPathIgnoredAsync()
+    {
+        _ignoreCheckCancellation?.Cancel();
+        var cancellation = _ignoreCheckCancellation = new CancellationTokenSource();
+
+        var path = MainViewModel.ExpandHome(_worktreePath.Trim());
+        if (!Path.IsPathRooted(path) || !WorktreeCreator.IsInsideRepository(_mainWorktreePath, path))
+        {
+            WorktreePathWarning = null;
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(250, cancellation.Token).ConfigureAwait(true);
+            var ignored = await WorktreeCreator.IsIgnoredAsync(_mainWorktreePath, path, cancellation.Token).ConfigureAwait(true);
+            if (cancellation.IsCancellationRequested) return;
+
+            WorktreePathWarning = ignored
+                ? null
+                : "A pasta fica dentro do repositório e o git não a ignora: o worktree apareceria como não rastreado no principal, "
+                  + "e um git clean -fd o apagaria. Acrescente a pasta dos worktrees ao .gitignore ou ao .git/info/exclude.";
+        }
+        catch (OperationCanceledException)
+        {
+            // Editou de novo — outra checagem assumiu.
+        }
+        catch
+        {
+            // Sem git para responder, não há o que avisar.
+            if (!cancellation.IsCancellationRequested) WorktreePathWarning = null;
+        }
     }
 
     /// <summary>Consulta o PR pelo gh, esperando o usuário parar de digitar.</summary>
